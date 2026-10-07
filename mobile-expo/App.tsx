@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
 import { supabase } from './src/lib/supabase';
 
@@ -646,11 +647,15 @@ export default function App() {
           setUploadProgress(50);
           setUploadStatusText('Uploading binary stream to National Evidence Vault...');
 
-          const localFileBlob = await (await fetch(recordedUri)).blob();
+          // Read raw file buffer as Base64 and decode into ArrayBuffer to avoid React Native's text/plain Blob bug
+          const base64Data = await FileSystem.readAsStringAsync(recordedUri, {
+            encoding: FileSystem.EncodingType.Base64
+          });
+          const binaryArrayBuffer = decode(base64Data);
 
           const { error: uploadError } = await supabase.storage
             .from('evidence')
-            .upload(fileName, localFileBlob, {
+            .upload(fileName, binaryArrayBuffer, {
               contentType: mimeType,
               upsert: true
             });
