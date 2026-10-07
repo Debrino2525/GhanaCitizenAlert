@@ -437,11 +437,12 @@ export default function App() {
 
       try {
         if (cameraRef.current) {
-          // Record directly in 720p / 480p for optimized cellular bandwidth and fast uploads
+          // Record directly in 720p / 480p with H.264 (avc1) codec for universal web/mobile playback
           cameraRef.current
             .recordAsync({
               maxDuration: 60,
-              quality: '720p'
+              quality: '720p',
+              codec: 'avc1'
             })
             .then((result: any) => {
               if (result?.uri) {
