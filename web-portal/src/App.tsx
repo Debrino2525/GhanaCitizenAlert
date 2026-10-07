@@ -66,27 +66,30 @@ export const App: React.FC = () => {
                 : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
             }));
 
+            const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
+            const lng = typeof r.longitude === 'number' && !isNaN(r.longitude) ? r.longitude : -0.1870;
+
             return {
               id: r.id,
-              trackingCode: r.tracking_code,
-              title: r.title,
-              category: r.category,
-              description: r.description,
-              locationName: r.location_name,
-              ghanaPostCode: r.ghanapost_code,
-              region: r.region,
-              coordinates: [r.latitude, r.longitude],
+              trackingCode: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
+              title: r.title || 'Civic Incident Report',
+              category: r.category || 'CRIMINAL_OFFENSE',
+              description: r.description || 'No description provided.',
+              locationName: r.location_name || 'Accra, Ghana',
+              ghanaPostCode: r.ghanapost_code || 'GA-014-9923',
+              region: r.region || 'Greater Accra',
+              coordinates: [lat, lng],
               media: parsedMedia,
-              reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
-              assignedAgency: r.assigned_agency,
+              reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: r.reporter_trust_score || 85 },
+              assignedAgency: r.assigned_agency || 'GPS_CID',
               secondaryAgencies: r.secondary_agencies || [],
-              status: r.status,
-              severity: r.severity,
-              isPublicEligible: r.is_public_eligible,
-              isPublicPublished: r.is_public_published,
+              status: r.status || 'RECEIVED_PENDING_TRIAGE',
+              severity: r.severity || 'NORMAL',
+              isPublicEligible: Boolean(r.is_public_eligible),
+              isPublicPublished: Boolean(r.is_public_published),
               publicCorroborations: r.public_corroborations || 0,
-              createdAt: r.created_at,
-              updatedAt: r.updated_at,
+              createdAt: r.created_at || new Date().toISOString(),
+              updatedAt: r.updated_at || new Date().toISOString(),
               investigatorNotes: r.investigator_notes || []
             };
           });
@@ -123,27 +126,30 @@ export const App: React.FC = () => {
             : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
         }));
 
+        const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
+        const lng = typeof r.longitude === 'number' && !isNaN(r.longitude) ? r.longitude : -0.1870;
+
         const newInc: IncidentReport = {
           id: r.id,
-          trackingCode: r.tracking_code,
-          title: r.title,
-          category: r.category,
-          description: r.description,
-          locationName: r.location_name,
-          ghanaPostCode: r.ghanapost_code,
-          region: r.region,
-          coordinates: [r.latitude, r.longitude],
+          trackingCode: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
+          title: r.title || 'Civic Incident Report',
+          category: r.category || 'CRIMINAL_OFFENSE',
+          description: r.description || 'No description provided.',
+          locationName: r.location_name || 'Accra, Ghana',
+          ghanaPostCode: r.ghanapost_code || 'GA-014-9923',
+          region: r.region || 'Greater Accra',
+          coordinates: [lat, lng],
           media: parsedMedia,
-          reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
-          assignedAgency: r.assigned_agency,
+          reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: r.reporter_trust_score || 85 },
+          assignedAgency: r.assigned_agency || 'GPS_CID',
           secondaryAgencies: r.secondary_agencies || [],
-          status: r.status,
-          severity: r.severity,
-          isPublicEligible: r.is_public_eligible,
-          isPublicPublished: r.is_public_published,
+          status: r.status || 'RECEIVED_PENDING_TRIAGE',
+          severity: r.severity || 'NORMAL',
+          isPublicEligible: Boolean(r.is_public_eligible),
+          isPublicPublished: Boolean(r.is_public_published),
           publicCorroborations: r.public_corroborations || 0,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
+          createdAt: r.created_at || new Date().toISOString(),
+          updatedAt: r.updated_at || new Date().toISOString(),
           investigatorNotes: r.investigator_notes || []
         };
         setIncidents(prev => [newInc, ...prev]);

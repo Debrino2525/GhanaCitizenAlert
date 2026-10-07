@@ -388,10 +388,10 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     <span>CITIZEN-ALERT EVIDENCE LOCK (ACT 772)</span>
                   </p>
                   <p className="text-slate-200">
-                    LAT: {selectedIncident.coordinates[0].toFixed(5)}° N | LNG: {selectedIncident.coordinates[1].toFixed(5)}° W
+                    LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W
                   </p>
                   <p className="text-amber-400 font-bold">
-                    GHANAPOST: {selectedIncident.ghanaPostCode} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
+                    GHANAPOST: {selectedIncident.ghanaPostCode || 'GA-014-9923'} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
                   </p>
                   <p className="text-emerald-400 text-[10px]">
                     UTC: {currentMedia?.timestampUtc ? new Date(currentMedia.timestampUtc).toUTCString() : new Date().toUTCString()}
@@ -400,7 +400,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
                 {/* Direct Google Maps Satellite / OpenStreetMap link */}
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${selectedIncident.coordinates[0]},${selectedIncident.coordinates[1]}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${selectedIncident?.coordinates?.[0] ?? 5.6037},${selectedIncident?.coordinates?.[1] ?? -0.1870}`}
                   target="_blank"
                   rel="noreferrer"
                   className="absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1.5 shadow-lg backdrop-blur-md transition"
