@@ -2,9 +2,13 @@
   "expo": {
     "name": "CitizenAlert Ghana",
     "slug": "ghana-citizen-alert",
+    "scheme": "citizenalert",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "plugins": [
+      "@react-native-google-signin/google-signin"
+    ],
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",

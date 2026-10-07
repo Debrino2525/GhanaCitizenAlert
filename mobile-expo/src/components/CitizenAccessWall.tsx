@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,17 +8,20 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Linking,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   StatusBar
 } from 'react-native';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { supabase } from '../lib/supabase';
 
-const SUPABASE_AUTH_SIGNUP = 'https://fqgujgwdgqlxnpmpmiui.supabase.co/auth/v1/signup';
-const SUPABASE_AUTH_TOKEN = 'https://fqgujgwdgqlxnpmpmiui.supabase.co/auth/v1/token?grant_type=password';
-const SUPABASE_AUTH_GOOGLE = 'https://fqgujgwdgqlxnpmpmiui.supabase.co/auth/v1/authorize?provider=google&redirect_to=https://app.ghanacitizenalert.globitechcybersolutions.com';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZ3VqZ3dkZ3FseG5wbXBtaXVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk0NTgsImV4cCI6MjEwNjgwNTQ1OH0._OvkzhPn_FTlhVZeZuZwmDI_TvgfHt__yTtijK4vgJc';
+// Configure Native Google Sign-In
+GoogleSignin.configure({
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '360721223201-tdr0166i26q1d5tupnlp4mluebjncq9b.apps.googleusercontent.com',
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || undefined,
+  scopes: ['profile', 'email']
+});
 
 export interface CitizenUser {
   id: string;
@@ -50,7 +53,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [phone, setPhone] = useState('');
   const [ghanaCard, setGhanaCard] = useState('');
 
-  // 1. Real Supabase Citizen Sign In
+  // 1. Real Supabase Citizen Sign In (Email / Password)
   const handleSignIn = async () => {
     setErrorMessage(null);
     if (!email.trim() || !password.trim()) {
@@ -60,59 +63,33 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
     setIsLoading(true);
     try {
-      const response = await fetch(SUPABASE_AUTH_TOKEN, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password: password
-        })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.error_description || data.msg || data.message) {
-          const msg = data.error_description || data.msg || data.message;
-          if (msg.includes('Email not confirmed')) {
-            // Provide a graceful fallback and allow the verified citizen session
-            Alert.alert(
-              '✉️ Email Verification Pending',
-              'Your account has been located in the national registry. Proceeding with active citizen session while email confirmation is finalized.'
-            );
-            onAuthenticated({
-              id: `cit-email-${Date.now()}`,
-              name: email.split('@')[0],
-              email: email.trim().toLowerCase(),
-              trustScore: 90,
-              isVerified: true,
-              loginMethod: 'EMAIL'
-            });
-            return;
-          }
-          throw new Error(msg);
-        }
-        throw new Error('Authentication failed. Please check your credentials.');
+      if (error) {
+        throw error;
       }
 
-      // Success with real Supabase Auth payload
-      const userMeta = data.user?.user_metadata || {};
+      if (!data.user) {
+        throw new Error('Authentication succeeded but no citizen user was returned.');
+      }
+
+      const user = data.user;
+      const userMeta = user.user_metadata || {};
       const authenticatedCitizen: CitizenUser = {
-        id: data.user?.id || `cit-${Date.now()}`,
-        name: userMeta.full_name || email.split('@')[0],
-        email: data.user?.email || email.trim().toLowerCase(),
+        id: user.id,
+        name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
+        email: user.email || email.trim().toLowerCase(),
         phone: userMeta.phone || '',
         ghanaCard: userMeta.ghana_card || '',
-        trustScore: userMeta.trust_score || 95,
-        isVerified: true,
+        trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+        isVerified: Boolean(userMeta.is_verified || false),
         loginMethod: 'EMAIL',
-        accessToken: data.access_token
+        accessToken: data.session?.access_token
       };
 
-      Alert.alert('✅ Access Granted', `Welcome back, ${authenticatedCitizen.name}! Civic Trust Score: ${authenticatedCitizen.trustScore}/100.`);
       onAuthenticated(authenticatedCitizen);
     } catch (err: any) {
       setErrorMessage(err.message || 'Login error occurred. Please try again.');
@@ -141,47 +118,46 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
     setIsLoading(true);
     try {
-      const response = await fetch(SUPABASE_AUTH_SIGNUP, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password: password,
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password: password,
+        options: {
           data: {
             full_name: fullName.trim(),
             phone: phone.trim(),
             ghana_card: ghanaCard.trim().toUpperCase(),
-            trust_score: ghanaCard.trim() ? 98 : 95,
-            role: 'citizen',
-            registered_at: new Date().toISOString()
+            trust_score: 70, // Baseline neutral trust score for new citizen accounts
+            is_verified: false,
+            role: 'citizen'
           }
-        })
+        }
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error_description || data.msg || data.message || 'Registration failed.');
+      if (error) {
+        throw error;
       }
 
+      if (!data.user) {
+        throw new Error('Registration failed.');
+      }
+
+      const user = data.user;
+      const userMeta = user.user_metadata || {};
       const registeredCitizen: CitizenUser = {
-        id: data.id || data.user?.id || `cit-${Date.now()}`,
+        id: user.id,
         name: fullName.trim(),
-        email: email.trim().toLowerCase(),
+        email: user.email || email.trim().toLowerCase(),
         phone: phone.trim(),
         ghanaCard: ghanaCard.trim().toUpperCase(),
-        trustScore: ghanaCard.trim() ? 98 : 95,
-        isVerified: true,
+        trustScore: 70,
+        isVerified: false,
         loginMethod: 'EMAIL',
-        accessToken: data.access_token
+        accessToken: data.session?.access_token
       };
 
       Alert.alert(
-        '🇬🇭 Verified Citizen Account Created',
-        `Account provisioned successfully for ${fullName.trim()}.\nCivic Trust Score initialized at ${registeredCitizen.trustScore}/100.`
+        '🇬🇭 Citizen Account Provisioned',
+        `Account provisioned for ${fullName.trim()}. Please verify your email if required.`
       );
       onAuthenticated(registeredCitizen);
     } catch (err: any) {
@@ -191,31 +167,64 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  // 3. Real Google OAuth Access
+  // 3. Native In-App Google Sign-In with Supabase signInWithIdToken (No Browser Redirects)
   const handleGoogleAuth = async () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const canOpen = await Linking.canOpenURL(SUPABASE_AUTH_GOOGLE);
-      if (canOpen) {
-        await Linking.openURL(SUPABASE_AUTH_GOOGLE);
+      // Ensure Google Play Services is available
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+      // Native in-app account chooser
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = signInResult.data?.idToken || (signInResult as any).idToken;
+
+      if (!idToken) {
+        throw new Error('Google Sign-In completed but no ID token was provided.');
       }
-      
-      // Complete authenticated Google citizen session
-      const googleCitizen: CitizenUser = {
-        id: `cit-google-${Date.now()}`,
-        name: 'Verified Google Citizen',
-        email: 'citizen@gmail.com',
-        phone: '0244 000 000',
-        trustScore: 98,
-        isVerified: true,
-        loginMethod: 'GOOGLE'
+
+      // Exchange Google ID token directly with Supabase Native Auth
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.user) {
+        throw new Error('Supabase authentication returned no active citizen user.');
+      }
+
+      const user = data.user;
+      const userMeta = user.user_metadata || {};
+
+      // Build real citizen user from Supabase user session data
+      const authenticatedCitizen: CitizenUser = {
+        id: user.id,
+        name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Google Citizen',
+        email: user.email || '',
+        phone: userMeta.phone || '',
+        ghanaCard: userMeta.ghana_card || '',
+        trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70, // Baseline trust score
+        isVerified: Boolean(userMeta.is_verified || false),
+        loginMethod: 'GOOGLE',
+        accessToken: data.session?.access_token
       };
 
-      Alert.alert('✅ Google Auth Handshake', 'Authenticated securely with Google Single Sign-On.');
-      onAuthenticated(googleCitizen);
+      onAuthenticated(authenticatedCitizen);
     } catch (err: any) {
-      setErrorMessage('Google Authentication was interrupted. Please try again or use direct login.');
+      if (err.code === statusCodes.SIGN_IN_CANCELLED) {
+        // User cancelled in-app prompt - stay logged out quietly without alert spam
+        console.log('Google Sign-In cancelled by citizen');
+      } else if (err.code === statusCodes.IN_PROGRESS) {
+        setErrorMessage('Google Sign-In operation is already in progress.');
+      } else if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        setErrorMessage('Google Play Services is not available or outdated on this device.');
+      } else {
+        setErrorMessage(err.message || 'Google Authentication failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -234,7 +243,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
     Alert.alert(
       '🛡️ Whistleblower Immunity Activated',
-      'You are entering under the Whistleblower Act, 2006 (Act 720). Your device identity and IP will not be linked to any evidence submitted.',
+      'You are entering under the Whistleblower Act, 2006 (Act 720). Your device identity and personal data will not be linked to any incident transmissions.',
       [
         {
           text: 'Proceed to Vault',

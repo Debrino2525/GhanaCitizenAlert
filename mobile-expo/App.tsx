@@ -21,10 +21,9 @@ import {
 import { CameraView, CameraType, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
-
-const SUPABASE_REST = 'https://fqgujgwdgqlxnpmpmiui.supabase.co/rest/v1/incidents';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZ3VqZ3dkZ3FseG5wbXBtaXVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk0NTgsImV4cCI6MjEwNjgwNTQ1OH0._OvkzhPn_FTlhVZeZuZwmDI_TvgfHt__yTtijK4vgJc';
+import { supabase } from './src/lib/supabase';
 
 const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   en: {
@@ -287,6 +286,55 @@ export default function App() {
     }
   };
 
+  // Restore persisted Supabase session on app launch & listen to auth state
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const user = session.user;
+        const userMeta = user.user_metadata || {};
+        setCitizen({
+          id: user.id,
+          name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
+          email: user.email || '',
+          phone: userMeta.phone || '',
+          ghanaCard: userMeta.ghana_card || '',
+          trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+          isVerified: Boolean(userMeta.is_verified || false),
+          loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
+          accessToken: session.access_token
+        });
+        setIsAuthenticated(true);
+        setIsAnonymous(false);
+        setReporterPhone(userMeta.phone || '');
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const user = session.user;
+        const userMeta = user.user_metadata || {};
+        setCitizen({
+          id: user.id,
+          name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
+          email: user.email || '',
+          phone: userMeta.phone || '',
+          ghanaCard: userMeta.ghana_card || '',
+          trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+          isVerified: Boolean(userMeta.is_verified || false),
+          loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
+          accessToken: session.access_token
+        });
+        setIsAuthenticated(true);
+        setIsAnonymous(false);
+        setReporterPhone(userMeta.phone || '');
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
   // Request permissions on mount & grab live GPS
   useEffect(() => {
     (async () => {
@@ -491,16 +539,7 @@ export default function App() {
         public_corroborations: 0
       };
 
-      await fetch(SUPABASE_REST, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(payload)
-      });
+      await supabase.from('incidents').insert(payload);
     } catch (err) {}
 
     Alert.alert(
@@ -533,16 +572,7 @@ export default function App() {
         public_corroborations: 0
       };
 
-      await fetch(SUPABASE_REST, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(payload)
-      });
+      await supabase.from('incidents').insert(payload);
     } catch (e) {}
 
     Alert.alert('✅ Tip Transmitted', 'Sighting details and live coordinates sent to Police Operations Room.');
@@ -575,8 +605,7 @@ export default function App() {
         const extension = mediaType === 'VIDEO' ? 'mp4' : 'jpg';
         const mimeType = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
         const fileName = `${trackingCode}-${Date.now()}.${extension}`;
-        const targetUploadUrl = `https://fqgujgwdgqlxnpmpmiui.supabase.co/storage/v1/object/evidence/${fileName}`;
-        const publicStorageUrl = `https://fqgujgwdgqlxnpmpmiui.supabase.co/storage/v1/object/public/evidence/${fileName}`;
+        const publicStorageUrl = supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl;
 
         try {
           setUploadProgress(60);
@@ -584,16 +613,12 @@ export default function App() {
 
           const localFileBlob = await (await fetch(recordedUri)).blob();
 
-          const uploadRes = await fetch(targetUploadUrl, {
-            method: 'POST',
-            headers: {
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': mimeType,
-              'x-upsert': 'true'
-            },
-            body: localFileBlob
-          });
+          const { error: uploadError } = await supabase.storage
+            .from('evidence')
+            .upload(fileName, localFileBlob, {
+              contentType: mimeType,
+              upsert: true
+            });
 
           setUploadProgress(90);
           setUploadStatusText('Evidence signed and locked under Act 772...');
@@ -615,7 +640,7 @@ export default function App() {
               accuracyMeters: gpsAccuracy || 3.5
             },
             isTamperProofVerified: true,
-            uploadStatus: uploadRes.ok ? 'UPLOADED' : 'PENDING_STORAGE_SYNC'
+            uploadStatus: !uploadError ? 'UPLOADED' : 'PENDING_STORAGE_SYNC'
           });
         } catch (uploadErr) {
           console.warn('Storage upload error, saving direct reference:', uploadErr);
@@ -687,21 +712,12 @@ export default function App() {
         public_corroborations: 0
       };
 
-      // Direct POST to Supabase REST API
-      const res = await fetch(SUPABASE_REST, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(payload)
-      });
+      // Direct insert via Supabase client
+      const { error: insertError } = await supabase.from('incidents').insert(payload);
 
       setIsSubmitting(false);
 
-      if (res.ok || res.status === 201) {
+      if (!insertError) {
         Alert.alert(
           '✅ Report Transmitted & Live',
           `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nLive GPS Coordinates & Landmark pinned on the National Command Map.`,
@@ -715,7 +731,7 @@ export default function App() {
         setRecordingSeconds(0);
         setRecordedUri(null);
       } else {
-        throw new Error(`Server returned ${res.status}`);
+        throw insertError;
       }
     } catch (e: any) {
       setIsSubmitting(false);
@@ -1476,9 +1492,16 @@ export default function App() {
                     {
                       text: 'Lock App',
                       style: 'destructive',
-                      onPress: () => {
+                      onPress: async () => {
+                        try {
+                          await supabase.auth.signOut();
+                          await GoogleSignin.signOut().catch(() => {});
+                        } catch (err) {
+                          console.warn('Sign out error:', err);
+                        }
                         setIsCitizenAuthOpen(false);
                         setIsAuthenticated(false);
+                        setIsAnonymous(false);
                       }
                     }
                   ]
