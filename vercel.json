@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cd web-portal && npm install && npm run build",
+  "outputDirectory": "web-portal/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
