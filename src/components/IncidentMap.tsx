@@ -31,7 +31,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         zoomControl: true
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      const CARTO_API_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfcTI3M2Y0anMiLCJqdGkiOiIzY2U3YTU2NzVlMjA4ZGVhM2EyZDYzZDM1ODU3ODM2YSJ9.J7aEh-YJQaJ4As_S2QTmrSw1j1LXaZbsPLCB0NRiIiI';
+      L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`, {
         attribution: '&copy; OpenStreetMap &copy; CARTO &copy; GhanaPost GPS',
         maxZoom: 19
       }).addTo(map);
