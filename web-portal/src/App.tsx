@@ -25,31 +25,54 @@ export const App: React.FC = () => {
     // Fetch live incidents from Supabase if table exists
     const fetchSupabaseData = async () => {
       try {
-        const { data: incidentRows } = await supabase.from('incidents').select('*');
+        const { data: incidentRows } = await supabase
+          .from('incidents')
+          .select('*')
+          .order('created_at', { ascending: false });
         if (incidentRows && incidentRows.length > 0) {
-          const formatted: IncidentReport[] = incidentRows.map((r: any) => ({
-            id: r.id,
-            trackingCode: r.tracking_code,
-            title: r.title,
-            category: r.category,
-            description: r.description,
-            locationName: r.location_name,
-            ghanaPostCode: r.ghanapost_code,
-            region: r.region,
-            coordinates: [r.latitude, r.longitude],
-            media: r.media || [],
-            reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
-            assignedAgency: r.assigned_agency,
-            secondaryAgencies: r.secondary_agencies || [],
-            status: r.status,
-            severity: r.severity,
-            isPublicEligible: r.is_public_eligible,
-            isPublicPublished: r.is_public_published,
-            publicCorroborations: r.public_corroborations || 0,
-            createdAt: r.created_at,
-            updatedAt: r.updated_at,
-            investigatorNotes: r.investigator_notes || []
-          }));
+          const formatted: IncidentReport[] = incidentRows.map((r: any) => {
+            let parsedMedia = Array.isArray(r.media) ? r.media : [];
+            if (typeof r.media === 'string') {
+              try {
+                parsedMedia = JSON.parse(r.media);
+              } catch (e) {
+                parsedMedia = [];
+              }
+            }
+            parsedMedia = parsedMedia.map((m: any) => ({
+              ...m,
+              rawS3Url: (m.rawS3Url && !m.rawS3Url.startsWith('file://') && !m.rawS3Url.startsWith('content://') && !m.rawS3Url.includes('ForBiggerBlazes'))
+                ? m.rawS3Url
+                : 'https://media.w3.org/2010/05/sintel/trailer.mp4',
+              thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('file://') && !m.thumbnailUrl.startsWith('content://'))
+                ? m.thumbnailUrl
+                : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+            }));
+
+            return {
+              id: r.id,
+              trackingCode: r.tracking_code,
+              title: r.title,
+              category: r.category,
+              description: r.description,
+              locationName: r.location_name,
+              ghanaPostCode: r.ghanapost_code,
+              region: r.region,
+              coordinates: [r.latitude, r.longitude],
+              media: parsedMedia,
+              reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
+              assignedAgency: r.assigned_agency,
+              secondaryAgencies: r.secondary_agencies || [],
+              status: r.status,
+              severity: r.severity,
+              isPublicEligible: r.is_public_eligible,
+              isPublicPublished: r.is_public_published,
+              publicCorroborations: r.public_corroborations || 0,
+              createdAt: r.created_at,
+              updatedAt: r.updated_at,
+              investigatorNotes: r.investigator_notes || []
+            };
+          });
           setIncidents(formatted);
           setSelectedIncident(formatted[0]);
         }
@@ -65,6 +88,24 @@ export const App: React.FC = () => {
       .channel('realtime_incidents')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' }, (payload) => {
         const r: any = payload.new;
+        let parsedMedia = Array.isArray(r.media) ? r.media : [];
+        if (typeof r.media === 'string') {
+          try {
+            parsedMedia = JSON.parse(r.media);
+          } catch (e) {
+            parsedMedia = [];
+          }
+        }
+        parsedMedia = parsedMedia.map((m: any) => ({
+          ...m,
+          rawS3Url: (m.rawS3Url && !m.rawS3Url.startsWith('file://') && !m.rawS3Url.startsWith('content://') && !m.rawS3Url.includes('ForBiggerBlazes'))
+            ? m.rawS3Url
+            : 'https://media.w3.org/2010/05/sintel/trailer.mp4',
+          thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('file://') && !m.thumbnailUrl.startsWith('content://'))
+            ? m.thumbnailUrl
+            : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+        }));
+
         const newInc: IncidentReport = {
           id: r.id,
           trackingCode: r.tracking_code,
@@ -75,7 +116,7 @@ export const App: React.FC = () => {
           ghanaPostCode: r.ghanapost_code,
           region: r.region,
           coordinates: [r.latitude, r.longitude],
-          media: r.media || [],
+          media: parsedMedia,
           reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
           assignedAgency: r.assigned_agency,
           secondaryAgencies: r.secondary_agencies || [],

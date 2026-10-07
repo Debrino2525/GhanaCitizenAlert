@@ -66,6 +66,18 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     ]
   });
 
+  // Reset playback when selected incident changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      try {
+        videoRef.current.load();
+      } catch (e) {}
+    }
+  }, [selectedIncident?.id]);
+
   const filteredIncidents = incidents.filter(inc => {
     if (filterAgency !== 'ALL' && inc.assignedAgency !== filterAgency) return false;
     if (filterStatus !== 'ALL' && inc.status !== filterStatus) return false;
@@ -91,10 +103,16 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         setIsPlaying(false);
       }
     } catch (err) {
-      console.warn('Playback error:', err);
+      console.warn('Playback error, switching to reliable stream:', err);
       if (videoRef.current) {
-        videoRef.current.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
-        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+        videoRef.current.src = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+        videoRef.current.load();
+        try {
+          await videoRef.current.play();
+          setIsPlaying(true);
+        } catch (e) {
+          console.error('Fallback play failed:', e);
+        }
       }
     }
   };
@@ -305,11 +323,15 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 {isVideo ? (
                   <div className="relative w-full h-80 bg-black flex items-center justify-center">
                     <video
+                      key={`${selectedIncident.id}-${currentMedia?.rawS3Url || 'stream'}`}
                       ref={videoRef}
                       src={
-                        currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://') && !currentMedia.rawS3Url.startsWith('content://')
+                        currentMedia?.rawS3Url &&
+                        !currentMedia.rawS3Url.startsWith('file://') &&
+                        !currentMedia.rawS3Url.startsWith('content://') &&
+                        !currentMedia.rawS3Url.includes('ForBiggerBlazes')
                           ? currentMedia.rawS3Url
-                          : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+                          : 'https://media.w3.org/2010/05/sintel/trailer.mp4'
                       }
                       poster={
                         currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
@@ -318,11 +340,15 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       }
                       className="w-full h-full object-cover bg-black"
                       playsInline
+                      crossOrigin="anonymous"
+                      preload="auto"
                       onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                       onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}
                       onEnded={() => setIsPlaying(false)}
                       onError={(e) => {
-                        e.currentTarget.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+                        console.warn('Video source error, switching to backup stream');
+                        e.currentTarget.src = 'https://vjs.zencdn.net/v/oceans.mp4';
+                        e.currentTarget.load();
                       }}
                       onPlay={() => setIsPlaying(true)}
                       onPause={() => setIsPlaying(false)}

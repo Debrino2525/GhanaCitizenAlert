@@ -551,7 +551,7 @@ export default function App() {
         : locationName;
 
       const evidenceUrl = mediaType === 'VIDEO'
-        ? (recordedUri && !recordedUri.startsWith('file://') ? recordedUri : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4')
+        ? (recordedUri && !recordedUri.startsWith('file://') ? recordedUri : 'https://media.w3.org/2010/05/sintel/trailer.mp4')
         : (recordedUri && !recordedUri.startsWith('file://') ? recordedUri : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80');
 
       const evidenceThumb = recordedUri && !recordedUri.startsWith('file://')
