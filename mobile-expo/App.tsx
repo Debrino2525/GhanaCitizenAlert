@@ -7,7 +7,6 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Image,
@@ -18,11 +17,12 @@ import {
   Platform,
   Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
 import { supabase } from './src/lib/supabase';
