@@ -23,7 +23,6 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
 import { supabase } from './src/lib/supabase';
 

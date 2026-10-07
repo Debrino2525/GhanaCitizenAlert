@@ -13,15 +13,8 @@ import {
   SafeAreaView,
   StatusBar
 } from 'react-native';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable } from '../lib/googleAuth';
 import { supabase } from '../lib/supabase';
-
-// Configure Native Google Sign-In
-GoogleSignin.configure({
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '360721223201-tdr0166i26q1d5tupnlp4mluebjncq9b.apps.googleusercontent.com',
-  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || undefined,
-  scopes: ['profile', 'email']
-});
 
 export interface CitizenUser {
   id: string;
@@ -169,11 +162,22 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
   // 3. Native In-App Google Sign-In with Supabase signInWithIdToken (No Browser Redirects)
   const handleGoogleAuth = async () => {
+    if (!isNativeGoogleAuthAvailable || !GoogleSignin) {
+      Alert.alert(
+        'Native Google Sign-In',
+        'Native Google Sign-In requires a custom Development Client build (npx expo run:ios / run:android). While testing inside Expo Go, please sign in with Email & Password or use Whistleblower Mode below.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage(null);
     try {
       // Ensure Google Play Services is available
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      if (GoogleSignin.hasPlayServices) {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
 
       // Native in-app account chooser
       const signInResult = await GoogleSignin.signIn();
