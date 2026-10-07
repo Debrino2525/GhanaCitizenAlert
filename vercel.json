@@ -1,5 +1,6 @@
 {
-  "buildCommand": "cd web-portal && npm install && npm run build",
+  "version": 2,
+  "buildCommand": "cd web-portal && npm install && npm run build && cd .. && cp -r web-portal/dist ./dist 2>/dev/null || xcopy /E /I /Y web-portal\\dist dist",
   "outputDirectory": "web-portal/dist",
   "rewrites": [
     {
