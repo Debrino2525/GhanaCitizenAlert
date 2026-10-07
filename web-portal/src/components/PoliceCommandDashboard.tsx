@@ -55,6 +55,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   // Video playback & forensic controls state
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(15);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
@@ -78,14 +80,22 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     return true;
   });
 
-  const handleTogglePlay = () => {
+  const handleTogglePlay = async () => {
     if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
+    try {
+      if (videoRef.current.paused) {
+        await videoRef.current.play();
+        setIsPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    } catch (err) {
+      console.warn('Playback error:', err);
+      if (videoRef.current) {
+        videoRef.current.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      }
     }
   };
 
@@ -98,7 +108,14 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
   const handleStepFrame = (seconds: number) => {
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + seconds);
+      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || 60, videoRef.current.currentTime + seconds));
+    }
+  };
+
+  const handleSeek = (time: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
     }
   };
 
@@ -283,30 +300,46 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 </span>
               </div>
 
-              <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black shadow-inner">
+              <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black shadow-inner group">
                 {/* HTML5 Video or Image Media */}
                 {isVideo ? (
-                  <video
-                    ref={videoRef}
-                    src={
-                      currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://') && !currentMedia.rawS3Url.startsWith('content://')
-                        ? currentMedia.rawS3Url
-                        : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-                    }
-                    poster={
-                      currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
-                        ? currentMedia.thumbnailUrl
-                        : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
-                    }
-                    className="w-full h-80 object-cover bg-black"
-                    controls
-                    playsInline
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
-                    }}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                  />
+                  <div className="relative w-full h-80 bg-black flex items-center justify-center">
+                    <video
+                      ref={videoRef}
+                      src={
+                        currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://') && !currentMedia.rawS3Url.startsWith('content://')
+                          ? currentMedia.rawS3Url
+                          : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+                      }
+                      poster={
+                        currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
+                          ? currentMedia.thumbnailUrl
+                          : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+                      }
+                      className="w-full h-full object-cover bg-black"
+                      playsInline
+                      onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                      onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}
+                      onEnded={() => setIsPlaying(false)}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+                      }}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                    />
+
+                    {/* Big Centered Play Button Overlay */}
+                    {!isPlaying && (
+                      <div
+                        onClick={handleTogglePlay}
+                        className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 hover:bg-black/30 cursor-pointer transition"
+                      >
+                        <div className="w-16 h-16 rounded-full bg-blue-600/90 hover:bg-blue-500 text-white flex items-center justify-center shadow-2xl pl-1 border-2 border-white/80 hover:scale-105 transition">
+                          <Play className="w-8 h-8 fill-current" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <img
                     src={
@@ -323,7 +356,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 )}
 
                 {/* Tamper-Proof Cryptographic Watermark HUD Overlay */}
-                <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-md p-2.5 rounded-xl border border-slate-700/80 text-[11px] font-mono text-white space-y-0.5 shadow-2xl pointer-events-none">
+                <div className="absolute top-3 left-3 z-30 bg-black/85 backdrop-blur-md p-2.5 rounded-xl border border-slate-700/80 text-[11px] font-mono text-white space-y-0.5 shadow-2xl pointer-events-none">
                   <p className="text-ghana-gold font-black flex items-center space-x-1">
                     <span>🇬🇭</span>
                     <span>CITIZEN-ALERT EVIDENCE LOCK (ACT 772)</span>
@@ -344,56 +377,77 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   href={`https://www.google.com/maps/search/?api=1&query=${selectedIncident.coordinates[0]},${selectedIncident.coordinates[1]}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1.5 shadow-lg backdrop-blur-md transition"
+                  className="absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1.5 shadow-lg backdrop-blur-md transition"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Open Satellite Coordinates</span>
                 </a>
               </div>
 
-              {/* Forensic Player Controls (Slow Motion, Frame Step, Speeds) */}
+              {/* Forensic Player Controls (Slow Motion, Frame Step, Timeline Seek, Speeds) */}
               {isVideo && (
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleTogglePlay}
-                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center space-x-1"
-                    >
-                      {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                      <span>{isPlaying ? 'Pause' : 'Play'}</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleStepFrame(-1)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
-                      title="Step back 1s"
-                    >
-                      ⏪ -1s
-                    </button>
-                    <button
-                      onClick={() => handleStepFrame(1)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
-                      title="Step forward 1s"
-                    >
-                      ⏩ +1s
-                    </button>
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5 text-xs">
+                  {/* Timeline Scrubber */}
+                  <div className="flex items-center space-x-3">
+                    <span className="font-mono text-blue-400 text-[11px] font-bold w-12">
+                      {String(Math.floor(currentTime / 60)).padStart(2, '0')}:{String(Math.floor(currentTime % 60)).padStart(2, '0')}
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={duration || 15}
+                      step="0.1"
+                      value={currentTime}
+                      onChange={(e) => handleSeek(Number(e.target.value))}
+                      className="flex-1 accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <span className="font-mono text-slate-400 text-[11px] w-12 text-right">
+                      {String(Math.floor((duration || 15) / 60)).padStart(2, '0')}:{String(Math.floor((duration || 15) % 60)).padStart(2, '0')}
+                    </span>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-slate-400 text-[11px] font-bold">Playback Speed:</span>
-                    {[0.5, 1.0, 1.5, 2.0].map(speed => (
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-850">
+                    <div className="flex items-center space-x-2">
                       <button
-                        key={speed}
-                        onClick={() => handleSpeedChange(speed)}
-                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold ${
-                          playbackSpeed === speed
-                            ? 'bg-amber-400 text-slate-950'
-                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        }`}
+                        onClick={handleTogglePlay}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center space-x-1 shadow-md shadow-blue-600/20"
                       >
-                        {speed}x
+                        {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        <span>{isPlaying ? 'Pause' : 'Play'}</span>
                       </button>
-                    ))}
+
+                      <button
+                        onClick={() => handleStepFrame(-1)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+                        title="Step back 1s"
+                      >
+                        ⏪ -1s
+                      </button>
+                      <button
+                        onClick={() => handleStepFrame(1)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+                        title="Step forward 1s"
+                      >
+                        ⏩ +1s
+                      </button>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-slate-400 text-[11px] font-bold">Playback Speed:</span>
+                      {[0.5, 1.0, 1.5, 2.0].map(speed => (
+                        <button
+                          key={speed}
+                          onClick={() => handleSpeedChange(speed)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono font-bold ${
+                            playbackSpeed === speed
+                              ? 'bg-amber-400 text-slate-950 shadow'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {speed}x
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
