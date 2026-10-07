@@ -30,6 +30,7 @@ import {
   Plus
 } from 'lucide-react';
 import { generateCourtCertificate, CourtCertificate } from '../services/evidenceVault';
+import { supabase } from '../services/supabaseClient';
 
 interface PoliceCommandDashboardProps {
   incidents: IncidentReport[];
@@ -59,6 +60,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   const [duration, setDuration] = useState(15);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [videoLoadError, setVideoLoadError] = useState<boolean>(false);
+  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
+  const [isResolvingUrl, setIsResolvingUrl] = useState<boolean>(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
   const [caseNotes, setCaseNotes] = useState<Record<string, { author: string; text: string; time: string }[]>>({
@@ -67,18 +70,86 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     ]
   });
 
-  // Reset playback when selected incident changes
+  // Reset playback & resolve signed video URL when selected incident changes
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
     setVideoLoadError(false);
+
+    const activeMedia = (selectedIncident?.media || []).find((m: any) => m.type === 'VIDEO') || selectedIncident?.media?.[0];
+    if (!activeMedia) {
+      setResolvedVideoUrl('');
+      return;
+    }
+
+    let isCancelled = false;
+    const resolveMediaUrl = async () => {
+      setIsResolvingUrl(true);
+      try {
+        const rawUrl = (activeMedia as any).rawS3Url || (activeMedia as any).url || '';
+        const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
+
+        if (storagePath) {
+          // Attempt signed URL first for private storage security
+          const { data: signedData, error: signedErr } = await supabase.storage
+            .from('evidence')
+            .createSignedUrl(storagePath, 3600);
+
+          if (!isCancelled && !signedErr && signedData?.signedUrl) {
+            console.log('VIDEO_SIGNED_URL_CREATED', {
+              trackingCode: selectedIncident?.trackingCode,
+              storagePath,
+              signedUrl: signedData.signedUrl
+            });
+            setResolvedVideoUrl(signedData.signedUrl);
+            setIsResolvingUrl(false);
+            return;
+          }
+
+          // Fallback to public storage URL
+          const { data: pubData } = supabase.storage.from('evidence').getPublicUrl(storagePath);
+          if (!isCancelled && pubData?.publicUrl) {
+            setResolvedVideoUrl(pubData.publicUrl);
+            setIsResolvingUrl(false);
+            return;
+          }
+        }
+
+        if (rawUrl && !rawUrl.startsWith('file://')) {
+          if (!isCancelled) {
+            setResolvedVideoUrl(rawUrl);
+          }
+        } else {
+          if (!isCancelled) {
+            setResolvedVideoUrl('');
+          }
+        }
+      } catch (e) {
+        console.warn('Media URL resolution warning:', e);
+        if (!isCancelled) {
+          const fallback = (activeMedia as any).rawS3Url || '';
+          setResolvedVideoUrl(fallback.startsWith('file://') ? '' : fallback);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsResolvingUrl(false);
+        }
+      }
+    };
+
+    resolveMediaUrl();
+
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
       try {
         videoRef.current.load();
       } catch (e) {}
     }
-  }, [selectedIncident?.id]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedIncident?.id, selectedIncident?.trackingCode]);
 
   const filteredIncidents = incidents.filter(inc => {
     if (filterAgency !== 'ALL' && inc.assignedAgency !== filterAgency) return false;
@@ -154,8 +225,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     setNewNoteText('');
   };
 
-  const currentMedia = selectedIncident?.media[0];
-  const isVideo = currentMedia?.type === 'VIDEO' || currentMedia?.rawS3Url?.includes('.mp4') || currentMedia?.rawS3Url?.includes('video');
+  const currentMedia = (selectedIncident?.media || []).find((m: any) => m.type === 'VIDEO') || selectedIncident?.media?.[0];
+  const isVideo = currentMedia?.type === 'VIDEO' || resolvedVideoUrl?.includes('.mp4') || (currentMedia as any)?.rawS3Url?.includes('.mp4');
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -316,7 +387,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 {/* HTML5 Video or Image Media */}
                 {isVideo ? (
                   <div className="relative w-full h-80 bg-black flex items-center justify-center">
-                    {!currentMedia?.rawS3Url || currentMedia.rawS3Url.startsWith('file://') || videoLoadError ? (
+                    {isResolvingUrl ? (
+                      <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-3">
+                        <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-white font-bold text-xs">Generating Secure Evidence Stream (Act 772)...</p>
+                      </div>
+                    ) : !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') || videoLoadError ? (
                       <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-3">
                         <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-amber-400">
                           <AlertTriangle className="w-6 h-6" />
@@ -324,12 +400,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         <div>
                           <p className="text-white font-bold text-sm">Forensic Video Feed Unavailable</p>
                           <p className="text-slate-400 text-xs mt-1 max-w-sm">
-                            {currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://')
+                            {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://')
                               ? 'Media stream could not be loaded or network error occurred.'
                               : 'Video is stored in local encrypted queue on citizen device (Act 720 Whistleblower Vault).'}
                           </p>
                         </div>
-                        {currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://') && (
+                        {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && (
                           <div className="flex items-center space-x-2 pt-2">
                             <button
                               onClick={() => {
@@ -343,7 +419,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                               Retry Playback
                             </button>
                             <a
-                              href={currentMedia.rawS3Url}
+                              href={resolvedVideoUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1"
@@ -357,10 +433,10 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     ) : (
                       <>
                         <video
-                          key={`${selectedIncident.id}-${currentMedia.rawS3Url}`}
+                          key={`${selectedIncident.id}-${resolvedVideoUrl}`}
                           ref={videoRef}
-                          src={currentMedia.rawS3Url}
-                          poster={currentMedia.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://') ? currentMedia.thumbnailUrl : undefined}
+                          src={resolvedVideoUrl}
+                          poster={(currentMedia as any)?.thumbnailUrl && !(currentMedia as any)?.thumbnailUrl?.startsWith('file://') ? (currentMedia as any).thumbnailUrl : undefined}
                           className="w-full h-full object-cover bg-black"
                           playsInline
                           crossOrigin="anonymous"
@@ -368,11 +444,22 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}
                           onEnded={() => setIsPlaying(false)}
-                          onError={() => {
+                          onError={(e) => {
+                            console.error('VIDEO_PLAYBACK_FAILED', {
+                              trackingCode: selectedIncident.trackingCode,
+                              url: resolvedVideoUrl,
+                              error: e
+                            });
                             setVideoLoadError(true);
                             setIsPlaying(false);
                           }}
-                          onPlay={() => setIsPlaying(true)}
+                          onPlay={() => {
+                            setIsPlaying(true);
+                            console.log('VIDEO_PLAYBACK_STARTED', {
+                              trackingCode: selectedIncident.trackingCode,
+                              url: resolvedVideoUrl
+                            });
+                          }}
                           onPause={() => setIsPlaying(false)}
                         />
 

@@ -370,6 +370,9 @@ export default function App() {
 
   // Process and Attach Evidence with Real-time Upload Progress Reading
   const processAndAttachEvidence = (type: 'VIDEO' | 'IMAGE', uri: string, durationSec: number = 15) => {
+    console.log('VIDEO_CREATED', { uri, type, durationSeconds: durationSec });
+    console.log('VIDEO_QUEUED', { uri, type, durationSeconds: durationSec, status: 'QUEUED', queueTimestamp: new Date().toISOString() });
+    
     setIsUploadingMedia(true);
     setUploadProgress(15);
     setUploadStatusText('Extracting telemetry & frame buffers...');
@@ -619,7 +622,7 @@ export default function App() {
       let mediaPayloadList: any[] = [];
 
       if (hasRecordedMedia && recordedUri) {
-        setUploadProgress(25);
+        setUploadProgress(20);
         setUploadStatusText('Reading local evidence binary buffer...');
 
         const extension = mediaType === 'VIDEO' ? 'mp4' : 'jpg';
@@ -647,67 +650,109 @@ export default function App() {
           console.warn('Hash computation fallback:', hashErr);
         }
 
-        try {
-          setUploadProgress(50);
-          setUploadStatusText('Uploading binary stream to National Evidence Vault...');
+        let uploadState: 'QUEUED' | 'UPLOADING' | 'UPLOADED' | 'UPLOAD_FAILED' | 'RETRYING' = 'UPLOADING';
+        let uploadSucceeded = false;
 
-          // Read raw file buffer as Base64 and decode into ArrayBuffer to avoid React Native's text/plain Blob bug
+        console.log('VIDEO_UPLOAD_STARTED', {
+          trackingCode,
+          fileName,
+          mimeType,
+          fileSizeBytes: fileSize,
+          sha256Checksum: computedHash,
+          localUri: recordedUri
+        });
+
+        try {
+          setUploadProgress(40);
+          console.log('VIDEO_UPLOAD_PROGRESS', { trackingCode, progress: 40, state: uploadState });
+          setUploadStatusText('Reading binary buffer from secure sandbox...');
+
+          // Read raw file buffer as Base64 and decode into ArrayBuffer
           const base64Data = await FileSystem.readAsStringAsync(recordedUri, {
             encoding: FileSystem.EncodingType.Base64
           });
           const binaryArrayBuffer = decode(base64Data);
 
-          const { error: uploadError } = await supabase.storage
+          setUploadProgress(65);
+          console.log('VIDEO_UPLOAD_PROGRESS', { trackingCode, progress: 65, state: uploadState });
+          setUploadStatusText('Uploading binary stream to National Evidence Vault...');
+
+          let uploadResult = await supabase.storage
             .from('evidence')
             .upload(fileName, binaryArrayBuffer, {
-              contentType: mimeType,
-              upsert: true
+              contentType: mimeType
             });
 
-          setUploadProgress(85);
-          setUploadStatusText('Evidence signed and locked under Act 772...');
+          if (uploadResult.error) {
+            console.warn('Initial storage upload encountered error, retrying...', uploadResult.error);
+            uploadState = 'RETRYING';
+            console.log('VIDEO_UPLOAD_RETRY', { trackingCode, fileName, attempt: 2, error: uploadResult.error.message });
+            setUploadStatusText('Retrying binary transmission to Evidence Vault...');
 
-          mediaPayloadList.push({
-            type: mediaType,
-            durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-            rawS3Url: !uploadError ? publicStorageUrl : '',
-            thumbnailUrl: !uploadError ? publicStorageUrl : '',
-            localUri: recordedUri,
-            sha256Checksum: computedHash,
-            timestampUtc: new Date().toISOString(),
-            fileSizeBytes: fileSize,
-            gpsWatermark: {
-              lat: coords.latitude,
-              lng: coords.longitude,
-              landmark: landmark.trim() || 'Direct GPS Lock',
-              ghanaPostCode: ghanaPostCode.toUpperCase(),
-              accuracyMeters: gpsAccuracy || 3.5
-            },
-            isTamperProofVerified: true,
-            uploadStatus: !uploadError ? 'UPLOADED' : 'PENDING_STORAGE_SYNC'
-          });
+            // Retry once
+            uploadResult = await supabase.storage
+              .from('evidence')
+              .upload(fileName, binaryArrayBuffer, {
+                contentType: mimeType
+              });
+          }
+
+          if (!uploadResult.error && uploadResult.data) {
+            uploadSucceeded = true;
+            uploadState = 'UPLOADED';
+            setUploadProgress(85);
+            console.log('VIDEO_UPLOAD_PROGRESS', { trackingCode, progress: 85, state: uploadState });
+            console.log('VIDEO_UPLOAD_SUCCESS', {
+              trackingCode,
+              fileName,
+              path: uploadResult.data.path,
+              publicUrl: publicStorageUrl,
+              fileSizeBytes: fileSize
+            });
+            console.log('VIDEO_STORAGE_VERIFIED', {
+              trackingCode,
+              storageBucket: 'evidence',
+              storagePath: fileName,
+              verifiedAt: new Date().toISOString()
+            });
+            setUploadStatusText('Evidence signed and locked under Act 772...');
+          } else {
+            uploadState = 'UPLOAD_FAILED';
+            console.error('VIDEO_UPLOAD_FAILED', {
+              trackingCode,
+              fileName,
+              error: uploadResult.error?.message || 'Upload failed after retry'
+            });
+          }
         } catch (uploadErr: any) {
-          console.warn('Storage sync queued for offline/whistleblower mode:', uploadErr);
-          mediaPayloadList.push({
-            type: mediaType,
-            durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-            rawS3Url: '',
-            thumbnailUrl: '',
-            localUri: recordedUri,
-            sha256Checksum: computedHash,
-            timestampUtc: new Date().toISOString(),
-            fileSizeBytes: fileSize,
-            gpsWatermark: {
-              lat: coords.latitude,
-              lng: coords.longitude,
-              landmark: landmark.trim() || 'Direct GPS Lock',
-              ghanaPostCode: ghanaPostCode.toUpperCase(),
-              accuracyMeters: gpsAccuracy || 3.5
-            },
-            isTamperProofVerified: true,
-            uploadStatus: 'PENDING_STORAGE_SYNC'
+          uploadState = 'UPLOAD_FAILED';
+          console.error('VIDEO_UPLOAD_FAILED', {
+            trackingCode,
+            fileName,
+            error: uploadErr.message || 'Exception during storage upload'
           });
         }
+
+        mediaPayloadList.push({
+          type: mediaType,
+          video_storage_path: fileName,
+          durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
+          rawS3Url: uploadSucceeded ? publicStorageUrl : '',
+          thumbnailUrl: uploadSucceeded ? publicStorageUrl : '',
+          localUri: recordedUri,
+          sha256Checksum: computedHash,
+          timestampUtc: new Date().toISOString(),
+          fileSizeBytes: fileSize,
+          gpsWatermark: {
+            lat: coords.latitude,
+            lng: coords.longitude,
+            landmark: landmark.trim() || 'Direct GPS Lock',
+            ghanaPostCode: ghanaPostCode.toUpperCase(),
+            accuracyMeters: gpsAccuracy || 3.5
+          },
+          isTamperProofVerified: true,
+          uploadStatus: uploadState
+        });
       }
 
       setUploadProgress(95);
