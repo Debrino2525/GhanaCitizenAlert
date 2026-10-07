@@ -58,6 +58,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(15);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  const [videoLoadError, setVideoLoadError] = useState<boolean>(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
   const [caseNotes, setCaseNotes] = useState<Record<string, { author: string; text: string; time: string }[]>>({
@@ -70,6 +71,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
+    setVideoLoadError(false);
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
       try {
@@ -103,17 +105,9 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         setIsPlaying(false);
       }
     } catch (err) {
-      console.warn('Playback error, switching to reliable stream:', err);
-      if (videoRef.current) {
-        videoRef.current.src = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
-        videoRef.current.load();
-        try {
-          await videoRef.current.play();
-          setIsPlaying(true);
-        } catch (e) {
-          console.error('Fallback play failed:', e);
-        }
-      }
+      console.warn('Playback error:', err);
+      setVideoLoadError(true);
+      setIsPlaying(false);
     }
   };
 
@@ -322,63 +316,93 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 {/* HTML5 Video or Image Media */}
                 {isVideo ? (
                   <div className="relative w-full h-80 bg-black flex items-center justify-center">
-                    <video
-                      key={`${selectedIncident.id}-${currentMedia?.rawS3Url || 'stream'}`}
-                      ref={videoRef}
-                      src={
-                        currentMedia?.rawS3Url &&
-                        !currentMedia.rawS3Url.startsWith('file://') &&
-                        !currentMedia.rawS3Url.startsWith('content://') &&
-                        !currentMedia.rawS3Url.includes('ForBiggerBlazes')
-                          ? currentMedia.rawS3Url
-                          : 'https://media.w3.org/2010/05/sintel/trailer.mp4'
-                      }
-                      poster={
-                        currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
-                          ? currentMedia.thumbnailUrl
-                          : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
-                      }
-                      className="w-full h-full object-cover bg-black"
-                      playsInline
-                      crossOrigin="anonymous"
-                      preload="auto"
-                      onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                      onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}
-                      onEnded={() => setIsPlaying(false)}
-                      onError={(e) => {
-                        console.warn('Video source error, switching to backup stream');
-                        e.currentTarget.src = 'https://vjs.zencdn.net/v/oceans.mp4';
-                        e.currentTarget.load();
-                      }}
-                      onPlay={() => setIsPlaying(true)}
-                      onPause={() => setIsPlaying(false)}
-                    />
-
-                    {/* Big Centered Play Button Overlay */}
-                    {!isPlaying && (
-                      <div
-                        onClick={handleTogglePlay}
-                        className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 hover:bg-black/30 cursor-pointer transition"
-                      >
-                        <div className="w-16 h-16 rounded-full bg-blue-600/90 hover:bg-blue-500 text-white flex items-center justify-center shadow-2xl pl-1 border-2 border-white/80 hover:scale-105 transition">
-                          <Play className="w-8 h-8 fill-current" />
+                    {!currentMedia?.rawS3Url || currentMedia.rawS3Url.startsWith('file://') || videoLoadError ? (
+                      <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-amber-400">
+                          <AlertTriangle className="w-6 h-6" />
                         </div>
+                        <div>
+                          <p className="text-white font-bold text-sm">Forensic Video Feed Unavailable</p>
+                          <p className="text-slate-400 text-xs mt-1 max-w-sm">
+                            {currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://')
+                              ? 'Media stream could not be loaded or network error occurred.'
+                              : 'Video is stored in local encrypted queue on citizen device (Act 720 Whistleblower Vault).'}
+                          </p>
+                        </div>
+                        {currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://') && (
+                          <div className="flex items-center space-x-2 pt-2">
+                            <button
+                              onClick={() => {
+                                setVideoLoadError(false);
+                                if (videoRef.current) {
+                                  videoRef.current.load();
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold"
+                            >
+                              Retry Playback
+                            </button>
+                            <a
+                              href={currentMedia.rawS3Url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Open Direct URL</span>
+                            </a>
+                          </div>
+                        )}
                       </div>
+                    ) : (
+                      <>
+                        <video
+                          key={`${selectedIncident.id}-${currentMedia.rawS3Url}`}
+                          ref={videoRef}
+                          src={currentMedia.rawS3Url}
+                          poster={currentMedia.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://') ? currentMedia.thumbnailUrl : undefined}
+                          className="w-full h-full object-cover bg-black"
+                          playsInline
+                          crossOrigin="anonymous"
+                          preload="auto"
+                          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}
+                          onEnded={() => setIsPlaying(false)}
+                          onError={() => {
+                            setVideoLoadError(true);
+                            setIsPlaying(false);
+                          }}
+                          onPlay={() => setIsPlaying(true)}
+                          onPause={() => setIsPlaying(false)}
+                        />
+
+                        {/* Big Centered Play Button Overlay */}
+                        {!isPlaying && (
+                          <div
+                            onClick={handleTogglePlay}
+                            className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 hover:bg-black/30 cursor-pointer transition"
+                          >
+                            <div className="w-16 h-16 rounded-full bg-blue-600/90 hover:bg-blue-500 text-white flex items-center justify-center shadow-2xl pl-1 border-2 border-white/80 hover:scale-105 transition">
+                              <Play className="w-8 h-8 fill-current" />
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
-                  <img
-                    src={
-                      currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
-                        ? currentMedia.thumbnailUrl
-                        : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
-                    }
-                    alt="Evidence"
-                    className="w-full h-80 object-cover opacity-90"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80';
-                    }}
-                  />
+                  currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://') ? (
+                    <img
+                      src={currentMedia.thumbnailUrl}
+                      alt="Evidence"
+                      className="w-full h-80 object-cover opacity-90"
+                    />
+                  ) : (
+                    <div className="w-full h-80 bg-slate-950 flex flex-col items-center justify-center text-slate-400 text-xs">
+                      <ShieldCheck className="w-8 h-8 text-slate-600 mb-2" />
+                      <span>Photo evidence recorded and sealed under Act 772</span>
+                    </div>
+                  )
                 )}
 
                 {/* Tamper-Proof Cryptographic Watermark HUD Overlay */}

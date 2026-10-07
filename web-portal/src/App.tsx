@@ -60,12 +60,8 @@ export const App: React.FC = () => {
             }
             parsedMedia = parsedMedia.map((m: any) => ({
               ...m,
-              rawS3Url: (m.rawS3Url && !m.rawS3Url.startsWith('file://') && !m.rawS3Url.startsWith('content://') && !m.rawS3Url.includes('ForBiggerBlazes'))
-                ? m.rawS3Url
-                : 'https://media.w3.org/2010/05/sintel/trailer.mp4',
-              thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('file://') && !m.thumbnailUrl.startsWith('content://'))
-                ? m.thumbnailUrl
-                : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+              rawS3Url: m.rawS3Url || '',
+              thumbnailUrl: m.thumbnailUrl || ''
             }));
 
             const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
@@ -99,7 +95,7 @@ export const App: React.FC = () => {
           setSelectedIncident(formatted[0]);
         }
       } catch (err) {
-        // Fallback to initial mock data
+        // Handle fetch error
       }
     };
 
@@ -120,12 +116,8 @@ export const App: React.FC = () => {
         }
         parsedMedia = parsedMedia.map((m: any) => ({
           ...m,
-          rawS3Url: (m.rawS3Url && !m.rawS3Url.startsWith('file://') && !m.rawS3Url.startsWith('content://') && !m.rawS3Url.includes('ForBiggerBlazes'))
-            ? m.rawS3Url
-            : 'https://media.w3.org/2010/05/sintel/trailer.mp4',
-          thumbnailUrl: (m.thumbnailUrl && !m.thumbnailUrl.startsWith('file://') && !m.thumbnailUrl.startsWith('content://'))
-            ? m.thumbnailUrl
-            : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+          rawS3Url: m.rawS3Url || '',
+          thumbnailUrl: m.thumbnailUrl || ''
         }));
 
         const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
