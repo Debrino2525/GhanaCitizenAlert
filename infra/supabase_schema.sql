@@ -98,3 +98,24 @@ CREATE INDEX IF NOT EXISTS idx_incidents_geo ON incidents USING GIST(location);
 ALTER PUBLICATION supabase_realtime ADD TABLE incidents;
 ALTER PUBLICATION supabase_realtime ADD TABLE emergency_alerts;
 ALTER PUBLICATION supabase_realtime ADD TABLE alert_sightings;
+
+-- Enable Row Level Security (RLS) & allow anonymous/authenticated read & insert
+ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE emergency_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alert_sightings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_evidence_ledger ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read on incidents" ON incidents FOR SELECT USING (true);
+CREATE POLICY "Allow public insert on incidents" ON incidents FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update on incidents" ON incidents FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public read on emergency_alerts" ON emergency_alerts FOR SELECT USING (true);
+CREATE POLICY "Allow public insert on emergency_alerts" ON emergency_alerts FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update on emergency_alerts" ON emergency_alerts FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public read on alert_sightings" ON alert_sightings FOR SELECT USING (true);
+CREATE POLICY "Allow public insert on alert_sightings" ON alert_sightings FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public read on audit_ledger" ON audit_evidence_ledger FOR SELECT USING (true);
+CREATE POLICY "Allow public insert on audit_ledger" ON audit_evidence_ledger FOR INSERT WITH CHECK (true);
+
