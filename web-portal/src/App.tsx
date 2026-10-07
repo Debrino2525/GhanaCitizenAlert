@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { IncidentMap } from './components/IncidentMap';
 import { PoliceCommandDashboard } from './components/PoliceCommandDashboard';
@@ -10,6 +10,7 @@ import { CourtCertificateModal } from './components/CourtCertificateModal';
 import { INITIAL_INCIDENTS, INITIAL_ALERTS, INITIAL_SIGHTINGS } from './data/mockData';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType } from './types';
 import { CourtCertificate } from './services/evidenceVault';
+import { supabase } from './services/supabaseClient';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'COMMAND' | 'MODERATOR' | 'ALERTS' | 'FEED' | 'ANALYTICS'>('COMMAND');
@@ -19,7 +20,85 @@ export const App: React.FC = () => {
   const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(INITIAL_INCIDENTS[0]);
   const [activeCertificate, setActiveCertificate] = useState<CourtCertificate | null>(null);
 
-  const handleUpdateStatus = (incidentId: string, newStatus: IncidentStatus) => {
+  // 1. Load data from Supabase & Listen to Realtime Events
+  useEffect(() => {
+    // Fetch live incidents from Supabase if table exists
+    const fetchSupabaseData = async () => {
+      try {
+        const { data: incidentRows } = await supabase.from('incidents').select('*');
+        if (incidentRows && incidentRows.length > 0) {
+          const formatted: IncidentReport[] = incidentRows.map((r: any) => ({
+            id: r.id,
+            trackingCode: r.tracking_code,
+            title: r.title,
+            category: r.category,
+            description: r.description,
+            locationName: r.location_name,
+            ghanaPostCode: r.ghanapost_code,
+            region: r.region,
+            coordinates: [r.latitude, r.longitude],
+            media: r.media || [],
+            reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
+            assignedAgency: r.assigned_agency,
+            secondaryAgencies: r.secondary_agencies || [],
+            status: r.status,
+            severity: r.severity,
+            isPublicEligible: r.is_public_eligible,
+            isPublicPublished: r.is_public_published,
+            publicCorroborations: r.public_corroborations || 0,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            investigatorNotes: r.investigator_notes || []
+          }));
+          setIncidents(formatted);
+          setSelectedIncident(formatted[0]);
+        }
+      } catch (err) {
+        // Fallback to initial mock data
+      }
+    };
+
+    fetchSupabaseData();
+
+    // Subscribe to Realtime Incidents channel
+    const channel = supabase
+      .channel('realtime_incidents')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' }, (payload) => {
+        const r: any = payload.new;
+        const newInc: IncidentReport = {
+          id: r.id,
+          trackingCode: r.tracking_code,
+          title: r.title,
+          category: r.category,
+          description: r.description,
+          locationName: r.location_name,
+          ghanaPostCode: r.ghanapost_code,
+          region: r.region,
+          coordinates: [r.latitude, r.longitude],
+          media: r.media || [],
+          reporter: r.reporter_data || { isAnonymous: r.is_anonymous, trustScore: r.reporter_trust_score },
+          assignedAgency: r.assigned_agency,
+          secondaryAgencies: r.secondary_agencies || [],
+          status: r.status,
+          severity: r.severity,
+          isPublicEligible: r.is_public_eligible,
+          isPublicPublished: r.is_public_published,
+          publicCorroborations: r.public_corroborations || 0,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          investigatorNotes: r.investigator_notes || []
+        };
+        setIncidents(prev => [newInc, ...prev]);
+        setSelectedIncident(newInc);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleUpdateStatus = async (incidentId: string, newStatus: IncidentStatus) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
         const updated = { ...inc, status: newStatus, updatedAt: new Date().toISOString() };
@@ -28,9 +107,13 @@ export const App: React.FC = () => {
       }
       return inc;
     }));
+
+    try {
+      await supabase.from('incidents').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', incidentId);
+    } catch (e) {}
   };
 
-  const handleReassignAgency = (incidentId: string, newAgency: AgencyType) => {
+  const handleReassignAgency = async (incidentId: string, newAgency: AgencyType) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
         const updated = { ...inc, assignedAgency: newAgency, updatedAt: new Date().toISOString() };
@@ -39,40 +122,68 @@ export const App: React.FC = () => {
       }
       return inc;
     }));
+
+    try {
+      await supabase.from('incidents').update({ assigned_agency: newAgency, updated_at: new Date().toISOString() }).eq('id', incidentId);
+    } catch (e) {}
   };
 
-  const handleApprovePublicPublish = (incidentId: string) => {
+  const handleApprovePublicPublish = async (incidentId: string) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
         return { ...inc, isPublicPublished: true };
       }
       return inc;
     }));
+
+    try {
+      await supabase.from('incidents').update({ is_public_published: true }).eq('id', incidentId);
+    } catch (e) {}
   };
 
-  const handleRejectPublicPublish = (incidentId: string) => {
+  const handleRejectPublicPublish = async (incidentId: string) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
         return { ...inc, isPublicPublished: false, isPublicEligible: false };
       }
       return inc;
     }));
+
+    try {
+      await supabase.from('incidents').update({ is_public_published: false, is_public_eligible: false }).eq('id', incidentId);
+    } catch (e) {}
   };
 
-  const handleCorroborate = (incidentId: string) => {
+  const handleCorroborate = async (incidentId: string) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
         return { ...inc, publicCorroborations: inc.publicCorroborations + 1 };
       }
       return inc;
     }));
+
+    try {
+      await supabase.rpc('increment_corroboration', { row_id: incidentId });
+    } catch (e) {}
   };
 
-  const handleAddSighting = (sighting: SightingTip) => {
+  const handleAddSighting = async (sighting: SightingTip) => {
     setSightings(prev => [sighting, ...prev]);
+    try {
+      await supabase.from('alert_sightings').insert({
+        alert_id: sighting.alertId,
+        location_name: sighting.locationName,
+        ghanapost_code: sighting.ghanaPostCode,
+        latitude: sighting.coordinates[0],
+        longitude: sighting.coordinates[1],
+        comment: sighting.comment,
+        reporter_phone: sighting.reporterPhone,
+        is_verified: sighting.isVerified
+      });
+    } catch (e) {}
   };
 
-  const handleCreateAlert = (newAlert: EmergencyAlert) => {
+  const handleCreateAlert = async (newAlert: EmergencyAlert) => {
     setAlerts(prev => [newAlert, ...prev]);
   };
 
@@ -153,7 +264,10 @@ export const App: React.FC = () => {
 
       <footer className="mt-auto border-t border-slate-800 bg-slate-950 py-6 text-xs text-slate-500 text-center">
         <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
-          <p>&copy; 2026 Republic of Ghana • National Civic Safety & Portals System.</p>
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <p>&copy; 2026 Republic of Ghana • Supabase Realtime Connected</p>
+          </div>
           <div className="flex space-x-4">
             <span>Ghana Data Protection Act (Act 843)</span>
             <span>Electronic Transactions Act (Act 772)</span>

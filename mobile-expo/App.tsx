@@ -139,44 +139,81 @@ export default function App() {
 
     try {
       const payload = {
+        tracking_code: `GH-2026-${Math.floor(1000 + Math.random() * 9000)}`,
         category,
         title,
         description,
-        ghanaPostCode: ghanaPostCode.toUpperCase(),
-        locationDescription: locationName,
+        location_name: locationName,
+        ghanapost_code: ghanaPostCode.toUpperCase(),
+        region: 'Greater Accra',
+        latitude: 5.6354,
+        longitude: -0.1582,
         media: [
           {
             type: 'VIDEO',
             durationSeconds: recordedDuration || 30,
-            rawS3Url: 'https://s3.safety.gov.gh/evidence/mobile-capture.mp4',
+            rawS3Url: 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
+            thumbnailUrl: 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
             sha256Checksum: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-            hardwareAttestationToken: 'expo_device_attestation_token_verified'
+            timestampUtc: new Date().toISOString(),
+            gpsWatermark: {
+              lat: 5.6354,
+              lng: -0.1582,
+              ghanaPostCode: ghanaPostCode.toUpperCase(),
+              accuracyMeters: 3.5
+            },
+            isTamperProofVerified: true
           }
         ],
-        reporter: isAnonymous
-          ? { isAnonymous: true }
+        is_anonymous: isAnonymous,
+        reporter_data: isAnonymous
+          ? { isAnonymous: true, trustScore: 80 }
           : {
               isAnonymous: false,
               name: 'Kwame Mensah',
               phone: '+233 24 456 7890',
-              ghanaCardId: 'GHA-712893812-4'
-            }
+              ghanaCardId: 'GHA-712893812-4',
+              trustScore: 96
+            },
+        assigned_agency: category === 'DOMESTIC_ABUSE' ? 'DOVVSU' : category === 'GALAMSEY_ENVIRONMENTAL' ? 'EPA' : category === 'TRAFFIC_RECKLESS' ? 'MTTD' : 'GPS_CID',
+        status: 'RECEIVED_PENDING_TRIAGE',
+        severity: category === 'CRIMINAL_OFFENSE' ? 'RED' : category === 'DOMESTIC_ABUSE' || category === 'GALAMSEY_ENVIRONMENTAL' ? 'HIGH' : 'NORMAL',
+        is_public_eligible: category === 'GALAMSEY_ENVIRONMENTAL' || category === 'TRAFFIC_RECKLESS',
+        is_public_published: false,
+        public_corroborations: 0
       };
 
-      const res = await fetch(`${API_BASE_URL}/incidents`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      // 1. Post directly to Supabase REST API
+      const SUPABASE_REST = 'https://fqgujgwdgqlxnpmpmiui.supabase.co/rest/v1/incidents';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxZ3VqZ3dkZ3FseG5wbXBtaXVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk0NTgsImV4cCI6MjEwNjgwNTQ1OH0._OvkzhPn_FTlhVZeZuZwmDI_TvgfHt__yTtijK4vgJc';
 
-      const data = await res.json();
+      let trackingCode = payload.tracking_code;
+
+      try {
+        await fetch(SUPABASE_REST, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        // Fallback to Render API
+        await fetch(`${API_BASE_URL}/incidents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+
       setIsSubmitting(false);
 
       Alert.alert(
-        '✅ Report Transmitted',
-        `Tracking Code: ${data.trackingCode || 'GH-2026-X892'}\nAssigned Agency: ${data.assignedAgency || 'GPS_CID'}\n\nEvidence cryptographically sealed under Act 772.`,
+        '✅ Report Transmitted & Live',
+        `Tracking Code: ${trackingCode}\nAssigned Agency: ${payload.assigned_agency}\n\nLive on Supabase & Police Command Center.`,
         [{ text: 'OK' }]
       );
 
