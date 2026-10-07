@@ -11,7 +11,11 @@ import {
   StatusBar,
   ActivityIndicator,
   Image,
-  RefreshControl
+  RefreshControl,
+  Keyboard,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { CameraView, CameraType, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,8 +28,9 @@ const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   en: {
     appTitle: 'CitizenAlert Ghana',
     recordEvidence: 'Record 60s Evidence',
-    openCamera: '📸 Open Phone Camera',
-    chooseGallery: '📁 Attach from Gallery',
+    stopRecording: 'Stop Recording',
+    snapPhoto: '📸 Snap Photo',
+    chooseGallery: '📁 Attach Gallery',
     gpsLocked: 'GPS ACQUIRED (LIVE)',
     gpsLocating: 'ACQUIRING GPS...',
     recalibrateGps: '📍 Refresh GPS',
@@ -43,7 +48,8 @@ const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   tw: {
     appTitle: 'CitizenAlert Ghana',
     recordEvidence: 'Kyere Adanseɛ (Sekend 60)',
-    openCamera: '📸 Bue Fon Kamera',
+    stopRecording: 'Gyae Kyerew',
+    snapPhoto: '📸 Twa Mfonini',
     chooseGallery: '📁 Fa Mfonini Firi Fon Mu',
     gpsLocked: 'GPS AYƐ KRADO (NTƐM)',
     gpsLocating: 'YƐREHWƐ BEAE...',
@@ -62,7 +68,8 @@ const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   ga: {
     appTitle: 'CitizenAlert Ghana',
     recordEvidence: 'Tsɔɔ Nɔ Ni Eba (Sekɛnd 60)',
-    openCamera: '📸 Gblee Fon Kamera',
+    stopRecording: 'Tsi Sane Lɛ Naa',
+    snapPhoto: '📸 Gbee Mfoniri',
     chooseGallery: '📁 Hala Mfoniri',
     gpsLocked: 'GPS EBA AMRO NƐƐ',
     gpsLocating: 'TAOMƆ HE NI OYƆƆ...',
@@ -81,7 +88,8 @@ const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   ee: {
     appTitle: 'CitizenAlert Ghana',
     recordEvidence: 'Ɖe Kpeɖodzi (Sekend 60)',
-    openCamera: '📸 Ʋu Kaamera',
+    stopRecording: 'Dzudzɔ Kpeɖodzi',
+    snapPhoto: '📸 Ɖe Nutata',
     chooseGallery: '📁 Tia Nutatawo',
     gpsLocked: 'GPS LE DƆWƆM',
     gpsLocating: 'DI AFISI NÈLE...',
@@ -100,7 +108,8 @@ const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   ha: {
     appTitle: 'CitizenAlert Ghana',
     recordEvidence: 'Ɗauki Shaidar Bidiyo (Daƙiƙa 60)',
-    openCamera: '📸 Buɗe Kyamara',
+    stopRecording: 'Dakatar da Ɗauka',
+    snapPhoto: '📸 Ɗauki Hoto',
     chooseGallery: '📁 Zaɓi Hoto/Bidiyo',
     gpsLocked: 'AN SAMU GPS (KAI TSAYE)',
     gpsLocating: 'ANA NEMAN WURI...',
@@ -248,7 +257,6 @@ export default function App() {
           setGhanaPostCode(digitalCode);
         }
       } catch (geoErr) {
-        // Fallback digital code if offline geocoding fails
         const digitalCode = generateGhanaPostFromCoords(lat, lng, region);
         setGhanaPostCode(digitalCode);
       }
@@ -260,13 +268,13 @@ export default function App() {
     }
   };
 
-  // Request all permissions automatically on mount & grab GPS
+  // Request permissions on mount & grab live GPS
   useEffect(() => {
     (async () => {
       try {
         const cam = await Camera.requestCameraPermissionsAsync();
-        await Camera.requestMicrophonePermissionsAsync();
-        setHasCameraPermission(cam.status === 'granted');
+        const mic = await Camera.requestMicrophonePermissionsAsync();
+        setHasCameraPermission(cam.status === 'granted' && mic.status === 'granted');
       } catch (e) {
         setHasCameraPermission(false);
       }
@@ -281,7 +289,7 @@ export default function App() {
       interval = setInterval(() => {
         setRecordingSeconds((prev) => {
           if (prev >= 59) {
-            handleStopRecording();
+            handleToggleRecording();
             return 60;
           }
           return prev + 1;
@@ -291,50 +299,90 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
-  // Primary Record Action (Launches Native Hardware Camera with 60s Video/Photo)
-  const handleStartRecording = async () => {
-    await handleLaunchNativeCamera();
-  };
-
-  // Stop in-app recording fallback
-  const handleStopRecording = () => {
-    setIsRecording(false);
-    setRecordedDuration(recordingSeconds || 15);
-    setHasRecordedMedia(true);
-
-    try {
-      if (cameraRef.current && cameraRef.current.stopRecording) {
-        cameraRef.current.stopRecording();
+  // Toggle in-app video recording directly on camera feed
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      // STOP recording in-app
+      setIsRecording(false);
+      setRecordedDuration(recordingSeconds || 1);
+      try {
+        if (cameraRef.current && cameraRef.current.stopRecording) {
+          cameraRef.current.stopRecording();
+        }
+      } catch (e) {
+        console.warn('Stop record error:', e);
       }
-    } catch (e) {}
+    } else {
+      // START recording in-app directly
+      if (!hasCameraPermission) {
+        const cam = await Camera.requestCameraPermissionsAsync();
+        const mic = await Camera.requestMicrophonePermissionsAsync();
+        if (cam.status !== 'granted' || mic.status !== 'granted') {
+          Alert.alert(
+            'Permissions Needed',
+            'Camera and Microphone access are required to record video evidence.'
+          );
+          return;
+        }
+        setHasCameraPermission(true);
+      }
+
+      setHasRecordedMedia(false);
+      setRecordedUri(null);
+      setRecordingSeconds(0);
+      setIsRecording(true);
+      setMediaType('VIDEO');
+
+      try {
+        if (cameraRef.current) {
+          // recordAsync returns a promise that resolves when stopRecording is called or maxDuration reached
+          cameraRef.current
+            .recordAsync({ maxDuration: 60 })
+            .then((result: any) => {
+              if (result?.uri) {
+                setRecordedUri(result.uri);
+                setHasRecordedMedia(true);
+                setMediaType('VIDEO');
+              }
+            })
+            .catch((err: any) => {
+              console.warn('Record promise error:', err);
+            })
+            .finally(() => {
+              setIsRecording(false);
+            });
+        }
+      } catch (err: any) {
+        console.warn('Camera record start failed:', err);
+        setIsRecording(false);
+      }
+    }
   };
 
-  // Launch Full Native Device Camera (Video or Photo with full hardware preview)
-  const handleLaunchNativeCamera = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera access is required to capture evidence.');
+  // Instant In-App Photo Snap
+  const handleSnapPhoto = async () => {
+    if (!hasCameraPermission) {
+      const cam = await Camera.requestCameraPermissionsAsync();
+      if (cam.status !== 'granted') {
+        Alert.alert('Permission Needed', 'Camera permission required to take photo.');
         return;
       }
+      setHasCameraPermission(true);
+    }
 
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['videos', 'images'],
-        allowsEditing: false,
-        videoMaxDuration: 60,
-        quality: 0.8
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        setRecordedUri(asset.uri);
-        setMediaType(asset.type === 'video' ? 'VIDEO' : 'IMAGE');
-        setRecordedDuration(asset.duration ? Math.round(asset.duration / 1000) : 15);
-        setHasRecordedMedia(true);
-        Alert.alert('✅ Evidence Attached', `Captured with Live GPS: ${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+    try {
+      if (cameraRef.current) {
+        const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+        if (photo?.uri) {
+          setRecordedUri(photo.uri);
+          setHasRecordedMedia(true);
+          setMediaType('IMAGE');
+          setRecordedDuration(1);
+          Alert.alert('✅ Evidence Photo Captured', 'Photo evidence locked with GPS watermark.');
+        }
       }
     } catch (err: any) {
-      Alert.alert('Camera Error', err.message || 'Unable to open native camera.');
+      Alert.alert('Photo Error', err.message || 'Could not snap photo.');
     }
   };
 
@@ -381,6 +429,8 @@ export default function App() {
   };
 
   const handleSubmitReport = async () => {
+    Keyboard.dismiss();
+
     if (!title.trim() || !description.trim()) {
       Alert.alert('Missing Information', 'Please provide an incident title and situation details.');
       return;
@@ -532,7 +582,10 @@ export default function App() {
       {/* Navigation Tabs */}
       <View style={styles.tabBar}>
         <TouchableOpacity
-          onPress={() => setActiveTab('CAPTURE')}
+          onPress={() => {
+            Keyboard.dismiss();
+            setActiveTab('CAPTURE');
+          }}
           style={[styles.tabItem, activeTab === 'CAPTURE' && styles.tabItemActive]}
         >
           <Text style={[styles.tabText, activeTab === 'CAPTURE' && styles.tabTextActive]}>
@@ -541,7 +594,10 @@ export default function App() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => setActiveTab('ALERTS')}
+          onPress={() => {
+            Keyboard.dismiss();
+            setActiveTab('ALERTS');
+          }}
           style={[styles.tabItem, activeTab === 'ALERTS' && styles.tabItemActiveAmber]}
         >
           <Text style={[styles.tabText, activeTab === 'ALERTS' && styles.tabTextActive]}>
@@ -550,7 +606,10 @@ export default function App() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => setActiveTab('SOS')}
+          onPress={() => {
+            Keyboard.dismiss();
+            setActiveTab('SOS');
+          }}
           style={[styles.tabItem, activeTab === 'SOS' && styles.tabItemActiveRed]}
         >
           <Text style={[styles.tabText, activeTab === 'SOS' && styles.tabTextActive]}>
@@ -559,440 +618,478 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => {
-              setIsRefreshing(true);
-              fetchCurrentLocation();
-            }}
-            tintColor="#FCD116"
-          />
-        }
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* TAB 1: 60s Camera Capture & Ingestion */}
-        {activeTab === 'CAPTURE' && (
-          <View style={styles.section}>
-            {/* Safety Warning */}
-            <View style={styles.warningBox}>
-              <Text style={styles.warningText}>⚠️ {t.safetyNotice}</Text>
-            </View>
-
-            {/* Live GPS Coordinates Card */}
-            <View style={styles.gpsCard}>
-              <View style={styles.gpsCardHeader}>
-                <View style={styles.gpsIndicatorRow}>
-                  <View
-                    style={[
-                      styles.gpsDot,
-                      gpsStatus === 'LOCKED'
-                        ? styles.gpsDotLocked
-                        : isLocating
-                        ? styles.gpsDotLocating
-                        : styles.gpsDotError
-                    ]}
-                  />
-                  <Text style={styles.gpsCardTitle}>
-                    {isLocating
-                      ? t.gpsLocating
-                      : gpsStatus === 'LOCKED'
-                      ? t.gpsLocked
-                      : 'GPS UNLOCKED'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={fetchCurrentLocation}
-                  disabled={isLocating}
-                  style={styles.recalibrateBtn}
-                >
-                  {isLocating ? (
-                    <ActivityIndicator size="small" color="#070B13" />
-                  ) : (
-                    <Text style={styles.recalibrateBtnText}>{t.recalibrateGps}</Text>
-                  )}
-                </TouchableOpacity>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => {
+                setIsRefreshing(true);
+                fetchCurrentLocation();
+              }}
+              tintColor="#FCD116"
+            />
+          }
+        >
+          {/* TAB 1: 60s In-App Camera Capture & Ingestion */}
+          {activeTab === 'CAPTURE' && (
+            <View style={styles.section}>
+              {/* Safety Warning */}
+              <View style={styles.warningBox}>
+                <Text style={styles.warningText}>⚠️ {t.safetyNotice}</Text>
               </View>
 
-              <View style={styles.gpsCoordsRow}>
-                <View style={styles.gpsCoordItem}>
-                  <Text style={styles.gpsCoordLabel}>LATITUDE</Text>
-                  <Text style={styles.gpsCoordVal}>{coords.latitude.toFixed(5)}° N</Text>
+              {/* Live GPS Coordinates HUD */}
+              <View style={styles.gpsCard}>
+                <View style={styles.gpsCardHeader}>
+                  <View style={styles.gpsIndicatorRow}>
+                    <View
+                      style={[
+                        styles.gpsDot,
+                        gpsStatus === 'LOCKED'
+                          ? styles.gpsDotLocked
+                          : isLocating
+                          ? styles.gpsDotLocating
+                          : styles.gpsDotError
+                      ]}
+                    />
+                    <Text style={styles.gpsCardTitle}>
+                      {isLocating
+                        ? t.gpsLocating
+                        : gpsStatus === 'LOCKED'
+                        ? t.gpsLocked
+                        : 'GPS UNLOCKED'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={fetchCurrentLocation}
+                    disabled={isLocating}
+                    style={styles.recalibrateBtn}
+                  >
+                    {isLocating ? (
+                      <ActivityIndicator size="small" color="#070B13" />
+                    ) : (
+                      <Text style={styles.recalibrateBtnText}>{t.recalibrateGps}</Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.gpsCoordItem}>
-                  <Text style={styles.gpsCoordLabel}>LONGITUDE</Text>
-                  <Text style={styles.gpsCoordVal}>{coords.longitude.toFixed(5)}° W</Text>
-                </View>
-                <View style={styles.gpsCoordItem}>
-                  <Text style={styles.gpsCoordLabel}>PRECISION</Text>
-                  <Text style={[styles.gpsCoordVal, { color: '#10B981' }]}>
-                    ±{gpsAccuracy || 3.2}m
-                  </Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Live Camera Viewfinder / Preview Box */}
-            <View style={styles.cameraWrapper}>
-              {recordedUri ? (
-                // Captured Media Preview
-                <View style={StyleSheet.absoluteFill}>
-                  <Image
-                    source={{ uri: recordedUri }}
-                    style={StyleSheet.absoluteFill}
-                    resizeMode="cover"
-                  />
-                  <View style={styles.previewBadge}>
-                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
-                      🎬 Attached Evidence ({recordedDuration}s {mediaType})
+                <View style={styles.gpsCoordsRow}>
+                  <View style={styles.gpsCoordItem}>
+                    <Text style={styles.gpsCoordLabel}>LATITUDE</Text>
+                    <Text style={styles.gpsCoordVal}>{coords.latitude.toFixed(5)}° N</Text>
+                  </View>
+                  <View style={styles.gpsCoordItem}>
+                    <Text style={styles.gpsCoordLabel}>LONGITUDE</Text>
+                    <Text style={styles.gpsCoordVal}>{coords.longitude.toFixed(5)}° W</Text>
+                  </View>
+                  <View style={styles.gpsCoordItem}>
+                    <Text style={styles.gpsCoordLabel}>PRECISION</Text>
+                    <Text style={[styles.gpsCoordVal, { color: '#10B981' }]}>
+                      ±{gpsAccuracy || 3.2}m
                     </Text>
                   </View>
                 </View>
-              ) : hasCameraPermission ? (
-                // Live Viewfinder Feed
-                <CameraView
-                  ref={cameraRef}
-                  style={StyleSheet.absoluteFill}
-                  facing={facing}
-                  mode="video"
-                />
-              ) : (
-                // Permission Request Box
-                <View style={styles.permissionBox}>
-                  <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 10, fontSize: 12 }}>
-                    Camera access enables live hardware viewfinder and evidence recording
-                  </Text>
-                  <TouchableOpacity
-                    onPress={async () => {
-                      const cam = await Camera.requestCameraPermissionsAsync();
-                      await Camera.requestMicrophonePermissionsAsync();
-                      setHasCameraPermission(cam.status === 'granted');
-                    }}
-                    style={styles.permBtn}
-                  >
-                    <Text style={{ color: '#070B13', fontWeight: 'bold', fontSize: 12 }}>
-                      Enable Live Viewfinder
+              </View>
+
+              {/* Live Embedded In-App Viewfinder & Evidence Box */}
+              <View style={styles.cameraWrapper}>
+                {recordedUri ? (
+                  // Captured Media Preview
+                  <View style={StyleSheet.absoluteFill}>
+                    <Image
+                      source={{ uri: recordedUri }}
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.previewBadge}>
+                      <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
+                        🎬 Attached Evidence ({recordedDuration}s {mediaType})
+                      </Text>
+                    </View>
+                  </View>
+                ) : hasCameraPermission ? (
+                  // Live In-App Hardware Viewfinder Feed
+                  <CameraView
+                    ref={cameraRef}
+                    style={StyleSheet.absoluteFill}
+                    facing={facing}
+                    mode="video"
+                  />
+                ) : (
+                  // Permission Request Box
+                  <View style={styles.permissionBox}>
+                    <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 10, fontSize: 12 }}>
+                      Camera access enables live in-app hardware viewfinder and evidence recording
                     </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Viewfinder Top Controls */}
-              <View style={styles.viewfinderTop}>
-                <View style={styles.recBadge}>
-                  <View style={[styles.recDot, isRecording && styles.recDotActive]} />
-                  <Text style={styles.recText}>
-                    {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:
-                    {String(recordingSeconds % 60).padStart(2, '0')} / 01:00 MAX
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  {recordedUri ? (
                     <TouchableOpacity
-                      onPress={() => {
-                        setRecordedUri(null);
-                        setHasRecordedMedia(false);
+                      onPress={async () => {
+                        const cam = await Camera.requestCameraPermissionsAsync();
+                        const mic = await Camera.requestMicrophonePermissionsAsync();
+                        setHasCameraPermission(cam.status === 'granted' && mic.status === 'granted');
                       }}
-                      style={styles.retakeBtn}
+                      style={styles.permBtn}
                     >
-                      <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>
-                        🗑️ Retake
+                      <Text style={{ color: '#070B13', fontWeight: 'bold', fontSize: 12 }}>
+                        Enable Live Viewfinder
                       </Text>
                     </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity onPress={toggleCameraFacing} style={styles.flipBtn}>
-                      <Text style={{ color: '#ffffff', fontSize: 12 }}>🔄 Flip</Text>
-                    </TouchableOpacity>
-                  )}
+                  </View>
+                )}
+
+                {/* Viewfinder Top Controls */}
+                <View style={styles.viewfinderTop}>
+                  <View style={styles.recBadge}>
+                    <View style={[styles.recDot, isRecording && styles.recDotActive]} />
+                    <Text style={styles.recText}>
+                      {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:
+                      {String(recordingSeconds % 60).padStart(2, '0')} / 01:00 MAX
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {recordedUri ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setRecordedUri(null);
+                          setHasRecordedMedia(false);
+                        }}
+                        style={styles.retakeBtn}
+                      >
+                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>
+                          🗑️ Retake
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={toggleCameraFacing} style={styles.flipBtn}>
+                        <Text style={{ color: '#ffffff', fontSize: 12 }}>🔄 Flip</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                {/* Viewfinder Status Banner */}
+                <View style={styles.viewfinderCenter}>
+                  <Text
+                    style={{
+                      color: isRecording ? '#ffffff' : '#FCD116',
+                      fontSize: 11,
+                      fontWeight: '800',
+                      backgroundColor: isRecording ? '#DC2626' : 'rgba(0,0,0,0.75)',
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: 8
+                    }}
+                  >
+                    {isRecording
+                      ? `🔴 IN-APP RECORDING (${60 - recordingSeconds}s remaining)`
+                      : hasRecordedMedia
+                      ? '✅ EVIDENCE ATTACHED & HASH-LOCKED'
+                      : 'HARDWARE SENSOR LIVE'}
+                  </Text>
+                </View>
+
+                {/* Tamper-Evident Watermark Overlay */}
+                <View style={styles.watermarkBox}>
+                  <Text style={styles.watermarkGold}>🇬🇭 WATERMARK ENCRYPTED (ACT 772)</Text>
+                  <Text style={styles.watermarkWhite}>
+                    UTC: {new Date().toISOString().substring(11, 19)} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
+                  </Text>
+                  <Text style={styles.watermarkGold}>
+                    DIGITAL POST: {ghanaPostCode} (±{gpsAccuracy || 3.2}m)
+                  </Text>
                 </View>
               </View>
 
-              {/* Viewfinder Status */}
-              <View style={styles.viewfinderCenter}>
-                <Text
-                  style={{
-                    color: '#FCD116',
-                    fontSize: 11,
-                    fontWeight: '700',
-                    backgroundColor: 'rgba(0,0,0,0.75)',
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 8
-                  }}
+              {/* Direct In-App Capture Toolbar */}
+              <View style={styles.captureOptionsRow}>
+                {/* Snap Photo Button */}
+                <TouchableOpacity
+                  onPress={handleSnapPhoto}
+                  disabled={isRecording}
+                  style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
                 >
-                  {isRecording
-                    ? '🔴 RECORDING EVIDENCE STREAM...'
-                    : hasRecordedMedia
-                    ? '✅ EVIDENCE ATTACHED & HASH-LOCKED'
-                    : 'HARDWARE SENSOR ACTIVE'}
-                </Text>
+                  <Text style={styles.sideActionText}>📸 Photo</Text>
+                </TouchableOpacity>
+
+                {/* Main Red Record / Stop Button (Records in-app immediately) */}
+                <View style={styles.recordBtnContainer}>
+                  <TouchableOpacity
+                    onPress={handleToggleRecording}
+                    style={[styles.recordBtnPulse, isRecording && styles.recordBtnPulseActive]}
+                    activeOpacity={0.7}
+                    accessibilityLabel={isRecording ? 'Stop Recording' : 'Start 60s Recording'}
+                  >
+                    <View style={[styles.recordBtn, isRecording && styles.recordBtnActive]}>
+                      <View style={isRecording ? styles.stopSquare : styles.recordBtnInner} />
+                    </View>
+                  </TouchableOpacity>
+                  <Text style={[styles.recordBtnLabel, isRecording && { color: '#EF4444' }]}>
+                    {isRecording
+                      ? '⏹️ STOP RECORDING'
+                      : hasRecordedMedia
+                      ? 'RE-RECORD (60s)'
+                      : '🔴 TAP TO RECORD (60s)'}
+                  </Text>
+                </View>
+
+                {/* Gallery Picker */}
+                <TouchableOpacity
+                  onPress={handlePickFromGallery}
+                  disabled={isRecording}
+                  style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
+                >
+                  <Text style={styles.sideActionText}>📁 Gallery</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* Tamper-Evident Watermark Overlay */}
-              <View style={styles.watermarkBox}>
-                <Text style={styles.watermarkGold}>🇬🇭 WATERMARK ENCRYPTED (ACT 772)</Text>
-                <Text style={styles.watermarkWhite}>
-                  UTC: {new Date().toISOString().substring(11, 19)} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
-                </Text>
-                <Text style={styles.watermarkGold}>
-                  DIGITAL POST: {ghanaPostCode} (±{gpsAccuracy || 3.2}m)
-                </Text>
+              {/* Closest Landmark / Famous Place (User Request) */}
+              <View style={styles.landmarkSection}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.fieldLabelGold}>📍 {t.landmarkLabel}</Text>
+                  <TouchableOpacity onPress={Keyboard.dismiss}>
+                    <Text style={{ color: '#FCD116', fontSize: 11, fontWeight: 'bold' }}>✕ Hide</Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={[styles.input, styles.landmarkInput]}
+                  placeholder={t.landmarkPlaceholder}
+                  placeholderTextColor="#64748b"
+                  value={landmark}
+                  onChangeText={setLandmark}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  blurOnSubmit={true}
+                />
+
+                {/* Quick Landmark Suggestion Chips */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  style={styles.chipsScroll}
+                >
+                  {LANDMARK_SUGGESTIONS.map((chip, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
+                        setLandmark((prev) => (prev ? `${prev}, ${cleanChip}` : cleanChip));
+                      }}
+                      style={styles.chip}
+                    >
+                      <Text style={styles.chipText}>{chip}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
-            </View>
 
-            {/* Primary Evidence Capture Control Row */}
-            <View style={styles.captureOptionsRow}>
-              {/* Gallery Picker */}
-              <TouchableOpacity
-                onPress={handlePickFromGallery}
-                style={styles.galleryBtn}
-              >
-                <Text style={styles.galleryBtnText}>📁 Gallery</Text>
-              </TouchableOpacity>
-
-              {/* Big Red Record Button (Launches Hardware Camera 60s Video/Photo) */}
-              <View style={styles.recordBtnContainer}>
-                <TouchableOpacity
-                  onPress={handleLaunchNativeCamera}
-                  style={styles.recordBtnPulse}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Record 60s Evidence"
-                >
-                  <View style={styles.recordBtn}>
-                    <View style={styles.recordBtnInner} />
-                  </View>
+              {/* Detected Area / Street Name */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                <Text style={styles.fieldLabel}>{t.locationLabel}</Text>
+                <TouchableOpacity onPress={Keyboard.dismiss}>
+                  <Text style={{ color: '#94a3b8', fontSize: 11 }}>✕ Hide Keyboard</Text>
                 </TouchableOpacity>
-                <Text style={styles.recordBtnLabel}>
-                  {hasRecordedMedia ? 'RE-RECORD EVIDENCE' : '🔴 TAP TO RECORD (60s)'}
-                </Text>
-              </View>
-
-              {/* Retake / Clear or Quick GPS Refresh */}
-              {hasRecordedMedia ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    setRecordedUri(null);
-                    setHasRecordedMedia(false);
-                  }}
-                  style={styles.clearBtn}
-                >
-                  <Text style={styles.clearBtnText}>🗑️ Retake</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={fetchCurrentLocation}
-                  style={styles.refreshGpsSmallBtn}
-                >
-                  <Text style={styles.refreshGpsSmallBtnText}>📍 GPS</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Closest Landmark / Famous Place (Key User Request) */}
-            <View style={styles.landmarkSection}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={styles.fieldLabelGold}>📍 {t.landmarkLabel}</Text>
-                <Text style={{ color: '#10B981', fontSize: 10, fontWeight: 'bold' }}>AUTO GPS CONNECTED</Text>
               </View>
               <TextInput
-                style={[styles.input, styles.landmarkInput]}
-                placeholder={t.landmarkPlaceholder}
+                style={styles.input}
+                placeholder="e.g. Boundary Road, East Legon, Accra"
                 placeholderTextColor="#64748b"
-                value={landmark}
-                onChangeText={setLandmark}
+                value={locationName}
+                onChangeText={setLocationName}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
               />
 
-              {/* Quick Landmark Suggestion Chips */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-                {LANDMARK_SUGGESTIONS.map((chip, idx) => (
+              {/* GhanaPost GPS (Auto-Calculated from Live GPS) */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
+                <Text style={{ color: '#94a3b8', fontSize: 10 }}>Auto-Generated from GPS</Text>
+              </View>
+              <TextInput
+                style={[styles.input, { color: '#FCD116', fontFamily: 'monospace', fontWeight: 'bold' }]}
+                placeholder="e.g. GA-382-9104"
+                placeholderTextColor="#64748b"
+                value={ghanaPostCode}
+                onChangeText={setGhanaPostCode}
+                autoCapitalize="characters"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
+              />
+
+              {/* Incident Category */}
+              <Text style={styles.fieldLabel}>{t.categories}</Text>
+              <View style={styles.categoryGrid}>
+                {[
+                  { id: 'CRIMINAL_OFFENSE', label: '🚨 Armed Crime / Robbery' },
+                  { id: 'DOMESTIC_ABUSE', label: '🛡️ Domestic Abuse (DOVVSU)' },
+                  { id: 'GALAMSEY_ENVIRONMENTAL', label: '🌲 Galamsey / Pollution' },
+                  { id: 'TRAFFIC_RECKLESS', label: '🚗 Dangerous Driving (MTTD)' },
+                  { id: 'SANITATION_ZONING', label: '🗑️ Sanitation / Dumping' }
+                ].map((c) => (
                   <TouchableOpacity
-                    key={idx}
+                    key={c.id}
                     onPress={() => {
-                      const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
-                      setLandmark((prev) => (prev ? `${prev}, ${cleanChip}` : cleanChip));
+                      Keyboard.dismiss();
+                      setCategory(c.id);
                     }}
-                    style={styles.chip}
+                    style={[styles.categoryCard, category === c.id && styles.categoryCardActive]}
                   >
-                    <Text style={styles.chipText}>{chip}</Text>
+                    <Text style={[styles.categoryText, category === c.id && styles.categoryTextActive]}>
+                      {c.label}
+                    </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
-            </View>
+              </View>
 
-            {/* Detected Area / Street Name */}
-            <Text style={styles.fieldLabel}>{t.locationLabel}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Boundary Road, East Legon, Accra"
-              placeholderTextColor="#64748b"
-              value={locationName}
-              onChangeText={setLocationName}
-            />
+              {/* Incident Title */}
+              <Text style={styles.fieldLabel}>Incident Title</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Armed robbery attempt near junction"
+                placeholderTextColor="#64748b"
+                value={title}
+                onChangeText={setTitle}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
+              />
 
-            {/* GhanaPost GPS (Auto-Calculated from Live GPS) */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
-              <Text style={{ color: '#94a3b8', fontSize: 10 }}>Auto-Generated from GPS</Text>
-            </View>
-            <TextInput
-              style={[styles.input, { color: '#FCD116', fontFamily: 'monospace', fontWeight: 'bold' }]}
-              placeholder="e.g. GA-382-9104"
-              placeholderTextColor="#64748b"
-              value={ghanaPostCode}
-              onChangeText={setGhanaPostCode}
-              autoCapitalize="characters"
-            />
+              {/* Description */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.fieldLabel}>Situation Details & Suspect Description</Text>
+                <TouchableOpacity onPress={Keyboard.dismiss}>
+                  <Text style={{ color: '#FCD116', fontSize: 11, fontWeight: 'bold' }}>✕ Done</Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[styles.input, { height: 85, textAlignVertical: 'top' }]}
+                placeholder="Describe suspects, weapons, vehicle license plates, direction of escape..."
+                placeholderTextColor="#64748b"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                returnKeyType="default"
+              />
 
-            {/* Incident Category */}
-            <Text style={styles.fieldLabel}>{t.categories}</Text>
-            <View style={styles.categoryGrid}>
-              {[
-                { id: 'CRIMINAL_OFFENSE', label: '🚨 Armed Crime / Robbery' },
-                { id: 'DOMESTIC_ABUSE', label: '🛡️ Domestic Abuse (DOVVSU)' },
-                { id: 'GALAMSEY_ENVIRONMENTAL', label: '🌲 Galamsey / Pollution' },
-                { id: 'TRAFFIC_RECKLESS', label: '🚗 Dangerous Driving (MTTD)' },
-                { id: 'SANITATION_ZONING', label: '🗑️ Sanitation / Dumping' }
-              ].map((c) => (
-                <TouchableOpacity
-                  key={c.id}
-                  onPress={() => setCategory(c.id)}
-                  style={[styles.categoryCard, category === c.id && styles.categoryCardActive]}
-                >
-                  <Text style={[styles.categoryText, category === c.id && styles.categoryTextActive]}>
-                    {c.label}
+              {/* Anonymous Toggle (Act 720) */}
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setIsAnonymous(!isAnonymous);
+                }}
+                style={styles.anonToggleBox}
+              >
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <Text style={styles.anonTitle}>
+                    {isAnonymous ? '🛡️ Anonymous Whistleblower Active' : '👤 Citizen Safety Report'}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  <Text style={styles.anonSubtitle}>
+                    {isAnonymous
+                      ? 'All identifiers stripped under Whistleblower Act (Act 720)'
+                      : 'Coordinates and landmark attached for emergency dispatch'}
+                  </Text>
+                </View>
+                <View style={[styles.togglePill, isAnonymous && styles.togglePillActive]} />
+              </TouchableOpacity>
 
-            {/* Incident Title */}
-            <Text style={styles.fieldLabel}>Incident Title</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Armed robbery attempt near junction"
-              placeholderTextColor="#64748b"
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            {/* Description */}
-            <Text style={styles.fieldLabel}>Situation Details & Suspect Description</Text>
-            <TextInput
-              style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-              placeholder="Describe suspects, weapons, vehicle license plates, direction of escape..."
-              placeholderTextColor="#64748b"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-
-            {/* Anonymous Toggle (Act 720) */}
-            <TouchableOpacity
-              onPress={() => setIsAnonymous(!isAnonymous)}
-              style={styles.anonToggleBox}
-            >
-              <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={styles.anonTitle}>
-                  {isAnonymous ? '🛡️ Anonymous Whistleblower Active' : '👤 Citizen Safety Report'}
-                </Text>
-                <Text style={styles.anonSubtitle}>
-                  {isAnonymous
-                    ? 'All identifiers stripped under Whistleblower Act (Act 720)'
-                    : 'Coordinates and landmark attached for emergency dispatch'}
-                </Text>
-              </View>
-              <View style={[styles.togglePill, isAnonymous && styles.togglePillActive]} />
-            </TouchableOpacity>
-
-            {!isAnonymous && (
-              <View>
-                <Text style={styles.fieldLabel}>Contact Phone Number (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 0244 123 456"
-                  placeholderTextColor="#64748b"
-                  value={reporterPhone}
-                  onChangeText={setReporterPhone}
-                  keyboardType="phone-pad"
-                />
-              </View>
-            )}
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              onPress={handleSubmitReport}
-              disabled={isSubmitting}
-              style={styles.submitBtn}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#070B13" size="small" />
-              ) : (
-                <Text style={styles.submitBtnText}>{t.submitReport}</Text>
+              {!isAnonymous && (
+                <View>
+                  <Text style={styles.fieldLabel}>Contact Phone Number (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. 0244 123 456"
+                    placeholderTextColor="#64748b"
+                    value={reporterPhone}
+                    onChangeText={setReporterPhone}
+                    keyboardType="phone-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                    blurOnSubmit={true}
+                  />
+                </View>
               )}
-            </TouchableOpacity>
-          </View>
-        )}
 
-        {/* TAB 2: Amber & Red Alerts */}
-        {activeTab === 'ALERTS' && (
-          <View style={styles.section}>
-            <View style={styles.amberBanner}>
-              <Text style={styles.amberBannerTitle}>⚠️ AMBER ALERT GEOFENCE BROADCAST</Text>
-              <Text style={styles.amberSubject}>Emmanuel Kwabena Boateng (7 Years Old)</Text>
-              <Text style={styles.amberDetails}>
-                Last seen at Madina Market Complex near Zongo Junction. Wearing yellow school uniform, navy shorts. Accompanied by adult in green Daewoo Matiz taxi.
-              </Text>
-              <Text style={styles.amberGps}>📍 Broadcast Center: GM-014-9923 (35km Radius)</Text>
+              {/* Submit Button */}
+              <TouchableOpacity
+                onPress={handleSubmitReport}
+                disabled={isSubmitting}
+                style={styles.submitBtn}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#070B13" size="small" />
+                ) : (
+                  <Text style={styles.submitBtnText}>{t.submitReport}</Text>
+                )}
+              </TouchableOpacity>
             </View>
+          )}
 
-            <TouchableOpacity
-              onPress={() =>
-                Alert.prompt
-                  ? Alert.prompt('Submit Sighting', 'Enter landmark & details:', () =>
-                      Alert.alert('Tip Received', 'Dispatched to Police Operations Room.')
-                    )
-                  : Alert.alert('Sighting Submitted', 'Dispatched to Police Command Room.')
-              }
-              style={styles.sightingBtn}
-            >
-              <Text style={styles.sightingBtnText}>👁️ Send Sighting Tip to Police</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* TAB 3: SOS Emergency Panic */}
-        {activeTab === 'SOS' && (
-          <View style={[styles.section, { alignItems: 'center' }]}>
-            <Text style={styles.sosHeadline}>NATIONAL EMERGENCY BEACON</Text>
-            <Text style={styles.sosSubtext}>
-              Transmits instant distress signals, live GPS ({coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}), and audio link to Police Patrol Units.
-            </Text>
-
-            <TouchableOpacity
-              onPress={handleTriggerSOS}
-              style={[styles.sosBigBtn, sosActive && styles.sosBigBtnActive]}
-            >
-              <Text style={styles.sosBigBtnText}>SOS</Text>
-              <Text style={styles.sosBigBtnSub}>EMERGENCY</Text>
-            </TouchableOpacity>
-
-            {sosActive && (
-              <View style={styles.sosActiveCard}>
-                <Text style={styles.sosActiveText}>🔴 LIVE COORDINATE TRACKING ACTIVE</Text>
-                <Text style={styles.sosActiveSub}>
-                  GPS: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)} (±{gpsAccuracy || 3.2}m)
+          {/* TAB 2: Amber & Red Alerts */}
+          {activeTab === 'ALERTS' && (
+            <View style={styles.section}>
+              <View style={styles.amberBanner}>
+                <Text style={styles.amberBannerTitle}>⚠️ AMBER ALERT GEOFENCE BROADCAST</Text>
+                <Text style={styles.amberSubject}>Emmanuel Kwabena Boateng (7 Years Old)</Text>
+                <Text style={styles.amberDetails}>
+                  Last seen at Madina Market Complex near Zongo Junction. Wearing yellow school uniform, navy shorts. Accompanied by adult in green Daewoo Matiz taxi.
                 </Text>
-                <Text style={styles.sosActiveSub}>Pings Transmitted: {sosPingCount}</Text>
-                <TouchableOpacity onPress={() => setSosActive(false)} style={styles.sosCancelBtn}>
-                  <Text style={styles.sosCancelText}>Cancel Distress Beacon</Text>
-                </TouchableOpacity>
+                <Text style={styles.amberGps}>📍 Broadcast Center: GM-014-9923 (35km Radius)</Text>
               </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
+
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  Alert.alert('Tip Received', 'Dispatched to Police Operations Room.');
+                }}
+                style={styles.sightingBtn}
+              >
+                <Text style={styles.sightingBtnText}>👁️ Send Sighting Tip to Police</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* TAB 3: SOS Emergency Panic */}
+          {activeTab === 'SOS' && (
+            <View style={[styles.section, { alignItems: 'center' }]}>
+              <Text style={styles.sosHeadline}>NATIONAL EMERGENCY BEACON</Text>
+              <Text style={styles.sosSubtext}>
+                Transmits instant distress signals, live GPS ({coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}), and audio link to Police Patrol Units.
+              </Text>
+
+              <TouchableOpacity
+                onPress={handleTriggerSOS}
+                style={[styles.sosBigBtn, sosActive && styles.sosBigBtnActive]}
+              >
+                <Text style={styles.sosBigBtnText}>SOS</Text>
+                <Text style={styles.sosBigBtnSub}>EMERGENCY</Text>
+              </TouchableOpacity>
+
+              {sosActive && (
+                <View style={styles.sosActiveCard}>
+                  <Text style={styles.sosActiveText}>🔴 LIVE COORDINATE TRACKING ACTIVE</Text>
+                  <Text style={styles.sosActiveSub}>
+                    GPS: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)} (±{gpsAccuracy || 3.2}m)
+                  </Text>
+                  <Text style={styles.sosActiveSub}>Pings Transmitted: {sosPingCount}</Text>
+                  <TouchableOpacity onPress={() => setSosActive(false)} style={styles.sosCancelBtn}>
+                    <Text style={styles.sosCancelText}>Cancel Distress Beacon</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -1086,7 +1183,8 @@ const styles = StyleSheet.create({
     color: '#ffffff'
   },
   scrollContent: {
-    padding: 16
+    padding: 16,
+    paddingBottom: 40
   },
   section: {
     gap: 12
@@ -1180,7 +1278,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   cameraWrapper: {
-    height: 240,
+    height: 250,
     backgroundColor: '#000000',
     borderRadius: 18,
     borderWidth: 2,
@@ -1287,6 +1385,21 @@ const styles = StyleSheet.create({
     borderColor: '#1E293B',
     marginVertical: 4
   },
+  sideActionBtn: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  sideActionText: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
   recordBtnContainer: {
     alignItems: 'center',
     gap: 4
@@ -1301,6 +1414,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#EF4444'
   },
+  recordBtnPulseActive: {
+    backgroundColor: 'rgba(239,68,68,0.4)',
+    borderColor: '#ffffff',
+    transform: [{ scale: 1.05 }]
+  },
   recordBtn: {
     width: 52,
     height: 52,
@@ -1314,10 +1432,19 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8
   },
+  recordBtnActive: {
+    backgroundColor: '#991B1B'
+  },
   recordBtnInner: {
     width: 20,
     height: 20,
     borderRadius: 10,
+    backgroundColor: '#ffffff'
+  },
+  stopSquare: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
     backgroundColor: '#ffffff'
   },
   recordBtnLabel: {
@@ -1325,51 +1452,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5
-  },
-  galleryBtn: {
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#334155',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  galleryBtnText: {
-    color: '#cbd5e1',
-    fontSize: 11,
-    fontWeight: 'bold'
-  },
-  clearBtn: {
-    backgroundColor: '#7F1D1D',
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  clearBtnText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: 'bold'
-  },
-  refreshGpsSmallBtn: {
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#1E3A8A',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  refreshGpsSmallBtnText: {
-    color: '#93C5FD',
-    fontSize: 11,
-    fontWeight: 'bold'
   },
   landmarkSection: {
     backgroundColor: '#0B1E38',
