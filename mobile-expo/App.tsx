@@ -9,9 +9,11 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
-import { CameraView, useCameraPermissions, CameraType } from 'expo-camera';
+import { CameraView, CameraType, Camera } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 
 const SUPABASE_REST = 'https://fqgujgwdgqlxnpmpmiui.supabase.co/rest/v1/incidents';
@@ -74,8 +76,8 @@ export default function App() {
   const [lang, setLang] = useState('en');
   const [activeTab, setActiveTab] = useState<'CAPTURE' | 'ALERTS' | 'SOS'>('CAPTURE');
   
-  // Camera & Permissions
-  const [permission, requestPermission] = useCameraPermissions();
+  // Camera & Permissions state
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [facing, setFacing] = useState<CameraType>('back');
   const cameraRef = useRef<any>(null);
 
@@ -83,7 +85,7 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordedDuration, setRecordedDuration] = useState(0);
-  const [hasRecordedVideo, setHasRecordedVideo] = useState(false);
+  const [hasRecordedMedia, setHasRecordedMedia] = useState(false);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
 
   // Incident form fields
@@ -100,20 +102,24 @@ export default function App() {
   const [sosActive, setSosActive] = useState(false);
   const [sosPingCount, setSosPingCount] = useState(0);
 
-  // Fetch real device location on mount
+  // Request all permissions automatically on mount
   useEffect(() => {
     (async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
+        const cam = await Camera.requestCameraPermissionsAsync();
+        await Camera.requestMicrophonePermissionsAsync();
+        setHasCameraPermission(cam.status === 'granted');
+
+        const loc = await Location.requestForegroundPermissionsAsync();
+        if (loc.status === 'granted') {
+          const cur = await Location.getCurrentPositionAsync({});
           setCoords({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude
+            latitude: cur.coords.latitude,
+            longitude: cur.coords.longitude
           });
         }
       } catch (e) {
-        // Fallback default
+        setHasCameraPermission(false);
       }
     })();
   }, []);
@@ -135,44 +141,81 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
+  // Start in-app recording
   const handleStartRecording = async () => {
-    if (!permission?.granted) {
-      const res = await requestPermission();
-      if (!res.granted) {
-        Alert.alert('Camera Permission Required', 'Please grant camera permission to capture tamper-proof evidence.');
+    if (!hasCameraPermission) {
+      const cam = await Camera.requestCameraPermissionsAsync();
+      const mic = await Camera.requestMicrophonePermissionsAsync();
+      if (cam.status !== 'granted' || mic.status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please allow Camera & Microphone permissions or use the Native Camera button below.',
+          [
+            { text: 'Use Native Camera', onPress: handleLaunchNativeCamera },
+            { text: 'OK' }
+          ]
+        );
         return;
       }
+      setHasCameraPermission(true);
     }
 
-    setHasRecordedVideo(false);
+    setHasRecordedMedia(false);
     setRecordedUri(null);
     setRecordingSeconds(0);
     setIsRecording(true);
 
     try {
       if (cameraRef.current && cameraRef.current.recordAsync) {
-        const videoPromise = cameraRef.current.recordAsync({ maxDuration: 60 });
-        videoPromise.then((data: any) => {
-          if (data?.uri) {
-            setRecordedUri(data.uri);
+        const promise = cameraRef.current.recordAsync({ maxDuration: 60 });
+        promise.then((res: any) => {
+          if (res?.uri) {
+            setRecordedUri(res.uri);
           }
         }).catch(() => {});
       }
-    } catch (err) {
-      // Fallback timer simulation if running on emulator
-    }
+    } catch (e) {}
   };
 
+  // Stop in-app recording
   const handleStopRecording = () => {
     setIsRecording(false);
     setRecordedDuration(recordingSeconds || 15);
-    setHasRecordedVideo(true);
+    setHasRecordedMedia(true);
 
     try {
       if (cameraRef.current && cameraRef.current.stopRecording) {
         cameraRef.current.stopRecording();
       }
-    } catch (err) {}
+    } catch (e) {}
+  };
+
+  // Launch Full Native Device Camera (Video or Photo)
+  const handleLaunchNativeCamera = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera access is required to capture evidence.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['videos', 'images'],
+        allowsEditing: false,
+        videoMaxDuration: 60,
+        quality: 0.8
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setRecordedUri(asset.uri);
+        setRecordedDuration(asset.duration ? Math.round(asset.duration / 1000) : 20);
+        setHasRecordedMedia(true);
+        Alert.alert('✅ Evidence Captured', 'Photo/Video successfully attached with GhanaPost GPS watermark.');
+      }
+    } catch (err: any) {
+      Alert.alert('Camera Error', err.message || 'Unable to open camera.');
+    }
   };
 
   const toggleCameraFacing = () => {
@@ -214,7 +257,7 @@ export default function App() {
             type: 'VIDEO',
             durationSeconds: recordedDuration || 20,
             rawS3Url: recordedUri || 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
-            thumbnailUrl: 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
+            thumbnailUrl: recordedUri || 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
             sha256Checksum: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
             timestampUtc: new Date().toISOString(),
             gpsWatermark: {
@@ -244,7 +287,7 @@ export default function App() {
         public_corroborations: 0
       };
 
-      // Direct POST to Supabase REST API with anon key
+      // Direct POST to Supabase REST API
       await fetch(SUPABASE_REST, {
         method: 'POST',
         headers: {
@@ -266,14 +309,14 @@ export default function App() {
 
       setTitle('');
       setDescription('');
-      setHasRecordedVideo(false);
+      setHasRecordedMedia(false);
       setRecordingSeconds(0);
       setRecordedUri(null);
     } catch (e: any) {
       setIsSubmitting(false);
       Alert.alert(
         '📁 Saved to Encrypted Offline Queue',
-        'Report encrypted locally under Act 720 and queued for auto-sync once connected.',
+        'Report encrypted locally under Act 720 and queued for auto-sync.',
         [{ text: 'OK' }]
       );
     }
@@ -356,9 +399,20 @@ export default function App() {
               <Text style={styles.warningText}>⚠️ {t.safetyNotice}</Text>
             </View>
 
-            {/* Live Camera Viewfinder with Watermark Overlay */}
+            {/* Live Camera Viewfinder / Preview Box */}
             <View style={styles.cameraWrapper}>
-              {permission?.granted ? (
+              {recordedUri ? (
+                // Captured Media Preview
+                <View style={StyleSheet.absoluteFillObject}>
+                  <Image source={{ uri: recordedUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                  <View style={styles.previewBadge}>
+                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
+                      🎬 Attached Evidence ({recordedDuration}s)
+                    </Text>
+                  </View>
+                </View>
+              ) : hasCameraPermission ? (
+                // Live Viewfinder Feed
                 <CameraView
                   ref={cameraRef}
                   style={StyleSheet.absoluteFillObject}
@@ -366,12 +420,20 @@ export default function App() {
                   mode="video"
                 />
               ) : (
+                // Permission Request Box
                 <View style={styles.permissionBox}>
-                  <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 8, fontSize: 12 }}>
-                    Camera access required for tamper-proof video recording
+                  <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 10, fontSize: 12 }}>
+                    Camera access required for live hardware viewfinder
                   </Text>
-                  <TouchableOpacity onPress={requestPermission} style={styles.permBtn}>
-                    <Text style={{ color: '#070B13', fontWeight: 'bold', fontSize: 12 }}>Grant Camera Access</Text>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const cam = await Camera.requestCameraPermissionsAsync();
+                      await Camera.requestMicrophonePermissionsAsync();
+                      setHasCameraPermission(cam.status === 'granted');
+                    }}
+                    style={styles.permBtn}
+                  >
+                    <Text style={{ color: '#070B13', fontWeight: 'bold', fontSize: 12 }}>Enable Live Viewfinder</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -386,19 +448,33 @@ export default function App() {
                   </Text>
                 </View>
 
-                <TouchableOpacity onPress={toggleCameraFacing} style={styles.flipBtn}>
-                  <Text style={{ color: '#ffffff', fontSize: 12 }}>🔄 Flip</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {recordedUri ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setRecordedUri(null);
+                        setHasRecordedMedia(false);
+                      }}
+                      style={styles.retakeBtn}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>🗑️ Retake</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity onPress={toggleCameraFacing} style={styles.flipBtn}>
+                      <Text style={{ color: '#ffffff', fontSize: 12 }}>🔄 Flip</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
 
               {/* Viewfinder Status */}
               <View style={styles.viewfinderCenter}>
-                <Text style={{ color: '#FCD116', fontSize: 12, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                <Text style={{ color: '#FCD116', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
                   {isRecording
                     ? '🔴 RECORDING EVIDENCE STREAM...'
-                    : hasRecordedVideo
-                    ? '✅ VIDEO CAPTURED & HASH-LOCKED'
-                    : 'LIVE VIEWFINDER ACTIVE'}
+                    : hasRecordedMedia
+                    ? '✅ EVIDENCE ATTACHED & HASH-LOCKED'
+                    : 'LIVE HARDWARE STREAM READY'}
                 </Text>
               </View>
 
@@ -410,8 +486,8 @@ export default function App() {
               </View>
             </View>
 
-            {/* Recording Controls */}
-            <View style={styles.cameraControls}>
+            {/* Dual Capture Controls (In-App & Native Camera) */}
+            <View style={styles.captureOptionsRow}>
               {!isRecording ? (
                 <TouchableOpacity onPress={handleStartRecording} style={styles.recordBtn}>
                   <View style={styles.recordBtnInner} />
@@ -421,6 +497,10 @@ export default function App() {
                   <View style={styles.stopBtnInner} />
                 </TouchableOpacity>
               )}
+
+              <TouchableOpacity onPress={handleLaunchNativeCamera} style={styles.nativeCameraBtn}>
+                <Text style={styles.nativeCameraBtnText}>📸 Open Phone Camera</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Incident Category */}
@@ -698,6 +778,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8
   },
+  previewBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(16,185,129,0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6
+  },
   viewfinderTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -734,6 +823,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 8
   },
+  retakeBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8
+  },
   viewfinderCenter: {
     alignItems: 'center',
     zIndex: 10
@@ -756,14 +851,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: 'monospace'
   },
-  cameraControls: {
+  captureOptionsRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
     marginVertical: 4
   },
   recordBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#EF4444',
     borderWidth: 4,
     borderColor: '#1E293B',
@@ -771,15 +869,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   recordBtnInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: '#ffffff'
   },
   stopBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#ffffff',
     borderWidth: 4,
     borderColor: '#EF4444',
@@ -787,10 +885,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   stopBtnInner: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     borderRadius: 4,
     backgroundColor: '#EF4444'
+  },
+  nativeCameraBtn: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  nativeCameraBtnText: {
+    color: '#93C5FD',
+    fontSize: 12,
+    fontWeight: 'bold'
   },
   fieldLabel: {
     color: '#94a3b8',
