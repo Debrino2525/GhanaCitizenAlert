@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "CitizenAlert Ghana",
+    "slug": "ghana-citizen-alert",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#070B13"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "gh.gov.safety.citizenalert",
+      "infoPlist": {
+        "NSCameraUsageDescription": "CitizenAlert Ghana requires camera access to record 60-second video evidence of civic and criminal infractions.",
+        "NSMicrophoneUsageDescription": "CitizenAlert Ghana requires microphone access to record audio testimony accompanying evidence.",
+        "NSLocationWhenInUseUsageDescription": "CitizenAlert Ghana requires GPS location access to embed tamper-proof coordinates and GhanaPost digital address watermarks on evidence."
+      }
+    },
+    "android": {
+      "package": "gh.gov.safety.citizenalert",
+      "adaptiveIcon": {
+        "backgroundColor": "#070B13"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a943a193-dd2e-4192-b508-ff2f2a5864a3"
+      },
+      "apiUrl": "https://ghanacitizenalert.onrender.com/v1"
+    }
+  }
+}
