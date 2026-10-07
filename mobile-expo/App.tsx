@@ -291,44 +291,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
-  // Start in-app recording
+  // Primary Record Action (Launches Native Hardware Camera with 60s Video/Photo)
   const handleStartRecording = async () => {
-    if (!hasCameraPermission) {
-      const cam = await Camera.requestCameraPermissionsAsync();
-      const mic = await Camera.requestMicrophonePermissionsAsync();
-      if (cam.status !== 'granted' || mic.status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please allow Camera & Microphone permissions, or use the Native Phone Camera button.',
-          [
-            { text: 'Open Phone Camera', onPress: handleLaunchNativeCamera },
-            { text: 'Cancel' }
-          ]
-        );
-        return;
-      }
-      setHasCameraPermission(true);
-    }
-
-    setHasRecordedMedia(false);
-    setRecordedUri(null);
-    setRecordingSeconds(0);
-    setIsRecording(true);
-    setMediaType('VIDEO');
-
-    try {
-      if (cameraRef.current && cameraRef.current.recordAsync) {
-        const promise = cameraRef.current.recordAsync({ maxDuration: 60 });
-        promise.then((res: any) => {
-          if (res?.uri) {
-            setRecordedUri(res.uri);
-          }
-        }).catch(() => {});
-      }
-    } catch (e) {}
+    await handleLaunchNativeCamera();
   };
 
-  // Stop in-app recording
+  // Stop in-app recording fallback
   const handleStopRecording = () => {
     setIsRecording(false);
     setRecordedDuration(recordingSeconds || 15);
@@ -774,39 +742,52 @@ export default function App() {
               </View>
             </View>
 
-            {/* Dual Capture Controls (In-App Record, Phone Camera, Gallery) */}
+            {/* Primary Evidence Capture Control Row */}
             <View style={styles.captureOptionsRow}>
-              {!isRecording ? (
-                <TouchableOpacity
-                  onPress={handleStartRecording}
-                  style={styles.recordBtn}
-                  accessibilityLabel="Record 60s Evidence"
-                >
-                  <View style={styles.recordBtnInner} />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={handleStopRecording}
-                  style={styles.stopBtn}
-                  accessibilityLabel="Stop Recording"
-                >
-                  <View style={styles.stopBtnInner} />
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                onPress={handleLaunchNativeCamera}
-                style={styles.nativeCameraBtn}
-              >
-                <Text style={styles.nativeCameraBtnText}>{t.openCamera}</Text>
-              </TouchableOpacity>
-
+              {/* Gallery Picker */}
               <TouchableOpacity
                 onPress={handlePickFromGallery}
                 style={styles.galleryBtn}
               >
                 <Text style={styles.galleryBtnText}>📁 Gallery</Text>
               </TouchableOpacity>
+
+              {/* Big Red Record Button (Launches Hardware Camera 60s Video/Photo) */}
+              <View style={styles.recordBtnContainer}>
+                <TouchableOpacity
+                  onPress={handleLaunchNativeCamera}
+                  style={styles.recordBtnPulse}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Record 60s Evidence"
+                >
+                  <View style={styles.recordBtn}>
+                    <View style={styles.recordBtnInner} />
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.recordBtnLabel}>
+                  {hasRecordedMedia ? 'RE-RECORD EVIDENCE' : '🔴 TAP TO RECORD (60s)'}
+                </Text>
+              </View>
+
+              {/* Retake / Clear or Quick GPS Refresh */}
+              {hasRecordedMedia ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setRecordedUri(null);
+                    setHasRecordedMedia(false);
+                  }}
+                  style={styles.clearBtn}
+                >
+                  <Text style={styles.clearBtnText}>🗑️ Retake</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={fetchCurrentLocation}
+                  style={styles.refreshGpsSmallBtn}
+                >
+                  <Text style={styles.refreshGpsSmallBtnText}>📍 GPS</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Closest Landmark / Famous Place (Key User Request) */}
@@ -1298,67 +1279,95 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#1E293B',
     marginVertical: 4
+  },
+  recordBtnContainer: {
+    alignItems: 'center',
+    gap: 4
+  },
+  recordBtnPulse: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(239,68,68,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#EF4444'
   },
   recordBtn: {
     width: 52,
     height: 52,
     borderRadius: 26,
     backgroundColor: '#EF4444',
-    borderWidth: 4,
-    borderColor: '#1E293B',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 8
   },
   recordBtnInner: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#ffffff'
   },
-  stopBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#ffffff',
-    borderWidth: 4,
-    borderColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  stopBtnInner: {
-    width: 16,
-    height: 16,
-    borderRadius: 3,
-    backgroundColor: '#EF4444'
-  },
-  nativeCameraBtn: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center'
-  },
-  nativeCameraBtnText: {
-    color: '#93C5FD',
-    fontSize: 11,
-    fontWeight: 'bold'
+  recordBtnLabel: {
+    color: '#FCD116',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5
   },
   galleryBtn: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1E293B',
     borderWidth: 1,
     borderColor: '#334155',
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 12,
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   galleryBtnText: {
     color: '#cbd5e1',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
+  clearBtn: {
+    backgroundColor: '#7F1D1D',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  clearBtnText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
+  refreshGpsSmallBtn: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#1E3A8A',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  refreshGpsSmallBtnText: {
+    color: '#93C5FD',
     fontSize: 11,
     fontWeight: 'bold'
   },
