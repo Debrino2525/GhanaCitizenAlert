@@ -32,11 +32,10 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         scrollWheelZoom: true
       });
 
-      // CARTO High-Definition Basemap
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO &copy; GhanaPost GPS',
-        subdomains: 'abcd',
-        maxZoom: 20
+      // High-Definition OpenStreetMap & CARTO Basemap without watermarks
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
+        maxZoom: 19
       }).addTo(map);
 
       const markersGroup = L.layerGroup().addTo(map);
