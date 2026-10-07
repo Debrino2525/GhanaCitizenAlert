@@ -9,29 +9,15 @@ interface IncidentMapProps {
   onSelectIncident: (inc: IncidentReport) => void;
 }
 
-type BasemapStyle = 'osm' | 'carto-dark' | 'carto-voyager' | 'satellite';
+type BasemapStyle = 'mapbox-dark' | 'mapbox-streets' | 'mapbox-satellite' | 'mapbox-nav' | 'osm';
 
-const BASEMAP_TILES: Record<BasemapStyle, { url: string; attribution: string; subdomains?: string[] }> = {
-  'osm': {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    subdomains: ['a', 'b', 'c'],
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS'
-  },
-  'carto-voyager': {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    subdomains: ['a', 'b', 'c', 'd'],
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap &copy; GhanaPost GPS'
-  },
-  'carto-dark': {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    subdomains: ['a', 'b', 'c', 'd'],
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap &copy; GhanaPost GPS'
-  },
-  'satellite': {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri &copy; DigitalGlobe, GeoEye, Earthstar Geographics'
-  }
-};
+interface TileConfig {
+  url: string;
+  attribution: string;
+  subdomains?: string[];
+  tileSize?: number;
+  zoomOffset?: number;
+}
 
 export const IncidentMap: React.FC<IncidentMapProps> = ({
   incidents,
@@ -43,7 +29,54 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
-  const [currentStyle, setCurrentStyle] = useState<BasemapStyle>('osm');
+  const [currentStyle, setCurrentStyle] = useState<BasemapStyle>('mapbox-dark');
+
+  // Load Mapbox Token from Vite Environment or local storage
+  const mapboxToken = (import.meta.env.VITE_MAPBOX_TOKEN as string) || (typeof window !== 'undefined' ? localStorage.getItem('MAPBOX_TOKEN') : '') || '';
+
+  const getTileConfig = (style: BasemapStyle): TileConfig => {
+    if (mapboxToken) {
+      if (style === 'mapbox-dark') {
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
+          tileSize: 512,
+          zoomOffset: -1
+        };
+      }
+      if (style === 'mapbox-streets') {
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/512/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
+          tileSize: 512,
+          zoomOffset: -1
+        };
+      }
+      if (style === 'mapbox-satellite') {
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/512/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          tileSize: 512,
+          zoomOffset: -1
+        };
+      }
+      if (style === 'mapbox-nav') {
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/512/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; OpenStreetMap',
+          tileSize: 512,
+          zoomOffset: -1
+        };
+      }
+    }
+
+    // High Quality OpenStreetMap Fallback
+    return {
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      subdomains: ['a', 'b', 'c'],
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS'
+    };
+  };
 
   // 1. Initialize Map Instance (Only once per container mount)
   useEffect(() => {
@@ -58,17 +91,19 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     const map = L.map(mapContainerRef.current, {
       center: [6.3, -1.0],
       zoom: 7,
-      minZoom: 6,
-      maxZoom: 19,
+      minZoom: 5,
+      maxZoom: 20,
       zoomControl: true,
       scrollWheelZoom: true
     });
 
-    const activeTile = BASEMAP_TILES[currentStyle];
+    const activeTile = getTileConfig(currentStyle);
     const tileLayer = L.tileLayer(activeTile.url, {
       subdomains: activeTile.subdomains || ['a', 'b', 'c'],
       attribution: activeTile.attribution,
-      maxZoom: 19
+      maxZoom: 20,
+      tileSize: activeTile.tileSize || 256,
+      zoomOffset: activeTile.zoomOffset || 0
     }).addTo(map);
 
     tileLayerRef.current = tileLayer;
@@ -108,14 +143,16 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       map.removeLayer(tileLayerRef.current);
     }
 
-    const activeTile = BASEMAP_TILES[currentStyle];
+    const activeTile = getTileConfig(currentStyle);
     const newLayer = L.tileLayer(activeTile.url, {
       subdomains: activeTile.subdomains || ['a', 'b', 'c'],
       attribution: activeTile.attribution,
-      maxZoom: 19
+      maxZoom: 20,
+      tileSize: activeTile.tileSize || 256,
+      zoomOffset: activeTile.zoomOffset || 0
     }).addTo(map);
 
-    // Keep tiles below markers
+    // Keep markers on top
     if (markersRef.current) {
       markersRef.current.bringToFront?.();
     }
@@ -138,7 +175,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       const circle = L.circle(alert.centerCoordinates, {
         color: color,
         fillColor: color,
-        fillOpacity: 0.22,
+        fillOpacity: 0.24,
         radius: alert.radiusKm * 1000,
         dashArray: '6, 8',
         weight: 2
@@ -150,9 +187,9 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
       const alertIcon = L.divIcon({
         className: 'custom-alert-icon',
-        html: `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 15px ${color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 13px;">⚠️</div>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
+        html: `<div style="background-color: ${color}; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 16px ${color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; cursor: pointer;">⚠️</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
       });
 
       L.marker(alert.centerCoordinates, { icon: alertIcon })
@@ -235,8 +272,52 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       {/* Map DOM Container */}
       <div ref={mapContainerRef} className="w-full h-full min-h-[460px] z-[1]" />
       
-      {/* Basemap Style Switcher (Top Right) */}
+      {/* Mapbox Style Switcher (Top Right) */}
       <div className="absolute top-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-700/60 rounded-xl p-1.5 flex space-x-1 shadow-xl">
+        <button
+          onClick={() => setCurrentStyle('mapbox-dark')}
+          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+            currentStyle === 'mapbox-dark'
+              ? 'bg-amber-400 text-slate-950 font-bold shadow'
+              : 'text-slate-300 hover:bg-slate-800'
+          }`}
+          title="Mapbox Dark Tactical"
+        >
+          Mapbox Dark
+        </button>
+        <button
+          onClick={() => setCurrentStyle('mapbox-streets')}
+          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+            currentStyle === 'mapbox-streets'
+              ? 'bg-amber-400 text-slate-950 font-bold shadow'
+              : 'text-slate-300 hover:bg-slate-800'
+          }`}
+          title="Mapbox Streets v12"
+        >
+          Streets
+        </button>
+        <button
+          onClick={() => setCurrentStyle('mapbox-satellite')}
+          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+            currentStyle === 'mapbox-satellite'
+              ? 'bg-amber-400 text-slate-950 font-bold shadow'
+              : 'text-slate-300 hover:bg-slate-800'
+          }`}
+          title="Mapbox Satellite Imagery"
+        >
+          Satellite
+        </button>
+        <button
+          onClick={() => setCurrentStyle('mapbox-nav')}
+          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+            currentStyle === 'mapbox-nav'
+              ? 'bg-amber-400 text-slate-950 font-bold shadow'
+              : 'text-slate-300 hover:bg-slate-800'
+          }`}
+          title="Mapbox Navigation Night"
+        >
+          Nav Night
+        </button>
         <button
           onClick={() => setCurrentStyle('osm')}
           className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
@@ -248,46 +329,15 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         >
           OSM
         </button>
-        <button
-          onClick={() => setCurrentStyle('carto-voyager')}
-          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-            currentStyle === 'carto-voyager'
-              ? 'bg-amber-400 text-slate-950 font-bold shadow'
-              : 'text-slate-300 hover:bg-slate-800'
-          }`}
-          title="CARTO Voyager Clean"
-        >
-          Voyager
-        </button>
-        <button
-          onClick={() => setCurrentStyle('carto-dark')}
-          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-            currentStyle === 'carto-dark'
-              ? 'bg-amber-400 text-slate-950 font-bold shadow'
-              : 'text-slate-300 hover:bg-slate-800'
-          }`}
-          title="CARTO Dark Matter"
-        >
-          Dark
-        </button>
-        <button
-          onClick={() => setCurrentStyle('satellite')}
-          className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-            currentStyle === 'satellite'
-              ? 'bg-amber-400 text-slate-950 font-bold shadow'
-              : 'text-slate-300 hover:bg-slate-800'
-          }`}
-          title="Esri Satellite Imagery"
-        >
-          Satellite
-        </button>
       </div>
 
       {/* Map Floating Legend (Bottom Left) */}
       <div className="absolute bottom-4 left-4 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl p-3 text-xs space-y-1.5 shadow-2xl">
         <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-          <span className="font-extrabold text-slate-200 tracking-wider text-[11px]">GHANA INCIDENT MAP</span>
-          <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 px-1.5 py-0.5 rounded">LIVE POSTGIS</span>
+          <span className="font-extrabold text-slate-200 tracking-wider text-[11px]">GHANA MAPBOX RADAR</span>
+          <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 px-1.5 py-0.5 rounded">
+            {mapboxToken ? 'MAPBOX GL HD' : 'OSM ACTIVE'}
+          </span>
         </div>
         <div className="flex items-center space-x-2 text-slate-300">
           <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]" />
