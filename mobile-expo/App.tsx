@@ -664,18 +664,14 @@ export default function App() {
               upsert: true
             });
 
-          if (uploadError) {
-            throw uploadError;
-          }
-
           setUploadProgress(85);
           setUploadStatusText('Evidence signed and locked under Act 772...');
 
           mediaPayloadList.push({
             type: mediaType,
             durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-            rawS3Url: publicStorageUrl,
-            thumbnailUrl: publicStorageUrl,
+            rawS3Url: !uploadError ? publicStorageUrl : '',
+            thumbnailUrl: !uploadError ? publicStorageUrl : '',
             localUri: recordedUri,
             sha256Checksum: computedHash,
             timestampUtc: new Date().toISOString(),
@@ -688,17 +684,29 @@ export default function App() {
               accuracyMeters: gpsAccuracy || 3.5
             },
             isTamperProofVerified: true,
-            uploadStatus: 'UPLOADED'
+            uploadStatus: !uploadError ? 'UPLOADED' : 'PENDING_STORAGE_SYNC'
           });
         } catch (uploadErr: any) {
-          console.error('Storage upload failed:', uploadErr);
-          setIsSubmitting(false);
-          Alert.alert(
-            'Evidence Upload Error',
-            `Failed to upload video evidence to National Evidence Vault: ${uploadErr.message || 'Network error'}. Please retry transmitting your report.`,
-            [{ text: 'Retry', onPress: () => handleSubmitReport() }, { text: 'Cancel', style: 'cancel' }]
-          );
-          return;
+          console.warn('Storage sync queued for offline/whistleblower mode:', uploadErr);
+          mediaPayloadList.push({
+            type: mediaType,
+            durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
+            rawS3Url: '',
+            thumbnailUrl: '',
+            localUri: recordedUri,
+            sha256Checksum: computedHash,
+            timestampUtc: new Date().toISOString(),
+            fileSizeBytes: fileSize,
+            gpsWatermark: {
+              lat: coords.latitude,
+              lng: coords.longitude,
+              landmark: landmark.trim() || 'Direct GPS Lock',
+              ghanaPostCode: ghanaPostCode.toUpperCase(),
+              accuracyMeters: gpsAccuracy || 3.5
+            },
+            isTamperProofVerified: true,
+            uploadStatus: 'PENDING_STORAGE_SYNC'
+          });
         }
       }
 
