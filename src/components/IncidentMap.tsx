@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { IncidentReport, EmergencyAlert } from '../types';
-import { MapPin, Shield, AlertTriangle, Flame, Droplets, Car, Trash2, Home } from 'lucide-react';
 import L from 'leaflet';
 
 interface IncidentMapProps {
@@ -24,22 +23,28 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
-      // Default center: Ghana (Lat 6.5, Lng -1.5)
       const map = L.map(mapContainerRef.current, {
-        center: [6.1, -1.0],
+        center: [6.3, -1.0],
         zoom: 7,
-        zoomControl: true
+        zoomControl: true,
+        scrollWheelZoom: true
       });
 
-      const CARTO_API_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfcTI3M2Y0anMiLCJqdGkiOiIzY2U3YTU2NzVlMjA4ZGVhM2EyZDYzZDM1ODU3ODM2YSJ9.J7aEh-YJQaJ4As_S2QTmrSw1j1LXaZbsPLCB0NRiIiI';
-      L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`, {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO &copy; GhanaPost GPS',
-        maxZoom: 19
+        subdomains: 'abcd',
+        maxZoom: 20
       }).addTo(map);
 
       const markersGroup = L.layerGroup().addTo(map);
       markersRef.current = markersGroup;
       mapInstanceRef.current = map;
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 250);
+
+      window.addEventListener('resize', () => map.invalidateSize());
     }
 
     const map = mapInstanceRef.current;
@@ -62,33 +67,23 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         weight: 2
       }).addTo(markersGroup);
 
-      circle.bindTooltip(`<b>${alert.alertType} ALERT</b><br/>${alert.title}<br/>Broadcast Radius: ${alert.radiusKm} km`, {
+      circle.bindTooltip(`<b>${alert.alertType} ALERT GEOFENCE</b><br/>${alert.title}<br/>Broadcast Radius: ${alert.radiusKm} km`, {
         sticky: true
       });
 
-      // Pulse Center Marker for Alert
       const alertIcon = L.divIcon({
         className: 'custom-alert-icon',
-        html: `<div style="background-color: ${color}; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 15px ${color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px;">⚠️</div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11]
+        html: `<div style="background-color: ${color}; width: 26px; height: 26px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 15px ${color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 13px;">⚠️</div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
       });
 
-      L.marker(alert.centerCoordinates, { icon: alertIcon })
-        .addTo(markersGroup)
-        .bindPopup(`
-          <div style="font-family: sans-serif; font-size: 12px; color: #0f172a; min-width: 200px;">
-            <span style="background: ${color}; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${alert.alertType} ALERT</span>
-            <h4 style="margin: 6px 0 3px 0; font-weight: bold; font-size: 13px;">${alert.title}</h4>
-            <p style="margin: 0; color: #475569;">Last seen: ${alert.lastSeenLocation}</p>
-            <p style="margin: 2px 0 0 0; color: #b45309; font-weight: bold;">GhanaPost: ${alert.ghanaPostCode}</p>
-          </div>
-        `);
+      L.marker(alert.centerCoordinates, { icon: alertIcon }).addTo(markersGroup);
     });
 
     // 2. Draw Incident Markers
     incidents.forEach(inc => {
-      let pinColor = '#3b82f6'; // default blue
+      let pinColor = '#3b82f6';
       if (inc.category === 'CRIMINAL_OFFENSE') pinColor = '#ef4444';
       if (inc.category === 'DOMESTIC_ABUSE') pinColor = '#ec4899';
       if (inc.category === 'GALAMSEY_ENVIRONMENTAL') pinColor = '#10b981';
@@ -102,84 +97,38 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         html: `
           <div style="
             background-color: ${pinColor};
-            width: ${isSelected ? '32px' : '26px'};
-            height: ${isSelected ? '32px' : '26px'};
+            width: ${isSelected ? '36px' : '28px'};
+            height: ${isSelected ? '36px' : '28px'};
             border-radius: 50%;
             border: 3px solid ${isSelected ? '#FCD116' : '#ffffff'};
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 11px;
+            font-size: ${isSelected ? '14px' : '12px'};
             font-weight: bold;
-            transition: all 0.2s;
+            cursor: pointer;
           ">
             ${inc.category === 'GALAMSEY_ENVIRONMENTAL' ? '🌲' : inc.category === 'TRAFFIC_RECKLESS' ? '🚗' : inc.category === 'DOMESTIC_ABUSE' ? '🛡️' : '🚨'}
           </div>
         `,
-        iconSize: [isSelected ? 32 : 26, isSelected ? 32 : 26],
-        iconAnchor: [isSelected ? 16 : 13, isSelected ? 16 : 13]
+        iconSize: [isSelected ? 36 : 28, isSelected ? 36 : 28],
+        iconAnchor: [isSelected ? 18 : 14, isSelected ? 18 : 14]
       });
 
       const marker = L.marker(inc.coordinates, { icon: incidentIcon }).addTo(markersGroup);
-
-      marker.on('click', () => {
-        onSelectIncident(inc);
-      });
-
-      marker.bindPopup(`
-        <div style="font-family: sans-serif; font-size: 12px; color: #0f172a; min-width: 220px;">
-          <span style="background: #0B1E38; color: #FCD116; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${inc.trackingCode}</span>
-          <span style="color: #64748b; margin-left: 6px; font-size: 11px;">${inc.assignedAgency}</span>
-          <h4 style="margin: 6px 0 3px 0; font-weight: bold; font-size: 13px;">${inc.title}</h4>
-          <p style="margin: 0; color: #475569;">${inc.locationName}</p>
-          <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between;">
-            <span style="color: #0284c7; font-weight: bold;">📍 ${inc.ghanaPostCode}</span>
-            <span style="color: #64748b;">${inc.media.length} 60s Evidence</span>
-          </div>
-        </div>
-      `);
+      marker.on('click', () => onSelectIncident(inc));
     });
 
-    // If an incident is selected, pan to it
     if (selectedIncident) {
       map.setView(selectedIncident.coordinates, 13, { animate: true });
     }
   }, [incidents, alerts, selectedIncident]);
 
   return (
-    <div className="relative w-full h-full min-h-[420px] rounded-2xl overflow-hidden border border-slate-800 shadow-xl">
-      <div ref={mapContainerRef} className="w-full h-full" />
-      
-      {/* Map Floating Legend */}
-      <div className="absolute bottom-4 left-4 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl p-3 text-xs space-y-1.5 shadow-lg">
-        <span className="font-bold text-slate-300 block mb-1">INCIDENT CATEGORIES</span>
-        <div className="flex items-center space-x-2 text-slate-300">
-          <span className="w-3 h-3 rounded-full bg-red-500" />
-          <span>Criminal / Robbery (GPS/CID)</span>
-        </div>
-        <div className="flex items-center space-x-2 text-slate-300">
-          <span className="w-3 h-3 rounded-full bg-pink-500" />
-          <span>Domestic & Child Abuse (DOVVSU)</span>
-        </div>
-        <div className="flex items-center space-x-2 text-slate-300">
-          <span className="w-3 h-3 rounded-full bg-emerald-500" />
-          <span>Galamsey & Environmental (EPA)</span>
-        </div>
-        <div className="flex items-center space-x-2 text-slate-300">
-          <span className="w-3 h-3 rounded-full bg-amber-500" />
-          <span>Reckless Driving (MTTD/DVLA)</span>
-        </div>
-        <div className="flex items-center space-x-2 text-slate-300">
-          <span className="w-3 h-3 rounded-full bg-purple-500" />
-          <span>Sanitation & Zoning (MMDAs)</span>
-        </div>
-        <div className="pt-1.5 border-t border-slate-800 flex items-center space-x-2 text-amber-400 font-bold">
-          <span className="w-3 h-3 rounded-full border-2 border-dashed border-amber-400" />
-          <span>Active Geofence Alert Zone</span>
-        </div>
-      </div>
+    <div className="relative w-full h-full min-h-[440px] rounded-2xl overflow-hidden border border-slate-800 shadow-xl bg-slate-950">
+      <div ref={mapContainerRef} className="w-full h-full min-h-[440px]" />
     </div>
   );
 };
