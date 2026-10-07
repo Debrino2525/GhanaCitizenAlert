@@ -112,3 +112,23 @@ export interface SightingTip {
   reporterPhone?: string;
   isVerified: boolean;
 }
+
+export type OfficerRole = 
+  | 'NATIONAL_COMMAND_SUPERVISOR'
+  | 'POLICE_CID_OFFICER'
+  | 'DOVVSU_INVESTIGATOR'
+  | 'EPA_INSPECTOR'
+  | 'MTTD_OFFICER'
+  | 'PUBLIC_MODERATOR';
+
+export interface OfficerUser {
+  id: string;
+  name: string;
+  badgeNumber: string;
+  agency: AgencyType;
+  role: OfficerRole;
+  rank: string;
+  email: string;
+  avatarUrl?: string;
+  clearanceLevel: 'TOP_SECRET' | 'RESTRICTED' | 'OPERATIONAL' | 'PUBLIC_MOD';
+}

@@ -7,8 +7,9 @@ import { EmergencyAlertHub } from './components/EmergencyAlertHub';
 import { PublicWebFeed } from './components/PublicWebFeed';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { CourtCertificateModal } from './components/CourtCertificateModal';
+import { AuthModal, PRESET_OFFICERS } from './components/AuthModal';
 import { INITIAL_INCIDENTS, INITIAL_ALERTS, INITIAL_SIGHTINGS } from './data/mockData';
-import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType } from './types';
+import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
 
@@ -19,6 +20,22 @@ export const App: React.FC = () => {
   const [sightings, setSightings] = useState<SightingTip[]>(INITIAL_SIGHTINGS);
   const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(INITIAL_INCIDENTS[0]);
   const [activeCertificate, setActiveCertificate] = useState<CourtCertificate | null>(null);
+
+  // Law Enforcement Authentication & RBAC Session
+  const [currentOfficer, setCurrentOfficer] = useState<OfficerUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('citizen_alert_officer_session');
+      return saved ? JSON.parse(saved) : PRESET_OFFICERS[0];
+    } catch (e) {
+      return PRESET_OFFICERS[0];
+    }
+  });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem('citizen_alert_officer_session');
+    setCurrentOfficer(null);
+  };
 
   // 1. Load data from Supabase & Listen to Realtime Events
   useEffect(() => {
@@ -235,6 +252,9 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         activeAlerts={alerts}
         onOpenAlertModal={() => setActiveTab('ALERTS')}
+        currentOfficer={currentOfficer}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -301,6 +321,13 @@ export const App: React.FC = () => {
       <CourtCertificateModal
         certificate={activeCertificate}
         onClose={() => setActiveCertificate(null)}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={(officer) => setCurrentOfficer(officer)}
+        currentOfficer={currentOfficer}
       />
 
       <footer className="mt-auto border-t border-slate-800 bg-slate-950 py-6 text-xs text-slate-500 text-center">

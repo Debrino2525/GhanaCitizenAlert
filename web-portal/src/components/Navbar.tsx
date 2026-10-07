@@ -1,19 +1,26 @@
 import React from 'react';
 import { Shield, Bell, AlertTriangle, Radio, PhoneCall, CheckCircle2, ShieldCheck, BarChart3 } from 'lucide-react';
-import { EmergencyAlert } from '../types';
+import { EmergencyAlert, OfficerUser } from '../types';
+import { OfficerBadgeProfile } from './OfficerBadgeProfile';
 
 interface NavbarProps {
   activeTab: 'COMMAND' | 'MODERATOR' | 'ALERTS' | 'FEED' | 'ANALYTICS';
   setActiveTab: (tab: 'COMMAND' | 'MODERATOR' | 'ALERTS' | 'FEED' | 'ANALYTICS') => void;
   activeAlerts: EmergencyAlert[];
   onOpenAlertModal: () => void;
+  currentOfficer: OfficerUser | null;
+  onOpenAuthModal: () => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   activeAlerts,
-  onOpenAlertModal
+  onOpenAlertModal,
+  currentOfficer,
+  onOpenAuthModal,
+  onLogout
 }) => {
   const activeAmberOrRed = activeAlerts.find(a => a.isActive);
 
@@ -68,68 +75,78 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex items-center space-x-1 sm:space-x-2">
-            <button
-              onClick={() => setActiveTab('COMMAND')}
-              className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'COMMAND'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              <span>Agency Command</span>
-            </button>
+          {/* Navigation Tabs & Officer Profile */}
+          <div className="flex items-center space-x-3">
+            <nav className="flex items-center space-x-1 sm:space-x-2">
+              <button
+                onClick={() => setActiveTab('COMMAND')}
+                className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'COMMAND'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Shield className="w-4 h-4" />
+                <span>Agency Command</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('MODERATOR')}
-              className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'MODERATOR'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Moderator Console</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('MODERATOR')}
+                className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'MODERATOR'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Moderator</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('ALERTS')}
-              className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 relative ${
-                activeTab === 'ALERTS'
-                  ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span>Red / Amber Alerts</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('ALERTS')}
+                className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 relative ${
+                  activeTab === 'ALERTS'
+                    ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>Broadcasts</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('FEED')}
-              className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'FEED'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Public Feed</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('FEED')}
+                className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'FEED'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Public Feed</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('ANALYTICS')}
-              className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'ANALYTICS'
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>Analytics</span>
-            </button>
-          </nav>
+              <button
+                onClick={() => setActiveTab('ANALYTICS')}
+                className={`px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'ANALYTICS'
+                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span>Analytics</span>
+              </button>
+            </nav>
+
+            <div className="pl-2 border-l border-slate-800">
+              <OfficerBadgeProfile
+                officer={currentOfficer}
+                onOpenAuthModal={onOpenAuthModal}
+                onLogout={onLogout}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </header>
