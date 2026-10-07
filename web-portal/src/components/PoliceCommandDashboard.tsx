@@ -285,22 +285,40 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
               <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black shadow-inner">
                 {/* HTML5 Video or Image Media */}
-                {isVideo && currentMedia?.rawS3Url ? (
+                {isVideo ? (
                   <video
                     ref={videoRef}
-                    src={currentMedia.rawS3Url}
-                    poster={currentMedia.thumbnailUrl}
+                    src={
+                      currentMedia?.rawS3Url && !currentMedia.rawS3Url.startsWith('file://') && !currentMedia.rawS3Url.startsWith('content://')
+                        ? currentMedia.rawS3Url
+                        : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+                    }
+                    poster={
+                      currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
+                        ? currentMedia.thumbnailUrl
+                        : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+                    }
                     className="w-full h-80 object-cover bg-black"
                     controls
                     playsInline
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+                    }}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
                   />
                 ) : (
                   <img
-                    src={currentMedia?.thumbnailUrl || 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'}
+                    src={
+                      currentMedia?.thumbnailUrl && !currentMedia.thumbnailUrl.startsWith('file://')
+                        ? currentMedia.thumbnailUrl
+                        : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80'
+                    }
                     alt="Evidence"
                     className="w-full h-80 object-cover opacity-90"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80';
+                    }}
                   />
                 )}
 

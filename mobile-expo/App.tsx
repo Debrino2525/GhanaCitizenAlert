@@ -523,6 +523,14 @@ export default function App() {
         ? `${landmark.trim()} (${locationName})`
         : locationName;
 
+      const evidenceUrl = mediaType === 'VIDEO'
+        ? (recordedUri && !recordedUri.startsWith('file://') ? recordedUri : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4')
+        : (recordedUri && !recordedUri.startsWith('file://') ? recordedUri : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80');
+
+      const evidenceThumb = recordedUri && !recordedUri.startsWith('file://')
+        ? recordedUri
+        : 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80';
+
       const payload = {
         tracking_code: trackingCode,
         category,
@@ -537,8 +545,9 @@ export default function App() {
           {
             type: mediaType,
             durationSeconds: recordedDuration || 15,
-            rawS3Url: recordedUri || 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
-            thumbnailUrl: recordedUri || 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=800&auto=format&fit=crop&q=80',
+            rawS3Url: evidenceUrl,
+            thumbnailUrl: evidenceThumb,
+            localUri: recordedUri || null,
             sha256Checksum: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
             timestampUtc: new Date().toISOString(),
             gpsWatermark: {
