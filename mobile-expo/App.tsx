@@ -434,9 +434,12 @@ export default function App() {
 
       try {
         if (cameraRef.current) {
-          // recordAsync returns a promise that resolves when stopRecording is called or maxDuration reached
+          // Record directly in 720p / 480p for optimized cellular bandwidth and fast uploads
           cameraRef.current
-            .recordAsync({ maxDuration: 60 })
+            .recordAsync({
+              maxDuration: 60,
+              quality: '720p'
+            })
             .then((result: any) => {
               if (result?.uri) {
                 processAndAttachEvidence('VIDEO', result.uri, recordingSeconds || 15);
@@ -491,7 +494,8 @@ export default function App() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos', 'images'],
         allowsEditing: false,
-        quality: 0.8
+        quality: 0.8,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -1176,7 +1180,7 @@ export default function App() {
                     </Text>
                     <Text style={styles.uploadSizeText}>
                       {mediaType === 'VIDEO'
-                        ? `${recordedDuration}s • 1080p HD • MP4`
+                        ? `${recordedDuration}s • 720p HD • MP4`
                         : 'High-Res Photo • JPEG'}
                     </Text>
                   </View>
