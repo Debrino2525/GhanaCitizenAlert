@@ -12,7 +12,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 
-const API_BASE_URL = 'https://ghanacitizenalert.onrender.com/v1';
+const API_BASE_URL = 'https://ghanacitizenalert.globitechcybersolutions.com/v1';
 
 const GHANAIAN_LANGUAGES: Record<string, Record<string, string>> = {
   en: {
