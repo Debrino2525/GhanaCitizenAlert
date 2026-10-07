@@ -1,0 +1,54 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: citizen-alert-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: citizen-alert-backend
+  minReplicas: 4
+  maxReplicas: 24
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: citizen-alert-ingress
+  namespace: citizen-alert-prod
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "60m"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  tls:
+    - hosts:
+        - api.safety.gov.gh
+        - command.safety.gov.gh
+      secretName: citizen-alert-tls-cert
+  rules:
+    - host: api.safety.gov.gh
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: citizen-alert-backend-svc
+                port:
+                  number: 4000

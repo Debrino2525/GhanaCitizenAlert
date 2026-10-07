@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: citizen-alert-prod
+  labels:
+    environment: production
+    national-system: citizen-alert-ghana

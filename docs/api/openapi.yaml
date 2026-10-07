@@ -1,0 +1,564 @@
+openapi: 3.1.0
+info:
+  title: CitizenAlert Ghana — National Civic Safety API
+  version: 1.0.0
+  description: |
+    Production-grade REST API specification for CitizenAlert Ghana.
+    Provides endpoints for Citizen Capture, Tamper-Evident Evidence Ingestion,
+    Multi-Agency Triage (Ghana Police Service, DOVVSU, EPA, MTTD, MMDAs),
+    Red/Amber Emergency Alert Authorization, and Sanitized Public Feeds.
+  contact:
+    name: National Emergency Dispatch & Digital Systems Directorate
+    email: api-support@safety.gov.gh
+servers:
+  - url: https://api.safety.gov.gh/v1
+    description: National Production API Gateway
+  - url: http://localhost:4000/v1
+    description: Local Development Server
+
+paths:
+  # -------------------------------------------------------------
+  # AUTHENTICATION
+  # -------------------------------------------------------------
+  /auth/citizen/otp/request:
+    post:
+      summary: Request phone verification OTP for citizen reporter
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumber]
+              properties:
+                phoneNumber:
+                  type: string
+                  example: "+233244567890"
+      responses:
+        '200':
+          description: OTP dispatched via SMS adapter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId: { type: string, format: uuid }
+                  expiresInSeconds: { type: integer, example: 300 }
+
+  /auth/citizen/otp/verify:
+    post:
+      summary: Verify citizen OTP and return JWT session
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId, code]
+              properties:
+                sessionId: { type: string, format: uuid }
+                code: { type: string, example: "891024" }
+      responses:
+        '200':
+          description: Verification successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  reporterId: { type: string, format: uuid }
+                  trustScore: { type: integer, example: 80 }
+
+  /auth/agency/login:
+    post:
+      summary: Agency Officer / Dispatcher / Commander Login
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceNumber, password]
+              properties:
+                serviceNumber: { type: string, example: "GPS-OFF-8841" }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Credentials valid; MFA challenge required
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mfaRequired: { type: boolean, example: true }
+                  mfaToken: { type: string }
+
+  /auth/agency/mfa/verify:
+    post:
+      summary: Complete Agency Login via MFA TOTP / Hardware Token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mfaToken, totpCode]
+              properties:
+                mfaToken: { type: string }
+                totpCode: { type: string, example: "492019" }
+      responses:
+        '200':
+          description: MFA validated; Session token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  officer:
+                    type: object
+                    properties:
+                      name: { type: string, example: "Supt. David Agbenyega" }
+                      agency: { type: string, example: "GPS_CID" }
+                      rank: { type: string, example: "Superintendent" }
+                      permissions:
+                        type: array
+                        items: { type: string }
+
+  # -------------------------------------------------------------
+  # INCIDENTS & EVIDENCE INGESTION
+  # -------------------------------------------------------------
+  /incidents:
+    post:
+      summary: Submit a new civic or criminal incident report
+      tags: [Incidents]
+      security:
+        - BearerAuth: []
+        - AnonymousApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIncidentRequest'
+      responses:
+        '201':
+          description: Incident received, queued for triage, and tracking code generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentResponse'
+
+    get:
+      summary: List filtered incidents (Agency Command & Investigator view)
+      tags: [Incidents]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agency
+          in: query
+          schema: { type: string, enum: [GPS_CID, DOVVSU, EPA, MTTD, NADMO, AMA, KMA] }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: region
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Incident list returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IncidentResponse'
+
+  /incidents/{id}:
+    get:
+      summary: Retrieve detailed incident dossier including video evidence & audit history
+      tags: [Incidents]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetailResponse'
+
+    patch:
+      summary: Update incident status or dispatch field units
+      tags: [Incidents]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [DISPATCHED, UNDER_ACTIVE_INVESTIGATION, COURT_EVIDENCE_PACKAGED, RESOLVED, DISMISSED]
+                assignedAgency: { type: string }
+                dispatcherNote: { type: string }
+      responses:
+        '200':
+          description: Status updated successfully
+
+  /incidents/{id}/evidence/court-dossier:
+    get:
+      summary: Export cryptographically sealed court evidence package (Act 772)
+      tags: [Evidence Vault]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Legal Evidence Package with cryptographic signatures and audit trail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourtDossierResponse'
+
+  # -------------------------------------------------------------
+  # MEDIA PRE-SIGNED UPLOAD & VERIFICATION
+  # -------------------------------------------------------------
+  /media/pre-signed-upload:
+    post:
+      summary: Generate pre-signed S3 upload URL for direct chunked evidence upload
+      tags: [Evidence Vault]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mediaType, fileSizeBytes, sha256Checksum]
+              properties:
+                mediaType: { type: string, enum: [VIDEO, PHOTO] }
+                fileSizeBytes: { type: integer, maximum: 52428800 } # 50MB cap
+                sha256Checksum: { type: string, minLength: 64, maxLength: 64 }
+                durationSeconds: { type: integer, maximum: 60 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadUrl: { type: string }
+                  mediaId: { type: string, format: uuid }
+                  s3Key: { type: string }
+                  expiresInSeconds: { type: integer, example: 900 }
+
+  # -------------------------------------------------------------
+  # RED & AMBER EMERGENCY ALERTS
+  # -------------------------------------------------------------
+  /alerts:
+    get:
+      summary: List active emergency broadcasts (Amber & Red alerts)
+      tags: [Emergency Alerts]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmergencyAlertResponse'
+
+    post:
+      summary: Request new Amber / Red alert broadcast (Requires Commander Authorization)
+      tags: [Emergency Alerts]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAlertRequest'
+      responses:
+        '201':
+          description: Alert created in DRAFT_PENDING_AUTHORIZATION state
+
+  /alerts/{id}/authorize:
+    post:
+      summary: Approving Commander authorization to broadcast Amber/Red alert
+      tags: [Emergency Alerts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approverMfaCode, digitalSignature]
+              properties:
+                approverMfaCode: { type: string }
+                digitalSignature: { type: string }
+      responses:
+        '200':
+          description: Alert transitioned to ACTIVE_BROADCASTING; Push/SMS/Cell-Broadcast triggered
+
+  /alerts/{id}/sightings:
+    post:
+      summary: Submit citizen sighting tip for active Amber/Red alert
+      tags: [Emergency Alerts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ghanaPostCode, comment]
+              properties:
+                ghanaPostCode: { type: string, example: "GD-003-8812" }
+                locationDescription: { type: string }
+                comment: { type: string }
+                photoMediaId: { type: string, format: uuid }
+                reporterPhone: { type: string }
+      responses:
+        '201':
+          description: Sighting tip recorded and dispatched to Command Center
+
+  # -------------------------------------------------------------
+  # PUBLIC FEED & COMMUNITY CORROBORATION
+  # -------------------------------------------------------------
+  /public/feed:
+    get:
+      summary: Retrieve moderated, privacy-sanitized community awareness feed
+      tags: [Public Feed]
+      parameters:
+        - name: region
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicPostResponse'
+
+  /public/feed/{id}/corroborate:
+    post:
+      summary: Submit community corroboration / upvote for verified incident
+      tags: [Public Feed]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  newCorroborationCount: { type: integer }
+
+  # -------------------------------------------------------------
+  # NATIONAL ADAPTER SERVICES
+  # -------------------------------------------------------------
+  /adapters/ghanapost/lookup:
+    get:
+      summary: Resolve GhanaPost GPS digital address code
+      tags: [National Adapters]
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string, example: "GA-382-9104" }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  postcode: { type: string }
+                  region: { type: string }
+                  district: { type: string }
+                  areaName: { type: string }
+                  latitude: { type: number }
+                  longitude: { type: number }
+                  isMocked: { type: boolean }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    AnonymousApiKey:
+      type: apiKey
+      in: header
+      name: X-Anonymous-Device-Token
+
+  schemas:
+    CreateIncidentRequest:
+      type: object
+      required: [category, title, description, ghanaPostCode, mediaIds]
+      properties:
+        category:
+          type: string
+          enum: [CRIMINAL_OFFENSE, DOMESTIC_ABUSE, GALAMSEY_ENVIRONMENTAL, TRAFFIC_RECKLESS, MISSING_PERSON, SANITATION_ZONING, FIRE_ACCIDENT]
+        title: { type: string }
+        description: { type: string }
+        ghanaPostCode: { type: string, example: "GA-382-9104" }
+        locationDescription: { type: string }
+        latitude: { type: number, example: 5.6354 }
+        longitude: { type: number, example: -0.1582 }
+        mediaIds:
+          type: array
+          items: { type: string, format: uuid }
+        isAnonymous: { type: boolean, default: false }
+
+    IncidentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        trackingCode: { type: string, example: "GH-2026-9812" }
+        title: { type: string }
+        category: { type: string }
+        status: { type: string }
+        severity: { type: string }
+        ghanaPostCode: { type: string }
+        assignedAgency: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    IncidentDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/IncidentResponse'
+        - type: object
+          properties:
+            description: { type: string }
+            locationDescription: { type: string }
+            coordinates:
+              type: array
+              items: { type: number }
+            media:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  mediaType: { type: string }
+                  durationSeconds: { type: integer }
+                  rawS3Url: { type: string }
+                  sha256Hash: { type: string }
+                  isWatermarkVerified: { type: boolean }
+            timeline:
+              type: array
+              items:
+                type: object
+                properties:
+                  timestamp: { type: string, format: date-time }
+                  event: { type: string }
+                  actor: { type: string }
+
+    CourtDossierResponse:
+      type: object
+      properties:
+        certificateId: { type: string, example: "GH-CERT-K891-9921" }
+        trackingCode: { type: string }
+        certifiedAt: { type: string, format: date-time }
+        statutoryNotice: { type: string }
+        evidenceHashes:
+          type: array
+          items:
+            type: object
+            properties:
+              mediaId: { type: string }
+              sha256Hash: { type: string }
+              hardwareAttestationVerified: { type: boolean }
+        auditTrail:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp: { type: string }
+              actor: { type: string }
+              action: { type: string }
+
+    CreateAlertRequest:
+      type: object
+      required: [alertType, title, lastSeenLocation, ghanaPostCode, radiusKm, details]
+      properties:
+        alertType: { type: string, enum: [AMBER, RED, CIVIL_DISASTER] }
+        title: { type: string }
+        subjectName: { type: string }
+        subjectAge: { type: integer }
+        subjectPhotoMediaId: { type: string, format: uuid }
+        lastSeenLocation: { type: string }
+        ghanaPostCode: { type: string }
+        radiusKm: { type: number, default: 35.0 }
+        details: { type: string }
+        suspectDetails: { type: string }
+        vehicleDetails: { type: string }
+
+    EmergencyAlertResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        alertType: { type: string }
+        status: { type: string }
+        title: { type: string }
+        subjectName: { type: string }
+        subjectAge: { type: integer }
+        subjectPhotoUrl: { type: string }
+        lastSeenLocation: { type: string }
+        ghanaPostCode: { type: string }
+        radiusKm: { type: number }
+        activeUntil: { type: string, format: date-time }
+        sightingsCount: { type: integer }
+
+    PublicPostResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        trackingCode: { type: string }
+        title: { type: string }
+        category: { type: string }
+        locationName: { type: string }
+        ghanaPostCode: { type: string }
+        sanitizedMediaUrl: { type: string }
+        corroborationsCount: { type: integer }
+        publishedAt: { type: string, format: date-time }

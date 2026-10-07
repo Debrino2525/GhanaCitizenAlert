@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------
+  # 1. DATABASE LAYER (PostgreSQL 16 + PostGIS 3.4)
+  # -------------------------------------------------------------
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: citizen_alert_postgres
+    environment:
+      POSTGRES_DB: citizen_alert_ghana
+      POSTGRES_USER: alert_admin
+      POSTGRES_PASSWORD: secure_ghana_db_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alert_admin -d citizen_alert_ghana"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # 2. CACHE & GEOFENCING LAYER (Redis Cluster 7.2)
+  # -------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: citizen_alert_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  # -------------------------------------------------------------
+  # 3. ASYNC EVENT BROKER (NATS JetStream)
+  # -------------------------------------------------------------
+  nats:
+    image: nats:2.10-alpine
+    container_name: citizen_alert_nats
+    command: ["-js"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  # -------------------------------------------------------------
+  # 4. OBJECT STORAGE (MinIO S3 Compatible)
+  # -------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    container_name: citizen_alert_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_ghana_admin
+      MINIO_ROOT_PASSWORD: minio_ghana_secure_key_2026
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # -------------------------------------------------------------
+  # 5. CORE BACKEND SERVICE (NestJS / TypeScript)
+  # -------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: citizen_alert_backend
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://alert_admin:secure_ghana_db_password_2026@postgres:5432/citizen_alert_ghana
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NATS_URL: nats://nats:4222
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minio_ghana_admin
+      S3_SECRET_KEY: minio_ghana_secure_key_2026
+      GHANAPOST_ADAPTER_DRIVER: mock
+      NIA_ADAPTER_DRIVER: mock
+      SMS_ADAPTER_DRIVER: mock
+      CELL_BROADCAST_ADAPTER_DRIVER: mock
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # -------------------------------------------------------------
+  # 6. AI MODERATION & TRANSLATION PIPELINE (Python FastAPI)
+  # -------------------------------------------------------------
+  ai-pipeline:
+    build:
+      context: ../ai-pipeline
+      dockerfile: Dockerfile
+    container_name: citizen_alert_ai_pipeline
+    environment:
+      PORT: 8000
+      WORKERS: 4
+    ports:
+      - "8000:8000"
+
+  # -------------------------------------------------------------
+  # 7. WEB PORTALS & COMMAND DASHBOARD (React / Next.js)
+  # -------------------------------------------------------------
+  web-portal:
+    build:
+      context: ../web-portal
+      dockerfile: Dockerfile
+    container_name: citizen_alert_web_portal
+    environment:
+      VITE_API_URL: http://localhost:4000/v1
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
