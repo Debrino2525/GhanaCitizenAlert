@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { IncidentReport, IncidentStatus, AgencyType } from '../types';
 import {
   Shield,
