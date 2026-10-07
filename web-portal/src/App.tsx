@@ -8,6 +8,7 @@ import { PublicWebFeed } from './components/PublicWebFeed';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { CourtCertificateModal } from './components/CourtCertificateModal';
 import { AuthModal, PRESET_OFFICERS } from './components/AuthModal';
+import { OfficerManagementModal } from './components/OfficerManagementModal';
 import { INITIAL_INCIDENTS, INITIAL_ALERTS, INITIAL_SIGHTINGS } from './data/mockData';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser } from './types';
 import { CourtCertificate } from './services/evidenceVault';
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
     }
   });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isOfficerMgmtOpen, setIsOfficerMgmtOpen] = useState<boolean>(false);
 
   const handleLogout = () => {
     localStorage.removeItem('citizen_alert_officer_session');
@@ -334,6 +336,12 @@ export const App: React.FC = () => {
         onClose={() => setIsAuthModalOpen(false)}
         onLoginSuccess={(officer) => setCurrentOfficer(officer)}
         currentOfficer={currentOfficer}
+        onOpenOfficerProvisioning={() => setIsOfficerMgmtOpen(true)}
+      />
+
+      <OfficerManagementModal
+        isOpen={isOfficerMgmtOpen}
+        onClose={() => setIsOfficerMgmtOpen(false)}
       />
 
       <footer className="mt-auto border-t border-slate-800 bg-slate-950 py-6 text-xs text-slate-500 text-center">

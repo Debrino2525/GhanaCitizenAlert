@@ -15,7 +15,8 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Modal
 } from 'react-native';
 import { CameraView, CameraType, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -138,10 +139,37 @@ const LANDMARK_SUGGESTIONS = [
   '🛡️ Police Barrier'
 ];
 
+export interface CitizenUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  avatarUrl?: string;
+  trustScore: number;
+  isVerified: boolean;
+  loginMethod: 'GOOGLE' | 'PHONE' | 'ANONYMOUS';
+}
+
 export default function App() {
   const [lang, setLang] = useState('en');
   const [activeTab, setActiveTab] = useState<'CAPTURE' | 'ALERTS' | 'SOS'>('CAPTURE');
   
+  // Citizen Identity & Access Control state (Google / Phone / Anonymous)
+  const [citizen, setCitizen] = useState<CitizenUser>({
+    id: 'cit-1',
+    name: 'Kwame Mensah',
+    email: 'kwame.mensah@gmail.com',
+    phone: '0244 892 104',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    trustScore: 95,
+    isVerified: true,
+    loginMethod: 'GOOGLE'
+  });
+  const [isCitizenAuthOpen, setIsCitizenAuthOpen] = useState(false);
+  const [authNameInput, setAuthNameInput] = useState('');
+  const [authPhoneInput, setAuthPhoneInput] = useState('');
+  const [authEmailInput, setAuthEmailInput] = useState('');
+
   // Camera & Permissions state
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [facing, setFacing] = useState<CameraType>('back');
@@ -589,12 +617,16 @@ export default function App() {
         ],
         is_anonymous: isAnonymous,
         reporter_data: isAnonymous
-          ? { isAnonymous: true, trustScore: 85 }
+          ? { isAnonymous: true, trustScore: 85, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
           : {
               isAnonymous: false,
-              phone: reporterPhone || '+233 24 000 0000',
+              name: citizen.name,
+              email: citizen.email,
+              phone: reporterPhone || citizen.phone || '+233 24 000 0000',
               landmarkNote: landmark.trim(),
-              trustScore: 95
+              trustScore: citizen.trustScore || 95,
+              isGoogleVerified: citizen.loginMethod === 'GOOGLE',
+              loginMethod: citizen.loginMethod
             },
         assigned_agency:
           category === 'DOMESTIC_ABUSE'
@@ -692,6 +724,43 @@ export default function App() {
             </TouchableOpacity>
           ))}
         </View>
+      </View>
+
+      {/* Citizen Identity & Access Control Bar */}
+      <View style={styles.citizenProfileBar}>
+        <TouchableOpacity
+          onPress={() => setIsCitizenAuthOpen(true)}
+          style={styles.citizenBadgePill}
+          activeOpacity={0.8}
+        >
+          <View style={styles.citizenAvatar}>
+            <Text style={{ fontSize: 13 }}>
+              {citizen.loginMethod === 'ANONYMOUS' ? '🛡️' : '🇬🇭'}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.citizenNameText} numberOfLines={1}>
+                {citizen.loginMethod === 'ANONYMOUS' ? 'Anonymous Whistleblower' : citizen.name}
+              </Text>
+              {citizen.isVerified && (
+                <Text style={{ color: '#10B981', fontSize: 11, fontWeight: 'bold' }}>✓</Text>
+              )}
+            </View>
+            <Text style={styles.citizenMetaText}>
+              {citizen.loginMethod === 'GOOGLE'
+                ? `Google Verified • ${citizen.trustScore}% Trust`
+                : citizen.loginMethod === 'PHONE'
+                ? `Phone Verified • ${citizen.trustScore}% Trust`
+                : 'Whistleblower Act 720 Active'}
+            </Text>
+          </View>
+          <View style={styles.citizenAuthBtn}>
+            <Text style={styles.citizenAuthBtnText}>
+              {citizen.loginMethod === 'ANONYMOUS' ? 'Sign In' : 'Account'}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Navigation Tabs */}
@@ -1249,6 +1318,128 @@ export default function App() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Citizen Access Control & Google Login Modal */}
+      <Modal
+        visible={isCitizenAuthOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsCitizenAuthOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 24 }}>🇬🇭</Text>
+                <View>
+                  <Text style={styles.modalTitle}>Citizen Identity & Trust Vault</Text>
+                  <Text style={styles.modalSubtitle}>Ghana Civic Safety & Whistleblower Portal</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setIsCitizenAuthOpen(false)} style={styles.modalCloseBtn}>
+                <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Google Authentication for Citizens */}
+            <TouchableOpacity
+              onPress={() => {
+                setCitizen({
+                  id: `cit-google-${Date.now()}`,
+                  name: 'Kwame Mensah',
+                  email: 'kwame.mensah@gmail.com',
+                  phone: '0244 892 104',
+                  trustScore: 98,
+                  isVerified: true,
+                  loginMethod: 'GOOGLE'
+                });
+                setIsAnonymous(false);
+                setIsCitizenAuthOpen(false);
+                Alert.alert('✅ Google Verified', 'Logged in as Kwame Mensah (Civic Trust Score: 98/100).');
+              }}
+              style={styles.googleAuthBtn}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 16 }}>🔐</Text>
+              <Text style={styles.googleAuthBtnText}>Sign In with Google Account</Text>
+            </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR CITIZEN PHONE</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Phone Verification */}
+            <TextInput
+              style={styles.input}
+              placeholder="Your Full Name (e.g. Abena Serwaa)"
+              placeholderTextColor="#64748b"
+              value={authNameInput}
+              onChangeText={setAuthNameInput}
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 6 }]}
+              placeholder="Ghana Phone Number (e.g. 0244 123 456)"
+              placeholderTextColor="#64748b"
+              keyboardType="phone-pad"
+              value={authPhoneInput}
+              onChangeText={setAuthPhoneInput}
+            />
+
+            <TouchableOpacity
+              onPress={() => {
+                if (!authNameInput.trim() || !authPhoneInput.trim()) {
+                  Alert.alert('Input Needed', 'Please enter your name and phone number.');
+                  return;
+                }
+                setCitizen({
+                  id: `cit-phone-${Date.now()}`,
+                  name: authNameInput.trim(),
+                  email: `${authPhoneInput.replace(/\s+/g, '')}@citizen.gh`,
+                  phone: authPhoneInput.trim(),
+                  trustScore: 95,
+                  isVerified: true,
+                  loginMethod: 'PHONE'
+                });
+                setReporterPhone(authPhoneInput.trim());
+                setIsAnonymous(false);
+                setIsCitizenAuthOpen(false);
+                Alert.alert('✅ Phone Verified', `Registered as ${authNameInput.trim()} (Trust Score: 95/100).`);
+              }}
+              style={styles.phoneAuthBtn}
+            >
+              <Text style={styles.phoneAuthBtnText}>Save Verified Citizen Identity</Text>
+            </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>WHISTLEBLOWER ACT 720</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Anonymous Whistleblower Option */}
+            <TouchableOpacity
+              onPress={() => {
+                setCitizen({
+                  id: `anon-${Date.now()}`,
+                  name: 'Anonymous Whistleblower',
+                  email: 'anonymous@whistleblower.act720.gh',
+                  trustScore: 85,
+                  isVerified: false,
+                  loginMethod: 'ANONYMOUS'
+                });
+                setIsAnonymous(true);
+                setIsCitizenAuthOpen(false);
+                Alert.alert('🛡️ Whistleblower Mode', 'All personal identifiers will be stripped from evidence under Act 720.');
+              }}
+              style={styles.anonAuthBtn}
+            >
+              <Text style={styles.anonAuthBtnText}>🛡️ Switch to 100% Anonymous Mode</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1270,6 +1461,151 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#1E293B'
+  },
+  citizenProfileBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#0B1120',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
+  },
+  citizenBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 10
+  },
+  citizenAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#475569'
+  },
+  citizenNameText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  citizenMetaText: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '500'
+  },
+  citizenAuthBtn: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3B82F6'
+  },
+  citizenAuthBtnText: {
+    color: '#60A5FA',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 20,
+    gap: 12
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800'
+  },
+  modalSubtitle: {
+    color: '#94a3b8',
+    fontSize: 11
+  },
+  modalCloseBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#1E293B'
+  },
+  googleAuthBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 10,
+    marginTop: 8
+  },
+  googleAuthBtnText: {
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: 'bold'
+  },
+  phoneAuthBtn: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8
+  },
+  phoneAuthBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: 'bold'
+  },
+  anonAuthBtn: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#475569',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center'
+  },
+  anonAuthBtnText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: 'bold'
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 4
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#334155'
+  },
+  dividerText: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5
   },
   appTitle: {
     fontSize: 18,
