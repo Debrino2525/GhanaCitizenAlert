@@ -12,9 +12,12 @@ import {
   Platform,
   SafeAreaView,
   StatusBar
-} from 'react-native';
-import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable } from '../lib/googleAuth';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export interface CitizenUser {
   id: string;
@@ -160,75 +163,97 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  // 3. Native In-App Google Sign-In with Supabase signInWithIdToken (No Browser Redirects)
-  const handleGoogleAuth = async () => {
-    if (!isNativeGoogleAuthAvailable || !GoogleSignin) {
-      Alert.alert(
-        'Native Google Sign-In',
-        'Native Google Sign-In requires a custom Development Client build (npx expo run:ios / run:android). While testing inside Expo Go, please sign in with Email & Password or use Whistleblower Mode below.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
+  // Helper to construct CitizenUser from Supabase User object
+  const buildAndSetCitizenUser = (user: any, accessToken?: string) => {
+    const userMeta = user.user_metadata || {};
+    const authenticatedCitizen: CitizenUser = {
+      id: user.id,
+      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Google Citizen',
+      email: user.email || '',
+      phone: userMeta.phone || '',
+      ghanaCard: userMeta.ghana_card || '',
+      trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+      isVerified: Boolean(userMeta.is_verified || false),
+      loginMethod: 'GOOGLE',
+      accessToken: accessToken
+    };
+    onAuthenticated(authenticatedCitizen);
+  };
 
+  // 3. Expo Go Compatible In-App Google Sign-In with Supabase OAuth & WebBrowser
+  const handleGoogleAuth = async () => {
     setIsLoading(true);
     setErrorMessage(null);
+
     try {
-      // Ensure Google Play Services is available
-      if (GoogleSignin.hasPlayServices) {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      }
-
-      // Native in-app account chooser
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = signInResult.data?.idToken || (signInResult as any).idToken;
-
-      if (!idToken) {
-        throw new Error('Google Sign-In completed but no ID token was provided.');
-      }
-
-      // Exchange Google ID token directly with Supabase Native Auth
-      const { data, error } = await supabase.auth.signInWithIdToken({
-        provider: 'google',
-        token: idToken
+      const redirectUrl = AuthSession.makeRedirectUri({
+        scheme: 'citizenalert',
+        path: 'auth/callback'
       });
 
-      if (error) {
-        throw error;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true
+        }
+      });
+
+      if (error) throw error;
+      if (!data?.url) throw new Error('No authentication URL was returned by provider.');
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (result.type === 'success' && result.url) {
+        const parsedUrl = Linking.parse(result.url);
+
+        // 1. Check for PKCE Authorization Code in query params
+        if (parsedUrl.queryParams?.code) {
+          const { data: sessionData, error: sessionErr } = await supabase.auth.exchangeCodeForSession(
+            parsedUrl.queryParams.code as string
+          );
+          if (sessionErr) throw sessionErr;
+          if (sessionData?.user) {
+            buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token);
+            return;
+          }
+        }
+
+        // 2. Check for implicit access tokens in hash fragment or query params
+        let accessToken = (parsedUrl.queryParams?.access_token as string) || '';
+        let refreshToken = (parsedUrl.queryParams?.refresh_token as string) || '';
+
+        if (!accessToken && result.url.includes('#')) {
+          const hashPart = result.url.split('#')[1];
+          const hashParams = new URLSearchParams(hashPart);
+          accessToken = hashParams.get('access_token') || '';
+          refreshToken = hashParams.get('refresh_token') || '';
+        }
+
+        if (accessToken && refreshToken) {
+          const { data: sessionData, error: setSessionErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+          if (setSessionErr) throw setSessionErr;
+          if (sessionData?.user) {
+            buildAndSetCitizenUser(sessionData.user, accessToken);
+            return;
+          }
+        }
+
+        // 3. Fallback: Check active Supabase session
+        const { data: activeSession } = await supabase.auth.getSession();
+        if (activeSession?.session?.user) {
+          buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token);
+          return;
+        }
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        console.log('Google Sign-In dismissed');
       }
-
-      if (!data.user) {
-        throw new Error('Supabase authentication returned no active citizen user.');
-      }
-
-      const user = data.user;
-      const userMeta = user.user_metadata || {};
-
-      // Build real citizen user from Supabase user session data
-      const authenticatedCitizen: CitizenUser = {
-        id: user.id,
-        name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Google Citizen',
-        email: user.email || '',
-        phone: userMeta.phone || '',
-        ghanaCard: userMeta.ghana_card || '',
-        trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70, // Baseline trust score
-        isVerified: Boolean(userMeta.is_verified || false),
-        loginMethod: 'GOOGLE',
-        accessToken: data.session?.access_token
-      };
-
-      onAuthenticated(authenticatedCitizen);
     } catch (err: any) {
-      if (err.code === statusCodes.SIGN_IN_CANCELLED) {
-        // User cancelled in-app prompt - stay logged out quietly without alert spam
-        console.log('Google Sign-In cancelled by citizen');
-      } else if (err.code === statusCodes.IN_PROGRESS) {
-        setErrorMessage('Google Sign-In operation is already in progress.');
-      } else if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        setErrorMessage('Google Play Services is not available or outdated on this device.');
-      } else {
-        setErrorMessage(err.message || 'Google Authentication failed. Please try again.');
-      }
+      console.error('Google Sign-In Error:', err);
+      setErrorMessage(err.message || 'Google Sign-In encountered an error. Please try again.');
     } finally {
       setIsLoading(false);
     }
