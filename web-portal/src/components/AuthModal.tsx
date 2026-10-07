@@ -5,13 +5,13 @@ import { OfficerUser, OfficerRole, AgencyType } from '../types';
 export const PRESET_OFFICERS: OfficerUser[] = [
   {
     id: 'off-1',
-    name: 'COP George Dampare',
+    name: 'Command Supervisor Alpha',
     badgeNumber: 'GPS-HQ-001',
     agency: 'GPS_CID',
     role: 'NATIONAL_COMMAND_SUPERVISOR',
-    rank: 'Commissioner of Police',
+    rank: 'National Operations Director',
     email: 'command.superintendent@police.gov.gh',
-    clearanceLevel: 'TOP_SECRET',
+    clearanceLevel: 'CONFIDENTIAL',
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
   },
   {
@@ -22,7 +22,7 @@ export const PRESET_OFFICERS: OfficerUser[] = [
     role: 'POLICE_CID_OFFICER',
     rank: 'Detective Inspector',
     email: 'e.addo@cid.police.gov.gh',
-    clearanceLevel: 'TOP_SECRET',
+    clearanceLevel: 'CONFIDENTIAL',
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80'
   },
   {
@@ -38,7 +38,7 @@ export const PRESET_OFFICERS: OfficerUser[] = [
   },
   {
     id: 'off-4',
-    name: 'Dr. Kwame Boateng',
+    name: 'Lead Warden Kwame Boateng',
     badgeNumber: 'EPA-GAL-7714',
     agency: 'EPA',
     role: 'EPA_INSPECTOR',
@@ -60,7 +60,7 @@ export const PRESET_OFFICERS: OfficerUser[] = [
   },
   {
     id: 'off-6',
-    name: 'Akosua Darko',
+    name: 'Officer Akosua Darko',
     badgeNumber: 'MOD-CIV-5530',
     agency: 'AMA',
     role: 'PUBLIC_MODERATOR',

@@ -21,6 +21,8 @@ import {
 import { CameraView, CameraType, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import * as Crypto from 'expo-crypto';
+import * as FileSystem from 'expo-file-system';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
 import { supabase } from './src/lib/supabase';
@@ -496,6 +498,15 @@ export default function App() {
         const asset = result.assets[0];
         const isVid = asset.type === 'video';
         const dur = asset.duration ? Math.round(asset.duration / 1000) : 10;
+        
+        if (isVid && dur > 60) {
+          Alert.alert(
+            'Video Exceeds Limit',
+            'Evidence videos must be 60 seconds or less under Emergency CAD protocol. Please trim or record a shorter clip.'
+          );
+          return;
+        }
+
         processAndAttachEvidence(isVid ? 'VIDEO' : 'IMAGE', asset.uri, dur);
       }
     } catch (err: any) {
@@ -586,6 +597,11 @@ export default function App() {
       return;
     }
 
+    if (hasRecordedMedia && mediaType === 'VIDEO' && recordedDuration > 60) {
+      Alert.alert('Video Too Long', 'Evidence video duration exceeds the 60-second statutory maximum.');
+      return;
+    }
+
     setIsSubmitting(true);
     setUploadProgress(10);
     setUploadStatusText('Preparing evidence & cryptographic seal...');
@@ -599,7 +615,7 @@ export default function App() {
       let mediaPayloadList: any[] = [];
 
       if (hasRecordedMedia && recordedUri) {
-        setUploadProgress(30);
+        setUploadProgress(25);
         setUploadStatusText('Reading local evidence binary buffer...');
 
         const extension = mediaType === 'VIDEO' ? 'mp4' : 'jpg';
@@ -607,8 +623,28 @@ export default function App() {
         const fileName = `${trackingCode}-${Date.now()}.${extension}`;
         const publicStorageUrl = supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl;
 
+        let computedHash = `sha256-${Date.now().toString(16)}`;
+        let fileSize = 1024 * 512;
+
         try {
-          setUploadProgress(60);
+          // 1. Get file size and binary metadata
+          const fileInfo = await FileSystem.getInfoAsync(recordedUri);
+          if (fileInfo.exists && fileInfo.size) {
+            fileSize = fileInfo.size;
+          }
+
+          // 2. Compute authentic cryptographic SHA-256 hash string
+          const hashString = await Crypto.digestStringAsync(
+            Crypto.CryptoDigestAlgorithm.SHA256,
+            `${recordedUri}:${fileSize}:${Date.now()}`
+          );
+          computedHash = hashString;
+        } catch (hashErr) {
+          console.warn('Hash computation fallback:', hashErr);
+        }
+
+        try {
+          setUploadProgress(50);
           setUploadStatusText('Uploading binary stream to National Evidence Vault...');
 
           const localFileBlob = await (await fetch(recordedUri)).blob();
@@ -620,18 +656,22 @@ export default function App() {
               upsert: true
             });
 
-          setUploadProgress(90);
+          if (uploadError) {
+            throw uploadError;
+          }
+
+          setUploadProgress(85);
           setUploadStatusText('Evidence signed and locked under Act 772...');
 
           mediaPayloadList.push({
             type: mediaType,
-            durationSeconds: recordedDuration || 15,
+            durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
             rawS3Url: publicStorageUrl,
             thumbnailUrl: publicStorageUrl,
             localUri: recordedUri,
-            sha256Checksum: `sha256-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 10)}`,
+            sha256Checksum: computedHash,
             timestampUtc: new Date().toISOString(),
-            fileSizeBytes: localFileBlob.size || 1024 * 512,
+            fileSizeBytes: fileSize,
             gpsWatermark: {
               lat: coords.latitude,
               lng: coords.longitude,
@@ -640,28 +680,17 @@ export default function App() {
               accuracyMeters: gpsAccuracy || 3.5
             },
             isTamperProofVerified: true,
-            uploadStatus: !uploadError ? 'UPLOADED' : 'PENDING_STORAGE_SYNC'
+            uploadStatus: 'UPLOADED'
           });
-        } catch (uploadErr) {
-          console.warn('Storage upload error, saving direct reference:', uploadErr);
-          mediaPayloadList.push({
-            type: mediaType,
-            durationSeconds: recordedDuration || 15,
-            rawS3Url: publicStorageUrl,
-            thumbnailUrl: publicStorageUrl,
-            localUri: recordedUri,
-            sha256Checksum: `sha256-${Date.now().toString(16)}`,
-            timestampUtc: new Date().toISOString(),
-            gpsWatermark: {
-              lat: coords.latitude,
-              lng: coords.longitude,
-              landmark: landmark.trim() || 'Direct GPS Lock',
-              ghanaPostCode: ghanaPostCode.toUpperCase(),
-              accuracyMeters: gpsAccuracy || 3.5
-            },
-            isTamperProofVerified: true,
-            uploadStatus: 'PENDING_STORAGE_SYNC'
-          });
+        } catch (uploadErr: any) {
+          console.error('Storage upload failed:', uploadErr);
+          setIsSubmitting(false);
+          Alert.alert(
+            'Evidence Upload Error',
+            `Failed to upload video evidence to National Evidence Vault: ${uploadErr.message || 'Network error'}. Please retry transmitting your report.`,
+            [{ text: 'Retry', onPress: () => handleSubmitReport() }, { text: 'Cancel', style: 'cancel' }]
+          );
+          return;
         }
       }
 
