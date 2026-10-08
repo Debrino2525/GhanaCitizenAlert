@@ -30,11 +30,19 @@ import {
   Plus,
   Navigation,
   Compass,
-  Radio
+  Radio,
+  Sparkles
 } from 'lucide-react';
 import { generateCourtCertificate, CourtCertificate } from '../services/evidenceVault';
 import { supabase } from '../services/supabaseClient';
 import { computeTacticalDispatchRoute } from '../services/googleMapsService';
+import {
+  generatePoliceCaseBrief,
+  performAiTriageAnalysis,
+  PoliceCaseBrief,
+  AiTriageResult
+} from '../services/geminiAiService';
+import { AiCaseBriefModal } from './AiCaseBriefModal';
 
 interface PoliceCommandDashboardProps {
   incidents: IncidentReport[];
@@ -68,11 +76,37 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   const [isResolvingUrl, setIsResolvingUrl] = useState<boolean>(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
+
+  // Gemini AI Case Dossier & Multimodal Triage State
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiBrief, setAiBrief] = useState<PoliceCaseBrief | null>(null);
+  const [aiTriage, setAiTriage] = useState<AiTriageResult | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
+
   const [caseNotes, setCaseNotes] = useState<Record<string, { author: string; text: string; time: string }[]>>({
     'inc-1': [
       { author: 'Insp. Emmanuel Addo (CID)', text: 'Patrol Unit Alpha-4 deployed to boundary junction. Suspect vehicle identified.', time: '10:42 AM' }
     ]
   });
+
+  const handleOpenAiDossier = async () => {
+    if (!selectedIncident) return;
+    setIsAiModalOpen(true);
+    setIsLoadingAi(true);
+
+    try {
+      const [briefResult, triageResult] = await Promise.all([
+        generatePoliceCaseBrief(selectedIncident),
+        performAiTriageAnalysis(selectedIncident)
+      ]);
+      setAiBrief(briefResult);
+      setAiTriage(triageResult);
+    } catch (e) {
+      console.warn('Error synthesizing AI case brief:', e);
+    } finally {
+      setIsLoadingAi(false);
+    }
+  };
 
   // Reset playback & resolve signed video URL when selected incident changes
   useEffect(() => {
@@ -365,6 +399,14 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               </div>
 
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleOpenAiDossier}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-blue-500/20 to-purple-500/20 hover:from-amber-500/30 hover:to-blue-500/30 border border-amber-400/40 text-amber-300 font-bold text-xs flex items-center space-x-2 transition shadow-lg shadow-amber-500/10"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                  <span>Gemini AI Case Brief</span>
+                </button>
+
                 <button
                   onClick={() => onOpenCertificateModal(generateCourtCertificate(selectedIncident))}
                   className="px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs flex items-center space-x-2 transition shadow-lg shadow-amber-500/10"
@@ -800,6 +842,22 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Gemini AI Investigation Case Brief & Multimodal Triage Modal */}
+      {isAiModalOpen && (
+        <AiCaseBriefModal
+          brief={aiBrief}
+          triage={aiTriage}
+          isLoading={isLoadingAi}
+          onClose={() => setIsAiModalOpen(false)}
+          onApplyTriageAgency={(agency) => {
+            if (selectedIncident) {
+              onReassignAgency(selectedIncident.id, agency);
+              setIsAiModalOpen(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
