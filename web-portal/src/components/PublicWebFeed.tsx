@@ -1,27 +1,89 @@
-import React, { useState } from 'react';
-import { IncidentReport } from '../types';
-import { ThumbsUp, ShieldCheck, MapPin, Eye, AlertCircle, Share2, CheckCircle2, Lock, Flag, X, Send } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ThumbsUp, ShieldCheck, MapPin, AlertCircle, Share2, CheckCircle2, Flag, X, Send, Loader2 } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
 
-interface PublicWebFeedProps {
-  incidents: IncidentReport[];
-  onCorroborate: (incidentId: string) => void;
+export interface PublicFeedIncident {
+  id: string;
+  tracking_code: string;
+  category: string;
+  title: string;
+  description: string;
+  location_name: string;
+  region: string;
+  latitude: number;
+  longitude: number;
+  severity: string;
+  status: string;
+  public_corroborations: number;
+  created_at: string;
+  updated_at: string;
 }
 
-export const PublicWebFeed: React.FC<PublicWebFeedProps> = ({
-  incidents,
-  onCorroborate
-}) => {
+export const PublicWebFeed: React.FC = () => {
+  const [incidents, setIncidents] = useState<PublicFeedIncident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const [showAppealModal, setShowAppealModal] = useState(false);
-  const [appealIncident, setAppealIncident] = useState<IncidentReport | null>(null);
+  const [appealIncident, setAppealIncident] = useState<PublicFeedIncident | null>(null);
   const [appealName, setAppealName] = useState('');
   const [appealContact, setAppealContact] = useState('');
   const [appealReason, setAppealReason] = useState('');
   const [appealSubmitted, setAppealSubmitted] = useState(false);
 
-  // Show only approved public published items
-  const publicIncidents = incidents.filter(inc => inc.isPublicPublished);
+  // Fetch verified public safety bulletins from the public_feed_incidents view
+  const fetchPublicFeed = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const { data, error } = await supabase
+        .from('public_feed_incidents')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const handleOpenAppeal = (inc: IncidentReport) => {
+      if (error) {
+        throw error;
+      }
+      setIncidents(data || []);
+    } catch (err: any) {
+      console.warn('Error reading public_feed_incidents:', err);
+      setErrorMsg('Could not load public safety bulletins. Please refresh or check connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPublicFeed();
+
+    // Subscribe to realtime changes on public feed view / table
+    const channel = supabase
+      .channel('realtime_public_feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'public_feed_incidents' }, () => {
+        fetchPublicFeed();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleCorroborate = async (incidentId: string) => {
+    setIncidents(prev =>
+      prev.map(inc =>
+        inc.id === incidentId ? { ...inc, public_corroborations: (inc.public_corroborations || 0) + 1 } : inc
+      )
+    );
+
+    try {
+      await supabase.rpc('increment_corroboration', { row_id: incidentId });
+    } catch (e) {
+      console.warn('Corroboration RPC notice:', e);
+    }
+  };
+
+  const handleOpenAppeal = (inc: PublicFeedIncident) => {
     setAppealIncident(inc);
     setAppealSubmitted(false);
     setShowAppealModal(true);
@@ -59,32 +121,49 @@ export const PublicWebFeed: React.FC<PublicWebFeedProps> = ({
         <div className="p-3 rounded-xl bg-blue-950/30 border border-blue-900/40 text-xs text-blue-200 flex items-start space-x-2">
           <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
           <p>
-            <strong className="text-white">Ghana Data Protection Act (Act 843) Safeguard:</strong> All civilian faces and vehicle license plates are irreversibly blurred. Private accusations are never published. If you believe your rights or property have been misidentified, you may submit a formal takedown appeal below.
+            <strong className="text-white">Ghana Data Protection Act (Act 843) Notice:</strong> In compliance with national privacy and security policies, public safety bulletins display sanitized community awareness data without private media, individual reporter identities, or investigator worknotes.
           </p>
         </div>
       </div>
 
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-red-950/50 border border-red-800 text-red-200 text-xs flex items-center justify-between">
+          <span>{errorMsg}</span>
+          <button
+            onClick={fetchPublicFeed}
+            className="px-3 py-1 bg-red-900/80 hover:bg-red-800 rounded-lg text-white font-bold text-[11px]"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Feed Cards */}
       <div className="space-y-4">
-        {publicIncidents.length === 0 ? (
+        {loading ? (
+          <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
+            <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+            <span>Loading verified public safety bulletins...</span>
+          </div>
+        ) : incidents.length === 0 ? (
           <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-500 text-xs">
             No public bulletins active at this moment.
           </div>
         ) : (
-          publicIncidents.map(inc => (
+          incidents.map(inc => (
             <div key={inc.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg space-y-4">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center space-x-2 mb-1">
                     <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded bg-slate-950 text-ghana-gold border border-slate-800">
-                      {inc.trackingCode}
+                      {inc.tracking_code}
                     </span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                      {inc.assignedAgency}
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                      {inc.category.replace(/_/g, ' ')}
                     </span>
                     <span className="text-[11px] text-emerald-400 font-bold flex items-center space-x-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Moderated & Verified</span>
+                      <span>Verified Safety Bulletin</span>
                     </span>
                   </div>
                   <h3 className="text-base font-bold text-white mt-1">
@@ -92,12 +171,12 @@ export const PublicWebFeed: React.FC<PublicWebFeedProps> = ({
                   </h3>
                   <p className="text-xs text-slate-400 font-mono mt-0.5 flex items-center space-x-1">
                     <MapPin className="w-3.5 h-3.5 text-red-400" />
-                    <span>{inc.locationName} ({inc.ghanaPostCode})</span>
+                    <span>{inc.location_name} • {inc.region}</span>
                   </p>
                 </div>
 
                 <span className="text-xs text-slate-500 font-mono">
-                  {new Date(inc.createdAt).toLocaleDateString()}
+                  {new Date(inc.created_at).toLocaleDateString()}
                 </span>
               </div>
 
@@ -105,28 +184,14 @@ export const PublicWebFeed: React.FC<PublicWebFeedProps> = ({
                 {inc.description}
               </p>
 
-              {inc.media.length > 0 && (
-                <div className="rounded-xl overflow-hidden border border-slate-800 relative bg-slate-950">
-                  <img
-                    src={inc.media[0].thumbnailUrl}
-                    alt={inc.title}
-                    className="w-full h-56 object-cover"
-                  />
-                  <div className="absolute bottom-3 left-3 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-700 text-[10px] font-mono text-emerald-400 flex items-center space-x-1">
-                    <Lock className="w-3 h-3" />
-                    <span>Faces & Vehicle PII Sanitized (Act 843)</span>
-                  </div>
-                </div>
-              )}
-
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
                 <button
-                  onClick={() => onCorroborate(inc.id)}
+                  onClick={() => handleCorroborate(inc.id)}
                   className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold flex items-center space-x-2 transition"
                 >
                   <ThumbsUp className="w-3.5 h-3.5" />
-                  <span>Corroborate / Witnessed ({inc.publicCorroborations})</span>
+                  <span>Corroborate / Witnessed ({inc.public_corroborations || 0})</span>
                 </button>
 
                 <div className="flex space-x-2">

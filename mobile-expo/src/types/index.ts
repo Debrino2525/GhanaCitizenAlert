@@ -41,8 +41,10 @@ export type MediaUploadStatus =
   | 'UPLOAD_FAILED'
   | 'RETRYING';
 
+export type MediaType = 'VIDEO' | 'IMAGE';
+
 export interface EvidenceMediaItem {
-  type: 'VIDEO' | 'IMAGE';
+  type: MediaType;
   video_storage_path: string;
   durationSeconds: number;
   rawS3Url: string;

@@ -11,7 +11,7 @@ import {
   EvidenceMediaItem
 } from '../types';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
-import { uploadEvidenceStreaming, cleanupCachedEvidence } from '../services/evidenceUploader';
+import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult } from '../services/evidenceUploader';
 import { savePendingReport } from '../services/pendingReportsQueue';
 
 export interface UseIncidentDraftProps {
@@ -249,11 +249,12 @@ export const useIncidentDraft = ({
           }
         });
 
-        const timeoutPromise = new Promise<{ success: boolean; error: string; statusCode: number }>((resolve) =>
+        const timeoutPromise = new Promise<UploadEvidenceResult>((resolve) =>
           setTimeout(
             () =>
               resolve({
                 success: false,
+                publicUrl: '',
                 statusCode: 408,
                 error: 'Upload timed out after 3 minutes. Network is slow or unreachable.'
               }),
@@ -362,9 +363,11 @@ export const useIncidentDraft = ({
       }
 
       setUploadProgress(95);
-      setUploadStatusText('Transmitting incident dossier to Police CID Dispatch...');
+      const userRes = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      const authUid = userRes.data.user?.id || (citizen.id && citizen.id.length > 20 ? citizen.id : null);
+      const reporterId = !isAnonymous && authUid ? authUid : null;
 
-      const payload = {
+      const payload: any = {
         tracking_code: trackingCode,
         category,
         title: title.trim(),
@@ -408,6 +411,10 @@ export const useIncidentDraft = ({
         public_corroborations: 0
       };
 
+      if (reporterId) {
+        payload.reporter_id = reporterId;
+      }
+
       const { error: insertError } = await supabase.from('incidents').insert(payload);
 
       setIsSubmitting(false);
@@ -420,7 +427,7 @@ export const useIncidentDraft = ({
 
         Alert.alert(
           '✅ Report Transmitted & Live',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nEvidence verified on National Vault and pinned on Command Map.`,
+          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.`,
           [{ text: 'OK' }]
         );
 

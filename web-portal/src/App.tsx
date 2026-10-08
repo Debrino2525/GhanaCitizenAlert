@@ -623,20 +623,12 @@ export const App: React.FC = () => {
                 onSelectIncident={(inc) => setSelectedIncident(inc)}
               />
             </div>
-            <EmergencyAlertHub
-              alerts={alerts}
-              sightings={sightings}
-              onAddSighting={handleAddSighting}
-              onCreateAlert={handleCreateAlert}
-            />
+            <EmergencyAlertHub currentOfficer={currentOfficer} />
           </div>
         )}
 
         {activeTab === 'FEED' && (
-          <PublicWebFeed
-            incidents={incidents}
-            onCorroborate={handleCorroborate}
-          />
+          <PublicWebFeed />
         )}
 
         {activeTab === 'ANALYTICS' && (

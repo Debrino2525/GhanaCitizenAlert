@@ -104,23 +104,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     }, {} as Record<string, number>);
   }, [incidents]);
 
-  const handleOpenAiDossier = async () => {
+  const handleOpenAiDossier = () => {
     if (!selectedIncident) return;
     setIsAiModalOpen(true);
-    setIsLoadingAi(true);
-
-    try {
-      const [briefResult, triageResult] = await Promise.all([
-        generatePoliceCaseBrief(selectedIncident),
-        performAiTriageAnalysis(selectedIncident)
-      ]);
-      setAiBrief(briefResult);
-      setAiTriage(triageResult);
-    } catch (e) {
-      console.warn('Error synthesizing AI case brief:', e);
-    } finally {
-      setIsLoadingAi(false);
-    }
+    setIsLoadingAi(false);
+    setAiBrief(null);
+    setAiTriage(null);
   };
 
   // Reset playback & resolve signed video URL when selected incident changes
@@ -489,8 +478,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     onClick={handleOpenAiDossier}
                     className="px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-blue-500/20 to-purple-500/20 hover:from-amber-500/30 hover:to-blue-500/30 border border-amber-400/40 text-amber-300 font-bold text-xs flex items-center space-x-1.5 transition shadow-lg shadow-amber-500/10"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                    <span>Gemini AI Brief</span>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>AI Case Brief</span>
                   </button>
 
                   <button
