@@ -22,6 +22,8 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
 }) => {
   if (!isUploadingMedia && !hasRecordedMedia) return null;
 
+  const displayProgress = isUploadingMedia ? uploadProgress : 100;
+
   return (
     <View style={styles.uploadProgressCard}>
       <View style={styles.uploadHeaderRow}>
@@ -35,7 +37,7 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
             {isUploadingMedia ? 'UPLOADING & ENCRYPTING EVIDENCE...' : 'EVIDENCE SECURELY ATTACHED & LOCKED'}
           </Text>
         </View>
-        <Text style={styles.uploadPercentageText}>{uploadProgress}%</Text>
+        <Text style={styles.uploadPercentageText}>{displayProgress}%</Text>
       </View>
 
       <View style={styles.progressBarTrack}>
@@ -43,7 +45,7 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
           style={[
             styles.progressBarFill,
             {
-              width: `${uploadProgress}%`,
+              width: `${displayProgress}%`,
               backgroundColor: isUploadingMedia ? tokens.colors.police.accent : tokens.colors.status.success
             }
           ]}

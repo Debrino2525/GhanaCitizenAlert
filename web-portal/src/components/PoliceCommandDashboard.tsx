@@ -119,9 +119,19 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     const resolveMediaUrl = async () => {
       setIsResolvingUrl(true);
       try {
-        const rawUrl = (activeMedia as any).rawS3Url || (activeMedia as any).url || '';
+        const rawUrl = (activeMedia as any).rawS3Url || (activeMedia as any).url || (activeMedia as any).thumbnailUrl || '';
         const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
 
+        // 1. Direct Data URI or HTTP Stream (instant zero-latency playback)
+        if (rawUrl && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+          if (!isCancelled) {
+            setResolvedVideoUrl(rawUrl);
+            setIsResolvingUrl(false);
+            return;
+          }
+        }
+
+        // 2. Supabase Storage Signed/Public URL resolution
         if (storagePath) {
           const { data: signedData, error: signedErr } = await supabase.storage
             .from('evidence')
