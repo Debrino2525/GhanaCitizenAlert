@@ -388,7 +388,7 @@ export const useIncidentDraft = ({
               isAnonymous: false,
               name: citizen.name,
               email: citizen.email,
-              phone: reporterPhone || citizen.phone || '+233 24 000 0000',
+              phone: reporterPhone || citizen.phone || null,
               landmarkNote: landmark.trim(),
               trustScore: citizen.trustScore || 95,
               isGoogleVerified: citizen.loginMethod === 'GOOGLE',
@@ -409,7 +409,7 @@ export const useIncidentDraft = ({
             : category === 'DOMESTIC_ABUSE' || category === 'GALAMSEY_ENVIRONMENTAL'
             ? 'HIGH'
             : 'NORMAL',
-        is_public_eligible: category === 'GALAMSEY_ENVIRONMENTAL' || category === 'TRAFFIC_RECKLESS',
+        is_public_eligible: false,
         is_public_published: false,
         public_corroborations: 0
       };

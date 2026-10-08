@@ -197,7 +197,7 @@ export async function processPendingReport(
             isAnonymous: false,
             name: report.reporterName || 'Citizen Reporter',
             email: report.reporterEmail || '',
-            phone: report.reporterPhone || '+233 24 000 0000',
+            phone: report.reporterPhone || null,
             landmarkNote: report.landmark,
             trustScore: report.reporterTrustScore || 95,
             isGoogleVerified: report.reporterLoginMethod === 'GOOGLE',
@@ -218,7 +218,7 @@ export async function processPendingReport(
           : report.category === 'DOMESTIC_ABUSE' || report.category === 'GALAMSEY_ENVIRONMENTAL'
           ? 'HIGH'
           : 'NORMAL',
-      is_public_eligible: report.category === 'GALAMSEY_ENVIRONMENTAL' || report.category === 'TRAFFIC_RECKLESS',
+      is_public_eligible: false,
       is_public_published: false,
       public_corroborations: 0
     };
