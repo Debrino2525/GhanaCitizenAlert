@@ -145,7 +145,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
       </div>
 
       {showTipModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
             <h3 className="text-base font-bold text-white mb-2">Submit Urgent Sighting Tip</h3>
             <form onSubmit={handleSubmitTip} className="space-y-3 text-xs">

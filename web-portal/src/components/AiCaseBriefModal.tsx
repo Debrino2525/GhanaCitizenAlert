@@ -38,6 +38,13 @@ export const AiCaseBriefModal: React.FC<AiCaseBriefModalProps> = ({
 
   if (!brief && !isLoading) return null;
 
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   const handleCopyText = () => {
     if (!brief) return;
     const text = `
@@ -81,7 +88,7 @@ ${brief.commandActionDirectives.map(d => `* ${d}`).join('\n')}
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto border-t-2 border-t-amber-400">
         {/* Modal Header */}
         <div className="p-6 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4">

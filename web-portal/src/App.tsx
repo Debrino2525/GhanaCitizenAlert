@@ -245,8 +245,15 @@ export const App: React.FC = () => {
     setAlerts(prev => [newAlert, ...prev]);
   };
 
+  // Phase 2 KPI Strip Metrics computed strictly from incidents prop
+  const activeCount = incidents.filter(i => i.status !== 'RESOLVED' && i.status !== 'DISMISSED').length;
+  const dispatchedCount = incidents.filter(i => i.status === 'DISPATCHED').length;
+  const investigatingCount = incidents.filter(i => i.status === 'UNDER_ACTIVE_INVESTIGATION').length;
+  const resolvedCount = incidents.filter(i => i.status === 'RESOLVED').length;
+  const sealedEvidenceCount = incidents.reduce((sum, i) => sum + (i.media?.length || 1), 0);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(30,58,138,0.15),rgba(255,255,255,0))] text-slate-100 flex flex-col font-sans selection:bg-ghana-gold selection:text-black">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -257,10 +264,64 @@ export const App: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
         {activeTab === 'COMMAND' && (
-          <div className="space-y-6">
-            <div className="h-[440px]">
+          <div className="space-y-4">
+            {/* Slim KPI Command Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold shrink-0">
+                  🚨
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Active Queue</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-white tracking-tight">{activeCount}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold shrink-0">
+                  ⚡
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Units Dispatched</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-emerald-400 tracking-tight">{dispatchedCount}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold shrink-0">
+                  🔍
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Investigating</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-indigo-300 tracking-tight">{investigatingCount}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold shrink-0">
+                  ⚖️
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Act 772 Sealed</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-purple-300 tracking-tight">{sealedEvidenceCount}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3 col-span-2 sm:col-span-1">
+                <div className="w-9 h-9 rounded-xl bg-amber-600/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shrink-0">
+                  ✅
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Resolved Today</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-amber-400 tracking-tight">{resolvedCount}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Map Container */}
+            <div className="relative h-[320px] md:h-[clamp(340px,45vh,560px)]">
               <IncidentMap
                 incidents={incidents}
                 alerts={alerts}
@@ -289,7 +350,7 @@ export const App: React.FC = () => {
 
         {activeTab === 'ALERTS' && (
           <div className="space-y-6">
-            <div className="h-[380px]">
+            <div className="relative h-[320px] md:h-[clamp(340px,45vh,560px)]">
               <IncidentMap
                 incidents={incidents}
                 alerts={alerts}
