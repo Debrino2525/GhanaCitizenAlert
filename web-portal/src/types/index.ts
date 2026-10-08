@@ -140,3 +140,14 @@ export interface OfficerUser {
   must_change_password?: boolean;
   created_at?: string;
 }
+
+export interface SosPing {
+  id: string;
+  incident_id: string;
+  reporter_id?: string | null;
+  lat: number;
+  lng: number;
+  accuracy: number;
+  created_at: string;
+}
+
