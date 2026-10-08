@@ -173,14 +173,14 @@ export const useIncidentDraft = ({
       ? `${landmark.trim()} (${locationName})`
       : locationName;
 
-    try {
-      let mediaPayloadList: EvidenceMediaItem[] = [];
-      let permanentUri = activePermanentUriRef.current || permanentMediaUri;
-      let computedHash = `sha256-${Date.now().toString(16)}`;
-      let fileSize = 1024 * 512;
-      let fileName = '';
-      let mimeType = '';
+    let mediaPayloadList: EvidenceMediaItem[] = [];
+    let permanentUri = activePermanentUriRef.current || permanentMediaUri;
+    let computedHash: string | null = null;
+    let fileSize = 1024 * 512;
+    let fileName = '';
+    let mimeType = '';
 
+    try {
       if (hasRecordedMedia && recordedUri) {
         const isMov = recordedUri.toLowerCase().endsWith('.mov');
         const extension = mediaType === 'VIDEO' ? (isMov ? 'mov' : 'mp4') : 'jpg';
@@ -222,20 +222,23 @@ export const useIncidentDraft = ({
           console.warn('Gallery save notice (non-fatal):', galleryErr);
         }
 
-        // STEP 3: Inspect file size & compute SHA-256 Checksum
+        // STEP 3: Inspect file size & compute real SHA-256 Checksum on file bytes
         try {
           const fileInfo = await FileSystem.getInfoAsync(permanentUri);
           if (fileInfo.exists && typeof fileInfo.size === 'number') {
             fileSize = fileInfo.size;
           }
 
-          const hashString = await Crypto.digestStringAsync(
+          const base64Data = await FileSystem.readAsStringAsync(permanentUri, {
+            encoding: FileSystem.EncodingType.Base64
+          });
+          computedHash = await Crypto.digestStringAsync(
             Crypto.CryptoDigestAlgorithm.SHA256,
-            `${permanentUri}:${fileSize}:${Date.now()}`
+            base64Data
           );
-          computedHash = hashString;
         } catch (hashErr) {
-          console.warn('Checksum calculation error:', hashErr);
+          console.warn('SHA-256 byte hashing error:', hashErr);
+          computedHash = null;
         }
 
         // STEP 4: Upload and strictly verify evidence on Supabase Storage
@@ -302,7 +305,7 @@ export const useIncidentDraft = ({
                     permanentVideoUri: permanentUri!,
                     fileName,
                     mimeType,
-                    sha256Checksum: computedHash,
+                    sha256Checksum: computedHash || '',
                     fileSizeBytes: fileSize,
                     isAnonymous,
                     reporterPhone: reporterPhone || citizen.phone,
@@ -343,6 +346,13 @@ export const useIncidentDraft = ({
         }
 
         // Upload and verification verified successfully!
+        const isTamperProofVerified = Boolean(
+          computedHash &&
+          computedHash.length === 64 &&
+          uploadResult.success &&
+          uploadResult.publicUrl
+        );
+
         mediaPayloadList.push({
           type: mediaType,
           video_storage_path: fileName,
@@ -350,17 +360,17 @@ export const useIncidentDraft = ({
           rawS3Url: uploadResult.publicUrl,
           thumbnailUrl: uploadResult.publicUrl,
           localUri: permanentUri,
-          sha256Checksum: computedHash,
+          sha256Checksum: computedHash || '',
           timestampUtc: new Date().toISOString(),
           fileSizeBytes: fileSize,
           gpsWatermark: {
             lat: coords.latitude,
             lng: coords.longitude,
             landmark: landmark.trim() || 'Direct GPS Lock',
-            ghanaPostCode: ghanaPostCode.toUpperCase(),
+            ghanaPostCode: ghanaPostCode ? ghanaPostCode.toUpperCase() : '',
             accuracyMeters: gpsAccuracy || 3.5
           },
-          isTamperProofVerified: true,
+          isTamperProofVerified,
           uploadStatus: 'UPLOADED'
         });
       }
@@ -509,8 +519,8 @@ export const useIncidentDraft = ({
                   permanentVideoUri: permanentMediaUri,
                   fileName: `${trackingCode}-${Date.now()}.mp4`,
                   mimeType: 'video/mp4',
-                  sha256Checksum: 'sha256-local-queue',
-                  fileSizeBytes: 1024 * 512,
+                  sha256Checksum: computedHash || '',
+                  fileSizeBytes: fileSize || 1024 * 512,
                   isAnonymous,
                   reporterPhone: reporterPhone || citizen.phone,
                   reporterName: citizen.name,

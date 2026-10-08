@@ -173,7 +173,7 @@ export async function processPendingReport(
               ghanaPostCode: report.ghanaPostCode,
               accuracyMeters: report.gpsAccuracy
             },
-            isTamperProofVerified: true,
+            isTamperProofVerified: Boolean(report.sha256Checksum && report.sha256Checksum.length === 64 && uploadStatus === 'UPLOADED'),
             uploadStatus
           }
         ]
