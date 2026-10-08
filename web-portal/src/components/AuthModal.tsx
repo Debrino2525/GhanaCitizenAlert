@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import { Shield, Lock, Mail, AlertCircle, Eye, EyeOff, KeyRound, LogIn } from 'lucide-react';
-import { OfficerUser } from '../types';
 import { supabase } from '../services/supabaseClient';
 
 interface AuthModalProps {
   isOpen: boolean;
-  onLoginSuccess: (officer: OfficerUser) => void;
+  externalError?: string | null;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
-  onLoginSuccess
+  externalError
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,8 +32,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMsg('');
 
     try {
-      // 1. Authenticate with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      // Authenticate with Supabase Auth ONLY.
+      // Officer record lookup is handled centrally and exclusively by App.tsx
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password: password
       });
@@ -42,53 +42,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (authError) {
         throw authError;
       }
-
-      if (!authData?.user) {
-        throw new Error('Authentication succeeded but no user session was returned.');
-      }
-
-      // 2. Query officers table strictly for auth.uid()
-      const { data: officerRow, error: officerError } = await supabase
-        .from('officers')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (officerError || !officerRow) {
-        // Not in officers table
-        await supabase.auth.signOut();
-        throw new Error('Not authorized: No law enforcement officer credential registered for this account.');
-      }
-
-      // Check if deactivated
-      if (officerRow.is_active === false) {
-        await supabase.auth.signOut();
-        throw new Error('Not authorized: This officer account is deactivated. Contact National Command.');
-      }
-
-      // Role and clearance come ONLY from the database row
-      const officer: OfficerUser = {
-        id: officerRow.id,
-        name: officerRow.full_name || officerRow.name || 'Officer',
-        badgeNumber: officerRow.badge_number || officerRow.service_id || 'GPS-CAD',
-        service_id: officerRow.service_id,
-        agency: officerRow.agency || 'GPS_CID',
-        role: officerRow.role,
-        rank: officerRow.rank || 'Duty Officer',
-        email: officerRow.email || authData.user.email || email.trim().toLowerCase(),
-        avatarUrl: officerRow.avatar_url || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80`,
-        clearanceLevel: officerRow.clearance_level || 'RESTRICTED',
-        station_id: officerRow.station_id,
-        is_active: Boolean(officerRow.is_active),
-        must_change_password: Boolean(officerRow.must_change_password),
-        created_at: officerRow.created_at
-      };
-
-      onLoginSuccess(officer);
+      // If successful, onAuthStateChange in App.tsx takes over seamlessly
     } catch (err: any) {
       console.error('Officer sign-in error:', err);
       setErrorMsg(err.message || 'Invalid login credentials.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -118,6 +75,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const displayedError = errorMsg || externalError;
+
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn">
       <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden">
@@ -146,10 +105,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         </div>
 
-        {errorMsg && (
+        {displayedError && (
           <div className="mb-4 p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            <span>{errorMsg}</span>
+            <span>{displayedError}</span>
           </div>
         )}
 
@@ -269,7 +228,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
             >
               <LogIn className="w-4 h-4" />
-              <span>{isLoading ? 'Verifying Supabase Credentials...' : 'Authenticate & Unlock CAD Station'}</span>
+              <span>{isLoading ? 'Verifying Credentials...' : 'Authenticate & Unlock CAD Station'}</span>
             </button>
           </form>
         )}

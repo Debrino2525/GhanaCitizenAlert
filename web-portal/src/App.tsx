@@ -15,6 +15,7 @@ import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
 import { Shield, Loader2 } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -26,70 +27,118 @@ export const App: React.FC = () => {
   const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(INITIAL_INCIDENTS[0]);
   const [activeCertificate, setActiveCertificate] = useState<CourtCertificate | null>(null);
 
-  // Authentication & Officer Verification State
+  // Authentication State
+  const [authSession, setAuthSession] = useState<Session | null>(null);
   const [currentOfficer, setCurrentOfficer] = useState<OfficerUser | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
+
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isOfficerMgmtOpen, setIsOfficerMgmtOpen] = useState<boolean>(false);
   const [isSetPasswordRoute, setIsSetPasswordRoute] = useState<boolean>(() => {
-    return window.location.pathname === '/set-password' || window.location.hash.includes('type=recovery') || window.location.hash.includes('type=invite');
+    return (
+      window.location.pathname === '/set-password' ||
+      window.location.hash.includes('type=recovery') ||
+      window.location.hash.includes('type=invite')
+    );
   });
 
+  // Refs for tracking lookup state and preventing duplicate queries
+  const loadedUserIdRef = useRef<string | null>(null);
+  const isFetchingOfficerRef = useRef<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
 
-  // Function to load and verify officer record from database
-  const loadAndVerifyOfficer = useCallback(async (userId: string, userEmail?: string): Promise<OfficerUser | null> => {
-    try {
-      const { data: officerRow, error: officerErr } = await supabase
-        .from('officers')
-        .select('*')
-        .eq('id', userId)
-        .single();
+  // Single centralized function to fetch and verify officer record from database
+  const loadOfficerWithRetry = useCallback(async (session: Session): Promise<OfficerUser | null> => {
+    const userId = session.user.id;
+    const userEmail = session.user.email;
 
-      if (officerErr || !officerRow) {
-        console.warn('No officer record matching auth.uid():', officerErr?.message);
-        await supabase.auth.signOut();
+    let attempts = 0;
+    const maxAttempts = 3; // 1 initial + up to 2 retries
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        if (attempts > 1) {
+          // Allow token propagation on retry and re-check session
+          await new Promise((res) => setTimeout(res, 250 * attempts));
+          await supabase.auth.getSession();
+        }
+
+        const { data: officerRow, error: officerErr } = await supabase
+          .from('officers')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        // If query failed (e.g. 401, 42501, network issue)
+        if (officerErr) {
+          console.warn(`[Auth] Officers query error on attempt ${attempts}/${maxAttempts}:`, officerErr.message);
+          if (attempts < maxAttempts) {
+            continue; // Retry
+          }
+          // Exhausted retries due to server/network error:
+          // Do NOT call signOut(), do NOT grant access
+          setAuthErrorMsg('Could not verify your account, please try again.');
+          return null;
+        }
+
+        // Query SUCCEEDED (HTTP 200) but returned no row
+        if (!officerRow) {
+          console.warn('[Auth] Verified: No officer record found for user ID:', userId);
+          setAuthErrorMsg('Not authorized: No officer credentials registered for this account.');
+          await supabase.auth.signOut();
+          return null;
+        }
+
+        // Query SUCCEEDED but officer is deactivated
+        if (officerRow.is_active === false) {
+          console.warn('[Auth] Verified: Officer account is deactivated.');
+          setAuthErrorMsg('Not authorized: This officer account is deactivated.');
+          await supabase.auth.signOut();
+          return null;
+        }
+
+        // Query SUCCEEDED and officer is active
+        setAuthErrorMsg(null);
+        const verifiedOfficer: OfficerUser = {
+          id: officerRow.id,
+          name: officerRow.full_name || officerRow.name || 'Officer',
+          badgeNumber: officerRow.badge_number || officerRow.service_id || 'GPS-CAD',
+          service_id: officerRow.service_id,
+          agency: officerRow.agency || 'GPS_CID',
+          role: officerRow.role,
+          rank: officerRow.rank || 'Duty Officer',
+          email: officerRow.email || userEmail || '',
+          avatarUrl: officerRow.avatar_url || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80`,
+          clearanceLevel: officerRow.clearance_level || 'RESTRICTED',
+          station_id: officerRow.station_id,
+          is_active: Boolean(officerRow.is_active),
+          must_change_password: Boolean(officerRow.must_change_password),
+          created_at: officerRow.created_at
+        };
+
+        return verifiedOfficer;
+      } catch (err) {
+        console.warn(`[Auth] Unexpected exception on attempt ${attempts}/${maxAttempts}:`, err);
+        if (attempts < maxAttempts) {
+          continue;
+        }
+        setAuthErrorMsg('Could not verify your account, please try again.');
         return null;
       }
-
-      if (officerRow.is_active === false) {
-        console.warn('Officer account is deactivated.');
-        await supabase.auth.signOut();
-        return null;
-      }
-
-      const officer: OfficerUser = {
-        id: officerRow.id,
-        name: officerRow.full_name || officerRow.name || 'Officer',
-        badgeNumber: officerRow.badge_number || officerRow.service_id || 'GPS-CAD',
-        service_id: officerRow.service_id,
-        agency: officerRow.agency || 'GPS_CID',
-        role: officerRow.role,
-        rank: officerRow.rank || 'Duty Officer',
-        email: officerRow.email || userEmail || '',
-        avatarUrl: officerRow.avatar_url || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80`,
-        clearanceLevel: officerRow.clearance_level || 'RESTRICTED',
-        station_id: officerRow.station_id,
-        is_active: Boolean(officerRow.is_active),
-        must_change_password: Boolean(officerRow.must_change_password),
-        created_at: officerRow.created_at
-      };
-
-      return officer;
-    } catch (err) {
-      console.error('Error verifying officer credentials:', err);
-      await supabase.auth.signOut();
-      return null;
     }
+
+    return null;
   }, []);
 
-  // 1. Session Initialization & Cleanup on Mount
+  // 1. Initial Mount & Auth State Listener (Does NOT call queries directly in callback)
   useEffect(() => {
     // Delete legacy mock localStorage keys
     localStorage.removeItem('citizen_alert_officer_session');
     localStorage.removeItem('citizen_alert_officers_vault');
 
-    // Check URL route changes
+    // Route listener
     const checkRoute = () => {
       setIsSetPasswordRoute(
         window.location.pathname === '/set-password' ||
@@ -99,38 +148,78 @@ export const App: React.FC = () => {
     };
     window.addEventListener('popstate', checkRoute);
 
-    // Initial Supabase session retrieval
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const verified = await loadAndVerifyOfficer(session.user.id, session.user.email);
-        setCurrentOfficer(verified);
-      } else {
-        setCurrentOfficer(null);
+    // Fetch initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthSession(session);
+      if (!session) {
+        setIsAuthChecking(false);
       }
-      setIsAuthChecking(false);
     });
 
-    // Subscribe to Supabase Auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        if (event === 'PASSWORD_RECOVERY') {
-          setIsSetPasswordRoute(true);
-        }
-        const verified = await loadAndVerifyOfficer(session.user.id, session.user.email);
-        setCurrentOfficer(verified);
-      } else {
-        setCurrentOfficer(null);
+    // onAuthStateChange ONLY stores the session without executing database queries directly
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsSetPasswordRoute(true);
       }
-      setIsAuthChecking(false);
+      setAuthSession(session);
+      if (!session) {
+        loadedUserIdRef.current = null;
+        setCurrentOfficer(null);
+        setIsAuthChecking(false);
+      }
     });
 
     return () => {
       window.removeEventListener('popstate', checkRoute);
       subscription.unsubscribe();
     };
-  }, [loadAndVerifyOfficer]);
+  }, []);
 
-  // 2. 15-Minute Inactivity Auto-Logout
+  // 2. React Effect to Load Officer Record via setTimeout (Ensures Token is Attached and Runs ONCE)
+  useEffect(() => {
+    if (!authSession?.user) {
+      setCurrentOfficer(null);
+      loadedUserIdRef.current = null;
+      setIsAuthChecking(false);
+      return;
+    }
+
+    const userId = authSession.user.id;
+
+    // Prevent duplicate lookups if already loaded or currently fetching for the same user
+    if (loadedUserIdRef.current === userId && currentOfficer) {
+      setIsAuthChecking(false);
+      return;
+    }
+
+    if (isFetchingOfficerRef.current) {
+      return;
+    }
+
+    isFetchingOfficerRef.current = true;
+    setIsAuthChecking(true);
+
+    // Dispatch via setTimeout(..., 0) so authorization headers settle on the Supabase client
+    const timer = setTimeout(async () => {
+      try {
+        const officer = await loadOfficerWithRetry(authSession);
+        if (officer) {
+          loadedUserIdRef.current = userId;
+          setCurrentOfficer(officer);
+        } else {
+          loadedUserIdRef.current = null;
+          setCurrentOfficer(null);
+        }
+      } finally {
+        isFetchingOfficerRef.current = false;
+        setIsAuthChecking(false);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [authSession, currentOfficer, loadOfficerWithRetry]);
+
+  // 3. 15-Minute Inactivity Auto-Logout
   useEffect(() => {
     if (!currentOfficer) return;
 
@@ -146,13 +235,14 @@ export const App: React.FC = () => {
         console.warn('15 minutes of inactivity reached. Automatically signing out CAD workstation...');
         await supabase.auth.signOut();
         setCurrentOfficer(null);
+        loadedUserIdRef.current = null;
         alert('CAD Terminal Locked: You have been automatically signed out due to 15 minutes of inactivity.');
       }
     };
 
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
     activityEvents.forEach((ev) => window.addEventListener(ev, recordActivity, { passive: true }));
-    intervalId = setInterval(checkInactivity, 30000); // check every 30s
+    intervalId = setInterval(checkInactivity, 30000); // Check every 30s
 
     return () => {
       clearInterval(intervalId);
@@ -160,7 +250,7 @@ export const App: React.FC = () => {
     };
   }, [currentOfficer]);
 
-  // 3. Load Incidents & Realtime Events from Supabase
+  // 4. Load Incidents & Realtime Events from Supabase when authenticated
   useEffect(() => {
     if (!currentOfficer) return;
 
@@ -281,7 +371,10 @@ export const App: React.FC = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    loadedUserIdRef.current = null;
     setCurrentOfficer(null);
+    setAuthSession(null);
+    setAuthErrorMsg(null);
   };
 
   const handleUpdateStatus = async (incidentId: string, newStatus: IncidentStatus) => {
@@ -373,7 +466,7 @@ export const App: React.FC = () => {
     setAlerts(prev => [newAlert, ...prev]);
   };
 
-  // 4. Loading Splash Screen while checking initial auth
+  // 5. Loading Splash Screen while checking initial auth
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 space-y-4 text-white">
@@ -382,19 +475,20 @@ export const App: React.FC = () => {
         </div>
         <div className="flex items-center space-x-2 text-sm text-slate-300">
           <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-          <span>Verifying Law Enforcement Credentials...</span>
+          <span>Verifying CAD Credentials...</span>
         </div>
       </div>
     );
   }
 
-  // 5. If User is on /set-password route OR has must_change_password === true, render SetPasswordScreen ONLY
+  // 6. If User is on /set-password route OR has must_change_password === true, render SetPasswordScreen ONLY
   const isMandatoryPasswordSetup = currentOfficer?.must_change_password === true || isSetPasswordRoute;
-  if (isMandatoryPasswordSetup) {
+  if (isMandatoryPasswordSetup && authSession) {
     return (
       <SetPasswordScreen
-        userEmail={currentOfficer?.email}
+        userEmail={currentOfficer?.email || authSession.user.email}
         onPasswordChanged={(updatedOfficer) => {
+          loadedUserIdRef.current = updatedOfficer.id;
           setCurrentOfficer(updatedOfficer);
           setIsSetPasswordRoute(false);
         }}
@@ -403,16 +497,13 @@ export const App: React.FC = () => {
     );
   }
 
-  // 6. If not authenticated, visitor sees ONLY the login screen
+  // 7. If not authenticated or verification failed, visitor sees ONLY the login screen
   if (!currentOfficer) {
     return (
       <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(30,58,138,0.25),rgba(0,0,0,0))] flex flex-col items-center justify-center p-4">
         <AuthModal
           isOpen={true}
-          onLoginSuccess={(officer) => {
-            setCurrentOfficer(officer);
-            setIsAuthModalOpen(false);
-          }}
+          externalError={authErrorMsg}
         />
       </div>
     );
@@ -561,11 +652,7 @@ export const App: React.FC = () => {
       {isAuthModalOpen && (
         <AuthModal
           isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          onLoginSuccess={(officer) => {
-            setCurrentOfficer(officer);
-            setIsAuthModalOpen(false);
-          }}
+          externalError={authErrorMsg}
         />
       )}
 
