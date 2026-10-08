@@ -596,7 +596,6 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           poster={(currentMedia as any)?.thumbnailUrl && !(currentMedia as any)?.thumbnailUrl?.startsWith('file://') ? (currentMedia as any).thumbnailUrl : undefined}
                           className="w-full h-full object-cover bg-black"
                           playsInline
-                          crossOrigin="anonymous"
                           preload="auto"
                           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}

@@ -142,8 +142,9 @@ export const useIncidentDraft = ({
         setUploadProgress(20);
         setUploadStatusText('Reading local evidence binary buffer...');
 
-        const extension = mediaType === 'VIDEO' ? 'mp4' : 'jpg';
-        const mimeType = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
+        const isMov = recordedUri.toLowerCase().endsWith('.mov');
+        const extension = mediaType === 'VIDEO' ? (isMov ? 'mov' : 'mp4') : 'jpg';
+        const mimeType = mediaType === 'VIDEO' ? (isMov ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
         const fileName = `${trackingCode}-${Date.now()}.${extension}`;
 
         let computedHash = `sha256-${Date.now().toString(16)}`;

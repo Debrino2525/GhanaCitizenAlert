@@ -53,6 +53,8 @@ export async function uploadEvidenceStreaming({
         headers
       });
 
+      console.log('Native FileSystem upload response:', uploadResult.status, uploadResult.body);
+
       if (uploadResult.status >= 200 && uploadResult.status < 300) {
         onProgress?.(0.85, 'Cryptographic checksum locked in Vault...');
         return {
@@ -71,6 +73,8 @@ export async function uploadEvidenceStreaming({
         headers
       });
 
+      console.log('Native FileSystem retry response:', uploadResult.status, uploadResult.body);
+
       if (uploadResult.status >= 200 && uploadResult.status < 300) {
         onProgress?.(0.85, 'Cryptographic checksum locked in Vault...');
         return {
@@ -79,10 +83,35 @@ export async function uploadEvidenceStreaming({
         };
       }
 
+      // Final fallback: standard Supabase SDK binary upload
+      try {
+        const base64Data = await FileSystem.readAsStringAsync(fileUri, {
+          encoding: FileSystem.EncodingType.Base64
+        });
+        const binaryArrayBuffer = decode(base64Data);
+
+        const { data, error } = await supabase.storage
+          .from('evidence')
+          .upload(fileName, binaryArrayBuffer, {
+            contentType: mimeType,
+            upsert: true
+          });
+
+        if (!error && data) {
+          onProgress?.(0.85, 'Evidence sealed in National Vault...');
+          return {
+            success: true,
+            publicUrl: publicStorageUrl
+          };
+        }
+      } catch (fallbackErr) {
+        console.warn('Fallback upload error:', fallbackErr);
+      }
+
       return {
         success: false,
         publicUrl: '',
-        error: `Native upload returned HTTP ${uploadResult.status}`
+        error: `Upload returned HTTP ${uploadResult.status}: ${uploadResult.body}`
       };
     } else {
       // Web fallback
