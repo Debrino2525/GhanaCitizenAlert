@@ -279,7 +279,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             <span style="background: ${color}; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${alert.alertType} ALERT</span>
             <h4 style="margin: 6px 0 3px 0; font-weight: bold; font-size: 13px;">${alert.title}</h4>
             <p style="margin: 0; color: #475569;">Last seen: ${alert.lastSeenLocation}</p>
-            <p style="margin: 2px 0 0 0; color: #b45309; font-weight: bold;">GhanaPost: ${alert.ghanaPostCode}</p>
+            <p style="margin: 2px 0 0 0; color: #b45309; font-weight: bold;">GhanaPost: ${alert.ghanaPostCode || 'Not provided'}</p>
           </div>
         `);
     });
@@ -343,7 +343,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           <h4 style="margin: 7px 0 4px 0; font-weight: 800; font-size: 13px; line-height: 1.3;">${inc.title}</h4>
           <p style="margin: 0; color: #475569; font-size: 11px;">${inc.locationName}</p>
           <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 11px;">📍 ${inc.ghanaPostCode}</span>
+            <span style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 11px;">📍 ${inc.ghanaPostCode || 'Not provided'}</span>
             <span style="color: #059669; font-weight: 700; font-size: 10px; background: #ecfdf5; padding: 1px 5px; border-radius: 4px;">Act 772 Sealed</span>
           </div>
         </div>

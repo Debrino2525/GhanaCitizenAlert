@@ -46,6 +46,7 @@ import { AmberAlertsScreen } from './src/screens/AmberAlertsScreen';
 import { SosPanicScreen } from './src/screens/SosPanicScreen';
 import { PendingReportsScreen } from './src/screens/PendingReportsScreen';
 import { getPendingReports, initAutoSyncNetworkListener } from './src/services/pendingReportsQueue';
+import { verifyKnownSha256Vector } from './src/utils/fileHashing';
 import { tokens } from './src/theme/tokens';
 
 function MainApp() {
@@ -111,6 +112,23 @@ function MainApp() {
   const camera = useCameraRecorder({
     onMediaAttached: draft.processAndAttachEvidence
   });
+
+  // Dev-only cryptographic test vector verification at startup
+  useEffect(() => {
+    if (__DEV__) {
+      verifyKnownSha256Vector()
+        .then((passed) => {
+          if (passed) {
+            console.log('✅ [FORENSIC CRYPTO] verifyKnownSha256Vector PASSED: NIST vector ba7816bf... matching');
+          } else {
+            console.error('❌ [FORENSIC CRYPTO] verifyKnownSha256Vector FAILED!');
+          }
+        })
+        .catch((err) => {
+          console.error('❌ [FORENSIC CRYPTO] verifyKnownSha256Vector error:', err);
+        });
+    }
+  }, []);
 
   // Restore persisted Supabase session on app launch & listen to auth state
   useEffect(() => {

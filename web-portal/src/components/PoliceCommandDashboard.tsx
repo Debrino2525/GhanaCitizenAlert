@@ -263,8 +263,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
       const q = searchQuery.toLowerCase();
       const matchTrack = inc.trackingCode.toLowerCase().includes(q);
       const matchTitle = inc.title.toLowerCase().includes(q);
-      const matchLoc = inc.locationName.toLowerCase().includes(q);
-      const matchGps = inc.ghanaPostCode.toLowerCase().includes(q);
+      const matchLoc = (inc.locationName || '').toLowerCase().includes(q);
+      const matchGps = (inc.ghanaPostCode || '').toLowerCase().includes(q);
       if (!matchTrack && !matchTitle && !matchLoc && !matchGps) return false;
     }
     return true;
@@ -788,7 +788,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W
                   </p>
                   <p className="text-amber-400 font-bold">
-                    GHANAPOST: {selectedIncident.ghanaPostCode || 'N/A (GPS Only)'} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
+                    GHANAPOST: {selectedIncident.ghanaPostCode || 'Not provided'} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
                   </p>
                 </div>
 
@@ -1111,7 +1111,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             <div className="absolute bottom-3 left-3 bg-black/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-700/80 text-[11px] font-mono text-white shadow-2xl pointer-events-none">
               <p className="text-ghana-gold font-bold">🇬🇭 CITIZEN-ALERT FORENSIC TELEMETRY</p>
               <p className="text-slate-300">
-                LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W • {selectedIncident?.ghanaPostCode}
+                LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W • {selectedIncident?.ghanaPostCode || 'Not provided'}
               </p>
             </div>
           </div>

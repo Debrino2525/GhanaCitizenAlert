@@ -235,7 +235,7 @@ export function buildPoliceBriefHtml(brief: any): string {
       </div>
       <div class="meta-item">
         <label>GhanaPost GPS Code</label>
-        <span>${brief.geospatialAssessment?.ghanaPostCode || 'N/A'}</span>
+        <span>${brief.geospatialAssessment?.ghanaPostCode || 'Not provided'}</span>
       </div>
       <div class="meta-item">
         <label>Generated Timestamp</label>
@@ -318,7 +318,7 @@ export function buildCourtCertificateHtml(certificate: any): string {
       </div>
       <div class="meta-item">
         <label>GhanaPost Digital GPS</label>
-        <span>${certificate.ghanaPostCode || 'N/A'}</span>
+        <span>${certificate.ghanaPostCode || 'Not provided'}</span>
       </div>
       <div class="meta-item">
         <label>Date Sealed (UTC)</label>

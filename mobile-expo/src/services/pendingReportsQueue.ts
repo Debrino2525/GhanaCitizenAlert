@@ -184,9 +184,11 @@ export async function processPendingReport(
       category: report.category,
       title: report.title,
       description: report.description,
-      location_name: report.locationName,
-      ghanapost_code: report.ghanaPostCode,
-      region: report.region,
+      location_name: report.isAnonymous
+        ? 'Withheld (anonymous)'
+        : (report.locationName || (report.landmark ? `${report.landmark}` : 'Unknown location')),
+      ghanapost_code: report.isAnonymous ? '' : (report.ghanaPostCode ? report.ghanaPostCode.toUpperCase() : ''),
+      region: report.region || 'Unknown',
       latitude: report.latitude,
       longitude: report.longitude,
       media: mediaList,

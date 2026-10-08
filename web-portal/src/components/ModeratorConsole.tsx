@@ -77,7 +77,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                 <h4 className="text-sm font-bold text-white truncate">{inc.title}</h4>
                 <p className="text-xs text-slate-400 line-clamp-2 mt-1">{inc.description}</p>
                 <div className="mt-2 pt-2 border-t border-slate-800 text-[11px] flex justify-between text-slate-400">
-                  <span>📍 {inc.ghanaPostCode}</span>
+                  <span>📍 {inc.ghanaPostCode || 'Not provided'}</span>
                   <span className="text-emerald-400 font-semibold">
                     {inc.isPublicPublished ? '✅ Published' : '⏳ Pending Review'}
                   </span>
@@ -99,7 +99,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                   <h3 className="text-base font-bold text-white mt-1">
                     {selectedIncident.title}
                   </h3>
-                  <p className="text-xs text-slate-400">{selectedIncident.locationName} ({selectedIncident.ghanaPostCode})</p>
+                  <p className="text-xs text-slate-400">{selectedIncident.locationName} ({selectedIncident.ghanaPostCode || 'Not provided'})</p>
                 </div>
 
                 <div className="text-right text-xs">

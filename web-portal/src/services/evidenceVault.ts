@@ -26,7 +26,7 @@ export function generateCourtCertificate(incident: IncidentReport): CourtCertifi
     trackingCode: incident.trackingCode,
     generatedAt: new Date().toISOString(),
     incidentTimestamp: incident.createdAt,
-    ghanaPostCode: incident.ghanaPostCode || 'N/A',
+    ghanaPostCode: incident.ghanaPostCode || 'Not provided',
     coordinates: incident.coordinates,
     mediaItems: incident.media.map(m => {
       const rawHash = m.sha256Hash || (m as any).sha256Checksum || '';

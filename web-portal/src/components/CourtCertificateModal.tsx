@@ -55,7 +55,7 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
             </div>
             <div>
               <span className="text-slate-500 block text-[11px]">GHANAPOST GPS</span>
-              <span className="font-bold text-amber-400">{certificate.ghanaPostCode}</span>
+              <span className="font-bold text-amber-400">{certificate.ghanaPostCode || 'Not provided'}</span>
             </div>
           </div>
 
