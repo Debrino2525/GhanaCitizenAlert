@@ -203,8 +203,8 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         category: 'CRIMINAL_OFFENSE',
         title: '🚨 EMERGENCY SOS BEACON (ACTIVE)',
         description: `CITIZEN EMERGENCY DISTRESS BEACON ACTIVATED. Coordinates: ${freshGps.latitude.toFixed(5)}, ${freshGps.longitude.toFixed(5)} (±${freshGps.accuracy}m). Location sent to Police Command.`,
-        location_name: landmark ? `${landmark} (${locationName})` : (locationName || null),
-        ghanapost_code: ghanaPostCode ? ghanaPostCode.toUpperCase() : null,
+        location_name: isAnonymous ? null : (landmark ? `${landmark} (${locationName})` : (locationName || null)),
+        ghanapost_code: isAnonymous ? null : (ghanaPostCode ? ghanaPostCode.toUpperCase() : null),
         region: region || null,
         latitude: freshGps.latitude,
         longitude: freshGps.longitude,
@@ -212,7 +212,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         is_anonymous: isAnonymous,
         reporter_data: {
           isAnonymous: isAnonymous,
-          phone: reporterPhone || null,
+          phone: isAnonymous ? null : (reporterPhone || null),
           isEmergencyPanic: true,
           trustScore: 99
         },
