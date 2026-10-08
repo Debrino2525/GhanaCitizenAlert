@@ -179,7 +179,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
 
 const styles = StyleSheet.create({
   cameraWrapper: {
-    height: 270,
+    height: 225,
     backgroundColor: '#000000',
     borderRadius: tokens.radius.xl,
     borderWidth: 1.5,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     justifyContent: 'space-between',
-    padding: tokens.spacing.md
+    padding: tokens.spacing.sm
   },
   cornerBracket: {
     position: 'absolute',

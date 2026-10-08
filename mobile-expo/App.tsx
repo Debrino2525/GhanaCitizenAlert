@@ -11,7 +11,7 @@ import {
   Platform,
   ActivityIndicator
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useFonts,
   PlusJakartaSans_400Regular,
@@ -46,7 +46,8 @@ import { AmberAlertsScreen } from './src/screens/AmberAlertsScreen';
 import { SosPanicScreen } from './src/screens/SosPanicScreen';
 import { tokens } from './src/theme/tokens';
 
-export default function App() {
+function MainApp() {
+  const insets = useSafeAreaInsets();
   const [fontsLoaded] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
@@ -178,8 +179,8 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={tokens.colors.bg.base} />
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 24)), paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* Ghana Flag Header Accent */}
       <View style={styles.flagHeader}>
@@ -190,7 +191,7 @@ export default function App() {
 
       {/* Top Header Bar */}
       <View style={styles.topBar}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs, flex: 1 }}>
           <ShieldCheck color={tokens.colors.brand.gold} size={22} />
           <View>
             <Text style={styles.appTitle}>
@@ -368,7 +369,15 @@ export default function App() {
         onToggleAnonymous={draft.setIsAnonymous}
         onSignOut={handleSignOut}
       />
-    </SafeAreaView>
+    </View>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainApp />
+    </SafeAreaProvider>
   );
 }
 
