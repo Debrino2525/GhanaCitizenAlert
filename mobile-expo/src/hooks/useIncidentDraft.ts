@@ -164,9 +164,18 @@ export const useIncidentDraft = ({
     setIsSubmitting(true);
     setUploadProgress(5);
     const generateTrackingCode = (): string => {
-      const bytes = Crypto.getRandomBytes(2);
-      const num = (((bytes[0] << 8) | bytes[1]) % 9000) + 1000;
-      return `GH-2026-${num}`;
+      const bytes = Crypto.getRandomBytes(6);
+      let val = 0n;
+      for (let i = 0; i < 6; i++) {
+        val = (val << 8n) | BigInt(bytes[i]);
+      }
+      const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+      let suffix = '';
+      for (let i = 0; i < 8; i++) {
+        suffix += alphabet[Number(val % BigInt(alphabet.length))];
+        val /= BigInt(alphabet.length);
+      }
+      return `GH-2026-${suffix}`;
     };
 
     let trackingCode = generateTrackingCode();
