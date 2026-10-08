@@ -81,7 +81,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         <View style={styles.permissionBox}>
           <Camera color={tokens.colors.brand.gold} size={40} style={{ marginBottom: tokens.spacing.sm }} />
           <Text style={styles.permissionText}>
-            Camera access enables live hardware viewfinder and encrypted evidence capture
+            Camera access enables live hardware viewfinder and evidence capture
           </Text>
           <TouchableOpacity
             onPress={onRequestPermissions}
@@ -161,7 +161,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
       <View style={styles.watermarkBox}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <ShieldCheck color={tokens.colors.brand.gold} size={12} />
-          <Text style={styles.watermarkGold}>WATERMARK ENCRYPTED (ACT 772)</Text>
+          <Text style={styles.watermarkGold}>FORENSIC GPS WATERMARK (ACT 772)</Text>
         </View>
         <Text style={styles.watermarkWhite}>
           UTC: {new Date().toISOString().substring(11, 19)} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
@@ -169,7 +169,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <MapPin color={tokens.colors.brand.gold} size={11} />
           <Text style={styles.watermarkGold}>
-            DIGITAL POST: {ghanaPostCode} (±{gpsAccuracy || 3.2}m)
+            {ghanaPostCode ? `DIGITAL POST: ${ghanaPostCode} ` : ''}ACCURACY: ±{gpsAccuracy || 3.2}m
           </Text>
         </View>
       </View>

@@ -680,7 +680,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W
                   </p>
                   <p className="text-amber-400 font-bold">
-                    GHANAPOST: {selectedIncident.ghanaPostCode || 'GA-014-9923'} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
+                    GHANAPOST: {selectedIncident.ghanaPostCode || 'N/A (GPS Only)'} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
                   </p>
                 </div>
 

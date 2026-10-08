@@ -3,24 +3,6 @@ import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { GpsCoordinates, GpsLockStatus } from '../types';
 
-export const generateGhanaPostFromCoords = (lat: number, lng: number, regionName: string): string => {
-  let prefix = 'GA';
-  const reg = (regionName || '').toLowerCase();
-  if (reg.includes('ashanti')) prefix = 'AK';
-  else if (reg.includes('western')) prefix = 'WP';
-  else if (reg.includes('central')) prefix = 'CR';
-  else if (reg.includes('eastern')) prefix = 'ER';
-  else if (reg.includes('volta')) prefix = 'VR';
-  else if (reg.includes('northern')) prefix = 'NR';
-  else if (reg.includes('upper east')) prefix = 'UE';
-  else if (reg.includes('upper west')) prefix = 'UW';
-  else if (reg.includes('bono')) prefix = 'BA';
-
-  const part1 = String(Math.abs(Math.round(lat * 10000)) % 1000).padStart(3, '0');
-  const part2 = String(Math.abs(Math.round(lng * 10000)) % 10000).padStart(4, '0');
-  return `${prefix}-${part1}-${part2}`;
-};
-
 export interface UseGpsLocationResult {
   coords: GpsCoordinates;
   gpsAccuracy: number | null;
@@ -43,8 +25,8 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [gpsStatus, setGpsStatus] = useState<GpsLockStatus>('LOCATING');
   const [region, setRegion] = useState<string>('Greater Accra');
-  const [locationName, setLocationName] = useState<string>('Accra Central, Greater Accra');
-  const [ghanaPostCode, setGhanaPostCode] = useState<string>('GA-014-9923');
+  const [locationName, setLocationName] = useState<string>('');
+  const [ghanaPostCode, setGhanaPostCode] = useState<string>('');
 
   const fetchCurrentLocation = useCallback(async () => {
     setIsLocating(true);
@@ -88,28 +70,23 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             rev.region
           ].filter(Boolean);
 
-          const autoAreaName = parts.join(', ') || 'Ghana Coordinate Lock';
-          setLocationName(autoAreaName);
+          const autoAreaName = parts.join(', ') || '';
+          if (autoAreaName) {
+            setLocationName(autoAreaName);
+          }
           if (rev.region) {
             setRegion(rev.region);
           }
-
-          const digitalCode = generateGhanaPostFromCoords(lat, lng, rev.region || 'Greater Accra');
-          setGhanaPostCode(digitalCode);
-        } else {
-          const digitalCode = generateGhanaPostFromCoords(lat, lng, 'Greater Accra');
-          setGhanaPostCode(digitalCode);
         }
       } catch (geoErr) {
-        const digitalCode = generateGhanaPostFromCoords(lat, lng, region);
-        setGhanaPostCode(digitalCode);
+        console.warn('Reverse geocode notice:', geoErr);
       }
     } catch (e: any) {
       setGpsStatus('ERROR');
     } finally {
       setIsLocating(false);
     }
-  }, [region]);
+  }, []);
 
   useEffect(() => {
     fetchCurrentLocation();

@@ -320,8 +320,8 @@ export const useIncidentDraft = ({
 
                   safeHaptics.medium();
                   Alert.alert(
-                    '📁 Saved to Encrypted Local Queue',
-                    'Report encrypted securely under Act 720 and queued for automatic transmission when network connectivity returns.',
+                    '📁 Saved to Offline Queue',
+                    'Report and video evidence saved on your device. It will automatically transmit when network connectivity returns.',
                     [{ text: 'OK' }]
                   );
 
@@ -386,7 +386,7 @@ export const useIncidentDraft = ({
         title: title.trim(),
         description: description.trim(),
         location_name: combinedLocation,
-        ghanapost_code: ghanaPostCode.toUpperCase(),
+        ghanapost_code: ghanaPostCode.trim() ? ghanaPostCode.trim().toUpperCase() : null,
         region: region || 'Greater Accra',
         latitude: coords.latitude,
         longitude: coords.longitude,
@@ -534,8 +534,8 @@ export const useIncidentDraft = ({
               }
 
               Alert.alert(
-                '📁 Saved to Encrypted Local Queue',
-                'Report encrypted securely under Act 720 and queued for immediate sync.',
+                '📁 Saved to Offline Queue',
+                'Report and video evidence saved on your device and queued for transmission.',
                 [{ text: 'OK' }]
               );
 

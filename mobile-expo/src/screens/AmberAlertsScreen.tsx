@@ -137,14 +137,14 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 
     setIsSubmittingTip(true);
     try {
-      const locationLabel = landmark
-        ? `${landmark} (${locationName})`
-        : (locationName || 'Accra, Ghana');
+      const locationLabel = landmark.trim()
+        ? `${landmark.trim()} (${locationName})`
+        : (locationName || null);
 
       const payload = {
         alert_id: selectedAlert.id,
         location_name: locationLabel,
-        ghanapost_code: (ghanaPostCode || 'GA-014-9923').toUpperCase(),
+        ghanapost_code: ghanaPostCode.trim() ? ghanaPostCode.trim().toUpperCase() : null,
         latitude: coords.latitude,
         longitude: coords.longitude,
         comment: tipDescription.trim(),
@@ -169,13 +169,14 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
       );
     } catch (e: any) {
       console.warn('[AmberAlerts] Error transmitting sighting:', e?.message || e);
-      // Even if network fails or RLS restricts reading, show confirmed receipt for user
-      safeHaptics.medium();
-      setIsTipModalOpen(false);
-      setTipDescription('');
+      safeHaptics.warning();
       Alert.alert(
-        '✅ Sighting Transmitted',
-        'Tip queued for immediate triage by Police Operations.'
+        '⚠️ Transmission Failed',
+        `Could not transmit sighting tip: ${e?.message || 'Network/database error'}. Would you like to retry?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: () => handleSendAmberTip() }
+        ]
       );
     } finally {
       setIsSubmittingTip(false);
@@ -302,11 +303,13 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               </View>
 
               {/* Broadcast Anchor */}
-              <View style={styles.broadcastGpsBox}>
-                <Text style={styles.broadcastGpsText}>
-                  📍 Broadcast Anchor: {alertItem.ghanapost_code || ghanaPostCode || 'GA-014-9923'} • GPS CID Priority
-                </Text>
-              </View>
+              {alertItem.ghanapost_code ? (
+                <View style={styles.broadcastGpsBox}>
+                  <Text style={styles.broadcastGpsText}>
+                    📍 Broadcast Anchor: {alertItem.ghanapost_code} • GPS CID Priority
+                  </Text>
+                </View>
+              ) : null}
 
               {/* Action Button */}
               <TouchableOpacity

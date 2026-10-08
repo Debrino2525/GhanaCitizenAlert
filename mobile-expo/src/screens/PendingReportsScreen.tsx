@@ -139,7 +139,7 @@ export const PendingReportsScreen: React.FC<PendingReportsScreenProps> = ({
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator color={tokens.colors.brand.gold} size="large" />
-        <Text style={styles.loadingText}>Loading encrypted offline queue...</Text>
+        <Text style={styles.loadingText}>Loading offline queue...</Text>
       </View>
     );
   }
@@ -152,9 +152,9 @@ export const PendingReportsScreen: React.FC<PendingReportsScreenProps> = ({
           <HardDrive color={tokens.colors.brand.gold} size={20} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.bannerTitle}>Act 720 Encrypted Local Vault</Text>
+          <Text style={styles.bannerTitle}>Offline Report Queue</Text>
           <Text style={styles.bannerSubtitle}>
-            Reports queued when offline or on unstable networks. Auto-syncs when connection returns.
+            Reports stored locally on this device when offline. Transmits to Police Command when connection returns.
           </Text>
         </View>
       </View>

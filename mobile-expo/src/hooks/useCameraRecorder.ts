@@ -63,7 +63,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
   const stopRecordingInternal = useCallback(() => {
     setIsRecording(false);
     safeHaptics.medium();
-    announceAccessibility('Video recording stopped and evidence encrypted.');
+    announceAccessibility('Video recording stopped and evidence captured.');
     try {
       if (cameraRef.current && cameraRef.current.stopRecording) {
         cameraRef.current.stopRecording();
