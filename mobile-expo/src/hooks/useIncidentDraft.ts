@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { Alert, Keyboard } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
 import { CitizenUser } from '../components/CitizenAccessWall';
 import {
@@ -12,6 +11,7 @@ import {
   MediaUploadStatus
 } from '../types';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
+import { uploadEvidenceStreaming, cleanupCachedEvidence } from '../services/evidenceUploader';
 
 export interface UseIncidentDraftProps {
   citizen: CitizenUser;
@@ -145,7 +145,6 @@ export const useIncidentDraft = ({
         const extension = mediaType === 'VIDEO' ? 'mp4' : 'jpg';
         const mimeType = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg';
         const fileName = `${trackingCode}-${Date.now()}.${extension}`;
-        const publicStorageUrl = supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl;
 
         let computedHash = `sha256-${Date.now().toString(16)}`;
         let fileSize = 1024 * 512;
@@ -165,56 +164,28 @@ export const useIncidentDraft = ({
           console.warn('Hash computation fallback:', hashErr);
         }
 
-        let uploadState: MediaUploadStatus = 'UPLOADING';
-        let uploadSucceeded = false;
+        setUploadProgress(40);
+        setUploadStatusText('Initiating zero-RAM native streaming to Vault...');
 
-        try {
-          setUploadProgress(40);
-          setUploadStatusText('Reading binary buffer from secure sandbox...');
-
-          const base64Data = await FileSystem.readAsStringAsync(recordedUri, {
-            encoding: FileSystem.EncodingType.Base64
-          });
-          const binaryArrayBuffer = decode(base64Data);
-
-          setUploadProgress(65);
-          setUploadStatusText('Uploading binary stream to National Evidence Vault...');
-
-          let uploadResult = await supabase.storage
-            .from('evidence')
-            .upload(fileName, binaryArrayBuffer, {
-              contentType: mimeType
-            });
-
-          if (uploadResult.error) {
-            uploadState = 'RETRYING';
-            setUploadStatusText('Retrying binary transmission to Evidence Vault...');
-
-            uploadResult = await supabase.storage
-              .from('evidence')
-              .upload(fileName, binaryArrayBuffer, {
-                contentType: mimeType
-              });
+        const uploadResult = await uploadEvidenceStreaming({
+          fileUri: recordedUri,
+          fileName,
+          mimeType,
+          onProgress: (progressRatio, statusText) => {
+            setUploadProgress(Math.round(progressRatio * 100));
+            setUploadStatusText(statusText);
           }
+        });
 
-          if (!uploadResult.error && uploadResult.data) {
-            uploadSucceeded = true;
-            uploadState = 'UPLOADED';
-            setUploadProgress(85);
-            setUploadStatusText('Evidence signed and locked under Act 772...');
-          } else {
-            uploadState = 'UPLOAD_FAILED';
-          }
-        } catch (uploadErr) {
-          uploadState = 'UPLOAD_FAILED';
-        }
+        const uploadState: MediaUploadStatus = uploadResult.success ? 'UPLOADED' : 'UPLOAD_FAILED';
+        const publicStorageUrl = uploadResult.publicUrl;
 
         mediaPayloadList.push({
           type: mediaType,
           video_storage_path: fileName,
           durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-          rawS3Url: uploadSucceeded ? publicStorageUrl : '',
-          thumbnailUrl: uploadSucceeded ? publicStorageUrl : '',
+          rawS3Url: uploadResult.success ? publicStorageUrl : '',
+          thumbnailUrl: uploadResult.success ? publicStorageUrl : '',
           localUri: recordedUri,
           sha256Checksum: computedHash,
           timestampUtc: new Date().toISOString(),
@@ -283,6 +254,7 @@ export const useIncidentDraft = ({
       setIsSubmitting(false);
 
       if (!insertError) {
+        const fileToClean = recordedUri;
         safeHaptics.success();
         announceAccessibility(`Report transmitted successfully. Tracking Code ${trackingCode}`);
         Alert.alert(
@@ -296,6 +268,9 @@ export const useIncidentDraft = ({
         setLandmark('');
         setHasRecordedMedia(false);
         setRecordedUri(null);
+
+        // Safe cleanup of temporary camera cache after successful upload
+        await cleanupCachedEvidence(fileToClean);
       } else {
         throw insertError;
       }
