@@ -11,6 +11,7 @@ import {
   EvidenceMediaItem,
   MediaUploadStatus
 } from '../types';
+import { safeHaptics, announceAccessibility } from '../utils/haptics';
 
 export interface UseIncidentDraftProps {
   citizen: CitizenUser;
@@ -96,28 +97,30 @@ export const useIncidentDraft = ({
       setRecordedUri(uri);
       setHasRecordedMedia(true);
       setIsUploadingMedia(false);
+      safeHaptics.success();
+      announceAccessibility('Evidence attached and sealed with SHA-256 digest.');
     }, 950);
   }, []);
 
   const clearAttachedMedia = useCallback(() => {
     setHasRecordedMedia(false);
     setRecordedUri(null);
-    setRecordingSecondsLocal(0);
     setUploadProgress(0);
     setUploadStatusText('');
+    safeHaptics.light();
   }, []);
-
-  const setRecordingSecondsLocal = (_sec: number) => {};
 
   const handleSubmitReport = useCallback(async () => {
     Keyboard.dismiss();
 
     if (!title.trim() || !description.trim()) {
+      safeHaptics.warning();
       Alert.alert('Missing Information', 'Please provide an incident title and situation details.');
       return;
     }
 
     if (hasRecordedMedia && mediaType === 'VIDEO' && recordedDuration > 60) {
+      safeHaptics.warning();
       Alert.alert('Video Too Long', 'Evidence video duration exceeds the 60-second statutory maximum.');
       return;
     }
@@ -125,6 +128,7 @@ export const useIncidentDraft = ({
     setIsSubmitting(true);
     setUploadProgress(10);
     setUploadStatusText('Preparing evidence & cryptographic seal...');
+    safeHaptics.medium();
 
     try {
       const trackingCode = `GH-2026-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -279,6 +283,8 @@ export const useIncidentDraft = ({
       setIsSubmitting(false);
 
       if (!insertError) {
+        safeHaptics.success();
+        announceAccessibility(`Report transmitted successfully. Tracking Code ${trackingCode}`);
         Alert.alert(
           '✅ Report Transmitted & Live',
           `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nLive GPS Coordinates & Landmark pinned on the National Command Map.`,
@@ -295,6 +301,7 @@ export const useIncidentDraft = ({
       }
     } catch (e: any) {
       setIsSubmitting(false);
+      safeHaptics.warning();
       Alert.alert(
         '📁 Saved to Encrypted Local Queue',
         'Report encrypted securely under Act 720 and queued for immediate sync.',

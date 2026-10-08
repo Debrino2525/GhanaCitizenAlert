@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { Camera, CameraType } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { safeHaptics, announceAccessibility } from '../utils/haptics';
 
 export interface UseCameraRecorderProps {
   onMediaAttached: (type: 'VIDEO' | 'IMAGE', uri: string, durationSec: number) => void;
@@ -55,11 +56,14 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
     setHasRecordedMedia(false);
     setRecordingSeconds(0);
     setRecordedDuration(0);
+    safeHaptics.light();
   }, []);
 
   // Stop recording internal implementation
   const stopRecordingInternal = useCallback(() => {
     setIsRecording(false);
+    safeHaptics.medium();
+    announceAccessibility('Video recording stopped and evidence encrypted.');
     try {
       if (cameraRef.current && cameraRef.current.stopRecording) {
         cameraRef.current.stopRecording();
@@ -109,6 +113,8 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
       setRecordingSeconds(0);
       setIsRecording(true);
       setMediaType('VIDEO');
+      safeHaptics.heavy();
+      announceAccessibility('Video recording started. 60 seconds maximum duration.');
 
       try {
         if (cameraRef.current) {
@@ -125,6 +131,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
                 const finalDur = recordingSeconds || 15;
                 setRecordedDuration(finalDur);
                 onMediaAttached('VIDEO', result.uri, finalDur);
+                safeHaptics.success();
               }
             })
             .catch((err: any) => {
@@ -153,6 +160,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
 
     try {
       if (cameraRef.current) {
+        safeHaptics.medium();
         const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
         if (photo?.uri) {
           setRecordedUri(photo.uri);
@@ -160,6 +168,8 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
           setMediaType('IMAGE');
           setRecordedDuration(1);
           onMediaAttached('IMAGE', photo.uri, 1);
+          safeHaptics.success();
+          announceAccessibility('Photo captured and watermarked.');
         }
       }
     } catch (err: any) {
@@ -175,6 +185,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
         return;
       }
 
+      safeHaptics.light();
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos', 'images'],
         allowsEditing: false,
@@ -201,6 +212,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
         setMediaType(type);
         setRecordedDuration(dur);
         onMediaAttached(type, asset.uri, dur);
+        safeHaptics.success();
       }
     } catch (err: any) {
       Alert.alert('Gallery Error', err.message || 'Unable to open gallery.');
@@ -208,6 +220,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
   }, [onMediaAttached]);
 
   const toggleCameraFacing = useCallback(() => {
+    safeHaptics.light();
     setFacing((current) => (current === 'back' ? 'front' : 'back'));
   }, []);
 
