@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PoliceCaseBrief, AiTriageResult } from '../services/geminiAiService';
+import { printHtmlDocument, buildPoliceBriefHtml } from '../utils/printDocument';
 import {
   Sparkles,
   Shield,
@@ -84,7 +85,8 @@ ${brief.commandActionDirectives.map(d => `* ${d}`).join('\n')}
   };
 
   const handlePrint = () => {
-    window.print();
+    if (!brief) return;
+    printHtmlDocument('Ghana Police Service Investigation Brief - ' + (brief.incidentTrackingCode || brief.dossierNumber || 'CID'), buildPoliceBriefHtml(brief));
   };
 
   return (

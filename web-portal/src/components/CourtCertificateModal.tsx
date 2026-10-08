@@ -1,6 +1,7 @@
 import React from 'react';
-import { Shield, FileCheck, Copy, Download, Check, X, Lock, MapPin, Hash } from 'lucide-react';
+import { Shield, FileCheck, Copy, Download, Check, X, Lock, MapPin, Hash, Printer } from 'lucide-react';
 import { CourtCertificate } from '../services/evidenceVault';
+import { printHtmlDocument, buildCourtCertificateHtml } from '../utils/printDocument';
 
 interface CourtCertificateModalProps {
   certificate: CourtCertificate | null;
@@ -84,10 +85,14 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
             <span>{copied ? 'Copied' : 'Copy Evidence Signature'}</span>
           </button>
           <button
-            onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-2"
+            onClick={() => {
+              if (certificate) {
+                printHtmlDocument('Evidence Vault Certificate - ' + certificate.trackingCode, buildCourtCertificateHtml(certificate));
+              }
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-2 shadow-lg shadow-amber-500/20"
           >
-            <Download className="w-4 h-4" />
+            <Printer className="w-4 h-4" />
             <span>Export Official Court Dossier</span>
           </button>
         </div>
