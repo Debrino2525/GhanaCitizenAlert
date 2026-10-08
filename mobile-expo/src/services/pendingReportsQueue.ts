@@ -25,7 +25,7 @@ export interface PendingReportItem {
   permanentVideoUri: string;
   fileName: string;
   mimeType: string;
-  sha256Checksum: string;
+  sha256Checksum: string | null;
   fileSizeBytes: number;
   isAnonymous: boolean;
   reporterPhone?: string;
@@ -163,7 +163,7 @@ export async function processPendingReport(
             rawS3Url,
             thumbnailUrl: rawS3Url,
             localUri: report.permanentVideoUri,
-            sha256Checksum: report.sha256Checksum,
+            sha256Checksum: report.sha256Checksum || null,
             timestampUtc: report.createdAt,
             fileSizeBytes: report.fileSizeBytes,
             gpsWatermark: {

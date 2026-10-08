@@ -50,7 +50,7 @@ export interface EvidenceMediaItem {
   rawS3Url: string;
   thumbnailUrl: string;
   localUri: string;
-  sha256Checksum: string;
+  sha256Checksum: string | null;
   timestampUtc: string;
   fileSizeBytes: number;
   gpsWatermark: GpsWatermark;

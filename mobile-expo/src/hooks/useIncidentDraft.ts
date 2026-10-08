@@ -13,6 +13,7 @@ import {
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult } from '../services/evidenceUploader';
 import { savePendingReport } from '../services/pendingReportsQueue';
+import { computeFileSha256 } from '../utils/fileHashing';
 
 export interface UseIncidentDraftProps {
   citizen: CitizenUser;
@@ -222,22 +223,16 @@ export const useIncidentDraft = ({
           console.warn('Gallery save notice (non-fatal):', galleryErr);
         }
 
-        // STEP 3: Inspect file size & compute real SHA-256 Checksum on file bytes
+        // STEP 3: Inspect file size & compute real SHA-256 Checksum on raw file bytes (Expo SDK 57 File API)
         try {
           const fileInfo = await FileSystem.getInfoAsync(permanentUri);
           if (fileInfo.exists && typeof fileInfo.size === 'number') {
             fileSize = fileInfo.size;
           }
 
-          const base64Data = await FileSystem.readAsStringAsync(permanentUri, {
-            encoding: FileSystem.EncodingType.Base64
-          });
-          computedHash = await Crypto.digestStringAsync(
-            Crypto.CryptoDigestAlgorithm.SHA256,
-            base64Data
-          );
+          computedHash = await computeFileSha256(permanentUri);
         } catch (hashErr) {
-          console.warn('SHA-256 byte hashing error:', hashErr);
+          console.warn('SHA-256 raw byte hashing error:', hashErr);
           computedHash = null;
         }
 
@@ -305,7 +300,7 @@ export const useIncidentDraft = ({
                     permanentVideoUri: permanentUri!,
                     fileName,
                     mimeType,
-                    sha256Checksum: computedHash || '',
+                    sha256Checksum: computedHash || null,
                     fileSizeBytes: fileSize,
                     isAnonymous,
                     reporterPhone: reporterPhone || citizen.phone,
@@ -360,7 +355,7 @@ export const useIncidentDraft = ({
           rawS3Url: uploadResult.publicUrl,
           thumbnailUrl: uploadResult.publicUrl,
           localUri: permanentUri,
-          sha256Checksum: computedHash || '',
+          sha256Checksum: computedHash || null,
           timestampUtc: new Date().toISOString(),
           fileSizeBytes: fileSize,
           gpsWatermark: {
@@ -519,7 +514,7 @@ export const useIncidentDraft = ({
                   permanentVideoUri: permanentMediaUri,
                   fileName: `${trackingCode}-${Date.now()}.mp4`,
                   mimeType: 'video/mp4',
-                  sha256Checksum: computedHash || '',
+                  sha256Checksum: computedHash || null,
                   fileSizeBytes: fileSize || 1024 * 512,
                   isAnonymous,
                   reporterPhone: reporterPhone || citizen.phone,

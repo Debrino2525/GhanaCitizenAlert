@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { File } from 'expo-file-system';
 import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
-import { decode } from 'base64-arraybuffer';
 
 export interface UploadEvidenceOptions {
   fileUri: string;
@@ -203,10 +203,8 @@ export async function uploadEvidenceStreaming({
     } else {
       // Web fallback: Supabase JS upload without upsert
       onProgress?.(0.3, 'Reading evidence buffer for web transmission...');
-      const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.Base64
-      });
-      const binaryArrayBuffer = decode(base64Data);
+      const file = new File(fileUri);
+      const binaryArrayBuffer = await file.arrayBuffer();
 
       onProgress?.(0.6, 'Transmitting evidence to National Vault...');
       const { data, error } = await supabase.storage
