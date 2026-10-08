@@ -114,21 +114,29 @@ export interface SightingTip {
 }
 
 export type OfficerRole = 
+  | 'ADMIN'
   | 'NATIONAL_COMMAND_SUPERVISOR'
   | 'POLICE_CID_OFFICER'
   | 'DOVVSU_INVESTIGATOR'
   | 'EPA_INSPECTOR'
   | 'MTTD_OFFICER'
-  | 'PUBLIC_MODERATOR';
+  | 'PUBLIC_MODERATOR'
+  | 'CAD_DISPATCHER'
+  | string;
 
 export interface OfficerUser {
   id: string;
   name: string;
   badgeNumber: string;
+  service_id?: string;
   agency: AgencyType;
   role: OfficerRole;
   rank: string;
   email: string;
   avatarUrl?: string;
-  clearanceLevel: 'TOP_SECRET' | 'RESTRICTED' | 'OPERATIONAL' | 'PUBLIC_MOD';
+  clearanceLevel: 'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET' | string;
+  station_id?: string;
+  is_active?: boolean;
+  must_change_password?: boolean;
+  created_at?: string;
 }

@@ -1,85 +1,229 @@
-import React, { useState } from 'react';
-import { Shield, UserPlus, Trash2, KeyRound, Building2, CheckCircle2, AlertCircle, Award } from 'lucide-react';
-import { OfficerUser, OfficerRole, AgencyType } from '../types';
-import { PRESET_OFFICERS } from './AuthModal';
+import React, { useState, useEffect } from 'react';
+import { Shield, UserPlus, KeyRound, Building2, CheckCircle2, AlertCircle, RefreshCw, UserX, Send, Mail, BadgeCheck, Lock } from 'lucide-react';
+import { OfficerUser, AgencyType, OfficerRole } from '../types';
+import { supabase } from '../services/supabaseClient';
 
 interface OfficerManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onOfficersUpdated?: (officers: OfficerUser[]) => void;
+  currentOfficer: OfficerUser | null;
 }
 
 export const OfficerManagementModal: React.FC<OfficerManagementModalProps> = ({
   isOpen,
   onClose,
-  onOfficersUpdated
+  currentOfficer
 }) => {
-  const [officers, setOfficers] = useState<OfficerUser[]>(() => {
-    try {
-      const saved = localStorage.getItem('citizen_alert_officers_vault');
-      return saved ? JSON.parse(saved) : PRESET_OFFICERS;
-    } catch (e) {
-      return PRESET_OFFICERS;
-    }
-  });
+  const [officers, setOfficers] = useState<any[]>([]);
+  const [isLoadingList, setIsLoadingList] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const [name, setName] = useState('');
-  const [badgeNumber, setBadgeNumber] = useState('');
-  const [agency, setAgency] = useState<AgencyType>('GPS_CID');
-  const [role, setRole] = useState<OfficerRole>('POLICE_CID_OFFICER');
-  const [rank, setRank] = useState('Detective Inspector');
+  // Form states
   const [email, setEmail] = useState('');
-  const [pin, setPin] = useState('');
-  const [clearanceLevel, setClearanceLevel] = useState<'TOP_SECRET' | 'RESTRICTED' | 'OPERATIONAL' | 'PUBLIC_MOD'>('TOP_SECRET');
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [agency, setAgency] = useState<AgencyType>('GPS_CID');
+  const [role, setRole] = useState<string>('POLICE_CID_OFFICER');
+  const [rank, setRank] = useState('Detective Inspector');
+  const [clearanceLevel, setClearanceLevel] = useState<'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET'>('RESTRICTED');
+  const [stationId, setStationId] = useState('sta-hq');
+
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const isAdmin = currentOfficer?.role === 'ADMIN';
+
+  const fetchOfficers = async () => {
+    if (!isAdmin) return;
+    setIsLoadingList(true);
+    try {
+      const { data, error } = await supabase
+        .from('officers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+      setOfficers(data || []);
+    } catch (err: any) {
+      console.error('Fetch officers error:', err);
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to load officers directory.'
+      });
+    } finally {
+      setIsLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && isAdmin) {
+      fetchOfficers();
+      setFeedback(null);
+    }
+  }, [isOpen, isAdmin]);
 
   if (!isOpen) return null;
 
-  const handleCreateOfficer = (e: React.FormEvent) => {
+  // Enforce ADMIN role only
+  if (!isAdmin) {
+    return (
+      <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+        <div className="bg-slate-900 border border-red-800 rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-red-950/80 border border-red-700 mx-auto flex items-center justify-center text-red-400">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-white">ACCESS RESTRICTED</h2>
+          <p className="text-xs text-slate-400">
+            Only system administrators with the <span className="font-mono text-amber-400 font-bold">ADMIN</span> role have authorization to access the Officer Provisioning & Management console.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 1. Create Officer via Edge Function: provision-officer
+  const handleCreateOfficer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !badgeNumber.trim() || !pin.trim()) {
-      setErrorMsg('Please fill in all required officer details.');
+    setFeedback(null);
+
+    if (!email.trim() || !fullName.trim() || !serviceId.trim() || !rank.trim()) {
+      setFeedback({
+        type: 'error',
+        message: 'Please complete all required fields.'
+      });
       return;
     }
 
-    const newOfficer: OfficerUser = {
-      id: `off-${Date.now()}`,
-      name: name.trim(),
-      badgeNumber: badgeNumber.trim().toUpperCase(),
-      agency,
-      role,
-      rank: rank.trim(),
-      email: email.trim() || `${badgeNumber.toLowerCase()}@police.gov.gh`,
-      clearanceLevel,
-      avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80`
-    };
+    setIsSubmitting(true);
 
-    const updated = [newOfficer, ...officers];
-    setOfficers(updated);
-    localStorage.setItem('citizen_alert_officers_vault', JSON.stringify(updated));
-    if (onOfficersUpdated) onOfficersUpdated(updated);
+    try {
+      const { data, error } = await supabase.functions.invoke('provision-officer', {
+        body: {
+          email: email.trim().toLowerCase(),
+          full_name: fullName.trim(),
+          service_id: serviceId.trim().toUpperCase(),
+          agency,
+          rank: rank.trim(),
+          role,
+          clearance_level: clearanceLevel,
+          station_id: stationId.trim() || undefined
+        }
+      });
 
-    setIsSuccess(true);
-    setErrorMsg('');
-    setName('');
-    setBadgeNumber('');
-    setEmail('');
-    setPin('');
+      if (error) {
+        // Edge function error
+        throw new Error(error.message || `Provisioning failed with status: ${error.status || 'unknown'}`);
+      }
 
-    setTimeout(() => setIsSuccess(false), 3000);
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      setFeedback({
+        type: 'success',
+        message: `Officer ${fullName} provisioned. Invite email dispatched to ${email}.`
+      });
+
+      // Clear form
+      setEmail('');
+      setFullName('');
+      setServiceId('');
+      setRank('Detective Inspector');
+
+      // Refresh officers list
+      await fetchOfficers();
+    } catch (err: any) {
+      console.error('Provision error:', err);
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Error occurred during officer provisioning.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteOfficer = (id: string) => {
-    const updated = officers.filter(o => o.id !== id);
-    setOfficers(updated);
-    localStorage.setItem('citizen_alert_officers_vault', JSON.stringify(updated));
-    if (onOfficersUpdated) onOfficersUpdated(updated);
+  // 2. Deactivate Officer via Edge Function: deactivate-officer
+  const handleDeactivate = async (officerId: string, officerName: string) => {
+    if (!confirm(`Are you sure you want to deactivate officer ${officerName}? They will immediately lose CAD workstation access.`)) {
+      return;
+    }
+
+    setActionLoadingId(officerId);
+    setFeedback(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('deactivate-officer', {
+        body: { officer_id: officerId }
+      });
+
+      if (error) {
+        throw new Error(error.message || `Deactivation failed with status: ${error.status || 'unknown'}`);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      setFeedback({
+        type: 'success',
+        message: `Officer ${officerName} has been deactivated.`
+      });
+
+      await fetchOfficers();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to deactivate officer.'
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // 3. Resend Invite via Edge Function: resend-invite
+  const handleResendInvite = async (officerId: string, officerEmail: string) => {
+    setActionLoadingId(officerId);
+    setFeedback(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('resend-invite', {
+        body: { officer_id: officerId }
+      });
+
+      if (error) {
+        throw new Error(error.message || `Resend invite failed with status: ${error.status || 'unknown'}`);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      setFeedback({
+        type: 'success',
+        message: `Invite link resent successfully to ${officerEmail}.`
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to resend invite.'
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-5xl w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col">
         {/* Ghana Flag Header Accent */}
         <div className="absolute top-0 left-0 right-0 h-2 flex">
           <div className="flex-1 bg-[#CE1126]" />
@@ -87,21 +231,21 @@ export const OfficerManagementModal: React.FC<OfficerManagementModalProps> = ({
           <div className="flex-1 bg-[#006B3F]" />
         </div>
 
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4 pt-2">
+        {/* Modal Header */}
+        <div className="flex items-start justify-between mb-4 pt-2 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 flex items-center justify-center shadow-lg border border-blue-400/30">
               <UserPlus className="w-6 h-6 text-white" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-xl font-black text-white">OFFICER ACCOUNT PROVISIONING</h2>
+                <h2 className="text-xl font-black text-white">OFFICER DIRECTORY & PROVISIONING</h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/80 text-amber-300 font-bold border border-amber-700">
                   ADMIN ONLY
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Create & manage law enforcement agency accounts, security PINs, and CAD clearance levels.
+                National Security Gateway & Section 7 (Act 772) Officer Governance
               </p>
             </div>
           </div>
@@ -114,184 +258,259 @@ export const OfficerManagementModal: React.FC<OfficerManagementModalProps> = ({
           </button>
         </div>
 
-        {isSuccess && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-950/80 border border-emerald-600 text-emerald-300 text-xs flex items-center space-x-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-            <span>✅ Officer account provisioned successfully! Officer can now log in immediately on any terminal.</span>
+        {feedback && (
+          <div
+            className={`mb-4 p-3 rounded-xl text-xs flex items-center space-x-2 shrink-0 ${
+              feedback.type === 'success'
+                ? 'bg-emerald-950/70 border border-emerald-800 text-emerald-200'
+                : 'bg-red-950/70 border border-red-800 text-red-200'
+            }`}
+          >
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+            )}
+            <span>{feedback.message}</span>
           </div>
         )}
 
-        {errorMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/80 border border-red-700 text-red-200 text-xs flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto pr-1">
-          {/* Create Officer Form */}
-          <form onSubmit={handleCreateOfficer} className="lg:col-span-6 bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
-            <h3 className="font-bold text-white flex items-center space-x-1.5 border-b border-slate-800 pb-2">
-              <Award className="w-4 h-4 text-amber-400" />
-              <span>Provision New Security Officer</span>
+        {/* Content Body */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto flex-1 pr-1">
+          {/* Left Column: Create Officer Form */}
+          <div className="lg:col-span-5 bg-slate-950/70 border border-slate-800 rounded-2xl p-4 space-y-4">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
+              <UserPlus className="w-3.5 h-3.5 text-blue-400" />
+              <span>Provision New Officer</span>
             </h3>
 
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Full Officer Name & Title</label>
-              <input
-                type="text"
-                placeholder="e.g. Supt. Kwabena Adusei"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handleCreateOfficer} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Badge / Service Number</label>
+                <label className="block text-slate-300 font-semibold mb-1">Official Email Address *</label>
+                <input
+                  type="email"
+                  placeholder="e.g. k.boateng@police.gov.gh"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 font-mono focus:outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Full Legal Name *</label>
                 <input
                   type="text"
-                  placeholder="e.g. GPS-CID-9912"
-                  value={badgeNumber}
-                  onChange={(e) => setBadgeNumber(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 font-mono uppercase focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. Kwame Boateng"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   required
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Security PIN</label>
-                <input
-                  type="password"
-                  placeholder="4 or 6 digits"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 font-mono tracking-widest focus:outline-none focus:border-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Agency</label>
-                <select
-                  value={agency}
-                  onChange={(e) => setAgency(e.target.value as AgencyType)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-white font-semibold focus:outline-none focus:border-blue-500"
-                >
-                  <option value="GPS_CID">GPS / CID (Crime)</option>
-                  <option value="DOVVSU">DOVVSU (Abuse)</option>
-                  <option value="EPA">EPA (Galamsey)</option>
-                  <option value="MTTD">MTTD (Traffic)</option>
-                  <option value="AMA">AMA (Sanitation)</option>
-                  <option value="NADMO">NADMO (Disaster)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Clearance Level</label>
-                <select
-                  value={clearanceLevel}
-                  onChange={(e) => setClearanceLevel(e.target.value as any)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-white font-semibold focus:outline-none focus:border-blue-500"
-                >
-                  <option value="TOP_SECRET">TOP SECRET (Court Vault)</option>
-                  <option value="RESTRICTED">RESTRICTED (Agency CAD)</option>
-                  <option value="OPERATIONAL">OPERATIONAL (Field Dispatch)</option>
-                  <option value="PUBLIC_MOD">PUBLIC MODERATOR</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Rank / Position Title</label>
-              <input
-                type="text"
-                placeholder="e.g. Senior Detective Inspector"
-                value={rank}
-                onChange={(e) => setRank(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Official Agency Email</label>
-              <input
-                type="email"
-                placeholder="e.g. k.adusei@cid.police.gov.gh"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/20 transition mt-2"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Issue Official Officer Credentials</span>
-            </button>
-          </form>
-
-          {/* Active Officers List */}
-          <div className="lg:col-span-6 space-y-3">
-            <h3 className="font-bold text-white text-xs flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="flex items-center space-x-1.5">
-                <Shield className="w-4 h-4 text-emerald-400" />
-                <span>Authorized Officer Directory ({officers.length})</span>
-              </span>
-              <span className="text-[10px] text-slate-500">Live Credentials</span>
-            </h3>
-
-            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-              {officers.map((off) => (
-                <div
-                  key={off.id}
-                  className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between group hover:border-slate-700 transition"
-                >
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <img
-                      src={off.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'}
-                      alt={off.name}
-                      className="w-9 h-9 rounded-full object-cover border border-slate-700 shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-xs font-bold text-white truncate">{off.name}</span>
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                          {off.agency}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-amber-400 font-medium truncate">{off.rank}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">
-                        {off.badgeNumber} • {off.clearanceLevel}
-                      </p>
-                    </div>
-                  </div>
-
-                  {!PRESET_OFFICERS.some(p => p.id === off.id) && (
-                    <button
-                      onClick={() => handleDeleteOfficer(off.id)}
-                      className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900 text-red-400 hover:text-white transition"
-                      title="Revoke Officer Access"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Service / Badge ID *</label>
+                  <input
+                    type="text"
+                    placeholder="GPS-CID-8812"
+                    value={serviceId}
+                    onChange={(e) => setServiceId(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 font-mono uppercase focus:outline-none focus:border-blue-500"
+                    required
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Agency *</label>
+                  <select
+                    value={agency}
+                    onChange={(e) => setAgency(e.target.value as AgencyType)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2 py-2 text-white focus:outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="GPS_CID">GPS CID</option>
+                    <option value="DOVVSU">DOVVSU</option>
+                    <option value="EPA">EPA</option>
+                    <option value="MTTD">MTTD</option>
+                    <option value="NADMO">NADMO</option>
+                    <option value="AMA">AMA</option>
+                    <option value="KMA">KMA</option>
+                    <option value="FORESTRY_COMM">Forestry Comm</option>
+                  </select>
+                </div>
+              </div>
 
-        {/* Footer */}
-        <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-500 font-mono">
-          <span>SECTION 7 ACT 772 LAW ENFORCEMENT CREDENTIALS VAULT</span>
-          <span className="text-emerald-400 font-bold">ACTIVE CAD SYNC</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Official Rank *</label>
+                  <input
+                    type="text"
+                    placeholder="Detective Inspector"
+                    value={rank}
+                    onChange={(e) => setRank(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Clearance Level *</label>
+                  <select
+                    value={clearanceLevel}
+                    onChange={(e) => setClearanceLevel(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2 py-2 text-white focus:outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="RESTRICTED">RESTRICTED</option>
+                    <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                    <option value="SECRET">SECRET</option>
+                    <option value="TOP_SECRET">TOP_SECRET</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Operational CAD Role (Excludes ADMIN) *</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-semibold"
+                >
+                  <option value="NATIONAL_COMMAND_SUPERVISOR">🏛️ National Command Supervisor</option>
+                  <option value="POLICE_CID_OFFICER">👮 Police CID Detective</option>
+                  <option value="DOVVSU_INVESTIGATOR">🛡️ DOVVSU Investigator</option>
+                  <option value="EPA_INSPECTOR">🌲 EPA Inspector</option>
+                  <option value="MTTD_OFFICER">🚗 MTTD Officer</option>
+                  <option value="PUBLIC_MODERATOR">🌐 Public Feed Moderator</option>
+                  <option value="CAD_DISPATCHER">📡 CAD Emergency Dispatcher</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Station / Depot</label>
+                <input
+                  type="text"
+                  placeholder="sta-hq / National Police Headquarters"
+                  value={stationId}
+                  onChange={(e) => setStationId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black flex items-center justify-center space-x-1.5 shadow-lg shadow-blue-600/30 transition disabled:opacity-50 mt-2"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{isSubmitting ? 'Inviting via Supabase Auth...' : 'Create Officer & Dispatch Invite'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Right Column: Live Officers Directory */}
+          <div className="lg:col-span-7 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Registered CAD Personnel ({officers.length})</span>
+              </h3>
+              <button
+                onClick={fetchOfficers}
+                disabled={isLoadingList}
+                className="text-xs text-slate-400 hover:text-white flex items-center space-x-1"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingList ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {isLoadingList && officers.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">
+                Loading verified officers from database...
+              </div>
+            ) : officers.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl">
+                No active officers found. Provision the first officer using the form.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+                {officers.map((off) => {
+                  const isActionLoading = actionLoadingId === off.id;
+                  return (
+                    <div
+                      key={off.id}
+                      className={`p-3.5 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        off.is_active === false
+                          ? 'bg-red-950/20 border-red-900/40 opacity-75'
+                          : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 min-w-0 flex-1">
+                        <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0 font-mono text-xs font-bold">
+                          {(off.full_name || off.name || 'OF').substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-white truncate">
+                              {off.full_name || off.name}
+                            </span>
+                            {off.is_active === false ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 font-bold">
+                                DEACTIVATED
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                                ACTIVE
+                              </span>
+                            )}
+                            {off.must_change_password && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-bold">
+                                PENDING SETUP
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-amber-400 font-semibold truncate">{off.rank} • {off.role}</p>
+                          <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono mt-0.5">
+                            <span className="text-blue-300 font-bold">{off.service_id || off.badge_number}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400">{off.agency}</span>
+                            <span>•</span>
+                            <span>{off.email}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center space-x-2 shrink-0">
+                        {off.is_active !== false && (
+                          <>
+                            <button
+                              onClick={() => handleResendInvite(off.id, off.email)}
+                              disabled={isActionLoading}
+                              title="Resend invite email"
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1 transition disabled:opacity-50"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Invite</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeactivate(off.id, off.full_name || off.name)}
+                              disabled={isActionLoading}
+                              title="Deactivate officer"
+                              className="px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-semibold flex items-center space-x-1 transition disabled:opacity-50"
+                            >
+                              <UserX className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Deactivate</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
