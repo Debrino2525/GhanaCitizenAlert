@@ -162,10 +162,13 @@ export const useIncidentDraft = ({
 
     setIsSubmitting(true);
     setUploadProgress(5);
-    setUploadStatusText('Preparing evidence & cryptographic seal...');
-    safeHaptics.medium();
+    const generateTrackingCode = (): string => {
+      const bytes = Crypto.getRandomBytes(2);
+      const num = (((bytes[0] << 8) | bytes[1]) % 9000) + 1000;
+      return `GH-2026-${num}`;
+    };
 
-    const trackingCode = `GH-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    let trackingCode = generateTrackingCode();
     const combinedLocation = landmark.trim()
       ? `${landmark.trim()} (${locationName})`
       : locationName;
@@ -411,15 +414,34 @@ export const useIncidentDraft = ({
         public_corroborations: 0
       };
 
-      if (reporterId) {
-        payload.reporter_id = reporterId;
-      }
+      let insertSuccess = false;
+      let lastInsertError: any = null;
+      let insertAttempts = 0;
 
-      const { error: insertError } = await supabase.from('incidents').insert(payload);
+      while (insertAttempts < 3 && !insertSuccess) {
+        insertAttempts++;
+        if (insertAttempts > 1) {
+          trackingCode = generateTrackingCode();
+          payload.tracking_code = trackingCode;
+        }
+
+        const { error } = await supabase.from('incidents').insert(payload);
+        if (!error) {
+          insertSuccess = true;
+          break;
+        }
+
+        if (error.code === '23505') {
+          continue;
+        }
+
+        lastInsertError = error;
+        break;
+      }
 
       setIsSubmitting(false);
 
-      if (!insertError) {
+      if (insertSuccess) {
         setUploadProgress(100);
         setUploadStatusText('✅ Transmitted & Signed under Act 772');
         safeHaptics.success();
@@ -452,7 +474,7 @@ export const useIncidentDraft = ({
           } catch (e) {}
         }
       } else {
-        throw insertError;
+        throw lastInsertError || new Error('Failed to insert incident');
       }
     } catch (e: any) {
       setIsSubmitting(false);
