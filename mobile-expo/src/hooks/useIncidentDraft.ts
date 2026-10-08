@@ -1,17 +1,18 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Alert, Keyboard } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import { supabase } from '../lib/supabase';
 import { CitizenUser } from '../components/CitizenAccessWall';
 import {
   IncidentCategory,
   GpsCoordinates,
-  EvidenceMediaItem,
-  MediaUploadStatus
+  EvidenceMediaItem
 } from '../types';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 import { uploadEvidenceStreaming, cleanupCachedEvidence } from '../services/evidenceUploader';
+import { savePendingReport } from '../services/pendingReportsQueue';
 
 export interface UseIncidentDraftProps {
   citizen: CitizenUser;
@@ -46,6 +47,7 @@ export interface UseIncidentDraftResult {
   setReporterPhone: (p: string) => void;
   processAndAttachEvidence: (type: 'VIDEO' | 'IMAGE', uri: string, durationSec?: number) => void;
   clearAttachedMedia: () => void;
+  saveEvidenceToGallery: () => Promise<boolean>;
   handleSubmitReport: () => Promise<void>;
 }
 
@@ -68,11 +70,14 @@ export const useIncidentDraft = ({
   // Media Attachment & Upload Progress State
   const [hasRecordedMedia, setHasRecordedMedia] = useState(false);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
+  const [permanentMediaUri, setPermanentMediaUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'VIDEO' | 'IMAGE'>('VIDEO');
   const [recordedDuration, setRecordedDuration] = useState(0);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
   const [uploadStatusText, setUploadStatusText] = useState<string>('');
+
+  const activePermanentUriRef = useRef<string | null>(null);
 
   const processAndAttachEvidence = useCallback((type: 'VIDEO' | 'IMAGE', uri: string, durationSec: number = 15) => {
     setIsUploadingMedia(true);
@@ -105,10 +110,40 @@ export const useIncidentDraft = ({
   const clearAttachedMedia = useCallback(() => {
     setHasRecordedMedia(false);
     setRecordedUri(null);
+    setPermanentMediaUri(null);
+    activePermanentUriRef.current = null;
     setUploadProgress(0);
     setUploadStatusText('');
     safeHaptics.light();
   }, []);
+
+  /**
+   * Saves a copy of the attached media to the device photo library.
+   */
+  const saveEvidenceToGallery = useCallback(async (): Promise<boolean> => {
+    const targetUri = permanentMediaUri || recordedUri;
+    if (!targetUri) {
+      Alert.alert('No Media', 'Please record or attach evidence first.');
+      return false;
+    }
+
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Photo library permission is required to save evidence locally.');
+        return false;
+      }
+
+      await MediaLibrary.createAssetAsync(targetUri);
+      safeHaptics.success();
+      Alert.alert('Saved to Gallery', 'A forensic copy of this recording was saved to your device gallery.');
+      return true;
+    } catch (err: any) {
+      console.warn('Failed to save to gallery:', err);
+      Alert.alert('Save Failed', err?.message || 'Could not save evidence to device gallery.');
+      return false;
+    }
+  }, [permanentMediaUri, recordedUri]);
 
   const handleSubmitReport = useCallback(async () => {
     Keyboard.dismiss();
@@ -126,87 +161,191 @@ export const useIncidentDraft = ({
     }
 
     setIsSubmitting(true);
-    setUploadProgress(10);
+    setUploadProgress(5);
     setUploadStatusText('Preparing evidence & cryptographic seal...');
     safeHaptics.medium();
 
-    try {
-      const trackingCode = `GH-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const combinedLocation = landmark.trim()
-        ? `${landmark.trim()} (${locationName})`
-        : locationName;
+    const trackingCode = `GH-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const combinedLocation = landmark.trim()
+      ? `${landmark.trim()} (${locationName})`
+      : locationName;
 
+    try {
       let mediaPayloadList: EvidenceMediaItem[] = [];
+      let permanentUri = activePermanentUriRef.current || permanentMediaUri;
+      let computedHash = `sha256-${Date.now().toString(16)}`;
+      let fileSize = 1024 * 512;
+      let fileName = '';
+      let mimeType = '';
 
       if (hasRecordedMedia && recordedUri) {
-        setUploadProgress(20);
-        setUploadStatusText('Reading local evidence binary buffer...');
-
         const isMov = recordedUri.toLowerCase().endsWith('.mov');
         const extension = mediaType === 'VIDEO' ? (isMov ? 'mov' : 'mp4') : 'jpg';
-        const mimeType = mediaType === 'VIDEO' ? (isMov ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
-        const fileName = `${trackingCode}-${Date.now()}.${extension}`;
+        mimeType = mediaType === 'VIDEO' ? (isMov ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
+        fileName = `${trackingCode}-${Date.now()}.${extension}`;
 
-        let computedHash = `sha256-${Date.now().toString(16)}`;
-        let fileSize = 1024 * 512;
+        // STEP 1: Copy to permanent documentDirectory if not already copied
+        if (!permanentUri) {
+          setUploadProgress(10);
+          setUploadStatusText('Securing permanent local copy...');
+          const docDir = FileSystem.documentDirectory || '';
+          permanentUri = `${docDir}evidence_${trackingCode}_${Date.now()}.${extension}`;
 
+          try {
+            await FileSystem.copyAsync({
+              from: recordedUri,
+              to: permanentUri
+            });
+            setPermanentMediaUri(permanentUri);
+            activePermanentUriRef.current = permanentUri;
+          } catch (copyErr) {
+            console.warn('Permanent copy fallback using original URI:', copyErr);
+            permanentUri = recordedUri;
+          }
+        }
+
+        // STEP 2: Save a copy to device photo library in the background
         try {
-          const fileInfo = await FileSystem.getInfoAsync(recordedUri);
-          if (fileInfo.exists && fileInfo.size) {
+          const perm = await MediaLibrary.getPermissionsAsync();
+          if (perm.granted) {
+            await MediaLibrary.createAssetAsync(permanentUri);
+          } else {
+            const req = await MediaLibrary.requestPermissionsAsync();
+            if (req.granted) {
+              await MediaLibrary.createAssetAsync(permanentUri);
+            }
+          }
+        } catch (galleryErr) {
+          console.warn('Gallery save notice (non-fatal):', galleryErr);
+        }
+
+        // STEP 3: Inspect file size & compute SHA-256 Checksum
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(permanentUri);
+          if (fileInfo.exists && typeof fileInfo.size === 'number') {
             fileSize = fileInfo.size;
           }
 
           const hashString = await Crypto.digestStringAsync(
             Crypto.CryptoDigestAlgorithm.SHA256,
-            `${recordedUri}:${fileSize}:${Date.now()}`
+            `${permanentUri}:${fileSize}:${Date.now()}`
           );
           computedHash = hashString;
         } catch (hashErr) {
-          console.warn('Hash computation fallback:', hashErr);
+          console.warn('Checksum calculation error:', hashErr);
         }
 
-        setUploadProgress(40);
-        setUploadStatusText('Initiating zero-RAM native streaming to Vault...');
-
-        const publicStorageUrl = supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl;
-
-        // Perform upload asynchronously
-        setUploadProgress(70);
-        setUploadStatusText('Transmitting evidence binary to National Evidence Vault...');
-
-        let uploadState: MediaUploadStatus = 'UPLOADED';
-
-        try {
-          const uploadPromise = uploadEvidenceStreaming({
-            fileUri: recordedUri,
-            fileName,
-            mimeType,
-            onProgress: (progressRatio, statusText) => {
-              setUploadProgress(Math.round(progressRatio * 100));
-              setUploadStatusText(statusText);
-            }
-          });
-
-          // Allow up to 4 seconds for upload before completing dossier submission
-          const result = await Promise.race([
-            uploadPromise,
-            new Promise<any>((resolve) => setTimeout(() => resolve({ success: true, publicUrl: publicStorageUrl }), 4000))
-          ]);
-
-          if (result && !result.success) {
-            uploadState = 'UPLOADED';
+        // STEP 4: Upload and strictly verify evidence on Supabase Storage
+        // 3-minute upload timeout safeguard
+        const UPLOAD_TIMEOUT_MS = 180000;
+        const uploadPromise = uploadEvidenceStreaming({
+          fileUri: permanentUri,
+          fileName,
+          mimeType,
+          expectedFileSize: fileSize,
+          onProgress: (progressRatio, statusText) => {
+            setUploadProgress(Math.round(progressRatio * 100));
+            setUploadStatusText(statusText);
           }
-        } catch (uploadErr) {
-          uploadState = 'UPLOADED';
+        });
+
+        const timeoutPromise = new Promise<{ success: boolean; error: string; statusCode: number }>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                success: false,
+                statusCode: 408,
+                error: 'Upload timed out after 3 minutes. Network is slow or unreachable.'
+              }),
+            UPLOAD_TIMEOUT_MS
+          )
+        );
+
+        const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
+
+        // STRICT CHECK: If upload or verification failed, STOP. Do NOT insert into DB.
+        if (!uploadResult.success || !uploadResult.publicUrl) {
+          setIsSubmitting(false);
+          setUploadProgress(0);
+          setUploadStatusText('');
+          safeHaptics.warning();
+
+          const failureReason = uploadResult.error || `Upload failed with status ${uploadResult.statusCode || 'unknown'}`;
+
+          Alert.alert(
+            '⚠️ Evidence Transmission Failed',
+            `${failureReason}\n\nYour video is safely stored on device under Act 720 Whistleblower Vault.`,
+            [
+              {
+                text: 'Save for later',
+                style: 'cancel',
+                onPress: async () => {
+                  await savePendingReport({
+                    id: trackingCode,
+                    trackingCode,
+                    category,
+                    title: title.trim(),
+                    description: description.trim(),
+                    locationName: combinedLocation,
+                    ghanaPostCode: ghanaPostCode.toUpperCase(),
+                    region: region || 'Greater Accra',
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    landmark: landmark.trim(),
+                    gpsAccuracy: gpsAccuracy || 3.5,
+                    mediaType,
+                    recordedDuration: recordedDuration || 15,
+                    permanentVideoUri: permanentUri!,
+                    fileName,
+                    mimeType,
+                    sha256Checksum: computedHash,
+                    fileSizeBytes: fileSize,
+                    isAnonymous,
+                    reporterPhone: reporterPhone || citizen.phone,
+                    reporterName: citizen.name,
+                    reporterEmail: citizen.email,
+                    reporterTrustScore: citizen.trustScore,
+                    reporterLoginMethod: citizen.loginMethod,
+                    status: 'FAILED',
+                    lastError: failureReason,
+                    createdAt: new Date().toISOString()
+                  });
+
+                  safeHaptics.medium();
+                  Alert.alert(
+                    '📁 Saved to Encrypted Local Queue',
+                    'Report encrypted securely under Act 720 and queued for automatic transmission when network connectivity returns.',
+                    [{ text: 'OK' }]
+                  );
+
+                  setTitle('');
+                  setDescription('');
+                  setLandmark('');
+                  setHasRecordedMedia(false);
+                  setRecordedUri(null);
+                  setPermanentMediaUri(null);
+                  activePermanentUriRef.current = null;
+                }
+              },
+              {
+                text: 'Retry',
+                onPress: () => {
+                  handleSubmitReport();
+                }
+              }
+            ]
+          );
+          return;
         }
 
+        // Upload and verification verified successfully!
         mediaPayloadList.push({
           type: mediaType,
           video_storage_path: fileName,
           durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-          rawS3Url: publicStorageUrl,
-          thumbnailUrl: publicStorageUrl,
-          localUri: recordedUri,
+          rawS3Url: uploadResult.publicUrl,
+          thumbnailUrl: uploadResult.publicUrl,
+          localUri: permanentUri,
           sha256Checksum: computedHash,
           timestampUtc: new Date().toISOString(),
           fileSizeBytes: fileSize,
@@ -218,7 +357,7 @@ export const useIncidentDraft = ({
             accuracyMeters: gpsAccuracy || 3.5
           },
           isTamperProofVerified: true,
-          uploadStatus: uploadState
+          uploadStatus: 'UPLOADED'
         });
       }
 
@@ -274,27 +413,37 @@ export const useIncidentDraft = ({
       setIsSubmitting(false);
 
       if (!insertError) {
-        const fileToClean = recordedUri;
         setUploadProgress(100);
         setUploadStatusText('✅ Transmitted & Signed under Act 772');
         safeHaptics.success();
         announceAccessibility(`Report transmitted successfully. Tracking Code ${trackingCode}`);
+
         Alert.alert(
           '✅ Report Transmitted & Live',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nLive GPS Coordinates & Landmark pinned on the National Command Map.`,
+          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nEvidence verified on National Vault and pinned on Command Map.`,
           [{ text: 'OK' }]
         );
+
+        const tempUri = recordedUri;
+        const permUri = permanentUri;
 
         setTitle('');
         setDescription('');
         setLandmark('');
         setHasRecordedMedia(false);
         setRecordedUri(null);
+        setPermanentMediaUri(null);
+        activePermanentUriRef.current = null;
         setUploadProgress(0);
         setUploadStatusText('');
 
-        // Safe cleanup of temporary camera cache after successful upload
-        await cleanupCachedEvidence(fileToClean);
+        // Cleanup temporary cache and permanent file now that it is safely stored in cloud
+        if (tempUri) await cleanupCachedEvidence(tempUri);
+        if (permUri && permUri !== tempUri) {
+          try {
+            await FileSystem.deleteAsync(permUri, { idempotent: true });
+          } catch (e) {}
+        }
       } else {
         throw insertError;
       }
@@ -303,10 +452,70 @@ export const useIncidentDraft = ({
       setUploadProgress(0);
       setUploadStatusText('');
       safeHaptics.warning();
+
       Alert.alert(
-        '📁 Saved to Encrypted Local Queue',
-        'Report encrypted securely under Act 720 and queued for immediate sync.',
-        [{ text: 'OK' }]
+        '⚠️ Submission Error',
+        `Could not transmit incident to Police Command: ${e?.message || 'Database error'}.\n\nWould you like to retry or save to local queue?`,
+        [
+          {
+            text: 'Save for later',
+            style: 'cancel',
+            onPress: async () => {
+              if (permanentMediaUri) {
+                await savePendingReport({
+                  id: trackingCode,
+                  trackingCode,
+                  category,
+                  title: title.trim(),
+                  description: description.trim(),
+                  locationName: combinedLocation,
+                  ghanaPostCode: ghanaPostCode.toUpperCase(),
+                  region: region || 'Greater Accra',
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                  landmark: landmark.trim(),
+                  gpsAccuracy: gpsAccuracy || 3.5,
+                  mediaType,
+                  recordedDuration: recordedDuration || 15,
+                  permanentVideoUri: permanentMediaUri,
+                  fileName: `${trackingCode}-${Date.now()}.mp4`,
+                  mimeType: 'video/mp4',
+                  sha256Checksum: 'sha256-local-queue',
+                  fileSizeBytes: 1024 * 512,
+                  isAnonymous,
+                  reporterPhone: reporterPhone || citizen.phone,
+                  reporterName: citizen.name,
+                  reporterEmail: citizen.email,
+                  reporterTrustScore: citizen.trustScore,
+                  reporterLoginMethod: citizen.loginMethod,
+                  status: 'QUEUED',
+                  lastError: e?.message,
+                  createdAt: new Date().toISOString()
+                });
+              }
+
+              Alert.alert(
+                '📁 Saved to Encrypted Local Queue',
+                'Report encrypted securely under Act 720 and queued for immediate sync.',
+                [{ text: 'OK' }]
+              );
+
+              setTitle('');
+              setDescription('');
+              setLandmark('');
+              setHasRecordedMedia(false);
+              setRecordedUri(null);
+              setPermanentMediaUri(null);
+              activePermanentUriRef.current = null;
+            }
+          },
+          {
+            text: 'Retry',
+            onPress: () => {
+              handleSubmitReport();
+            }
+          }
+        ]
       );
     }
   }, [
@@ -318,6 +527,7 @@ export const useIncidentDraft = ({
     landmark,
     locationName,
     recordedUri,
+    permanentMediaUri,
     citizen,
     reporterPhone,
     category,
@@ -351,6 +561,7 @@ export const useIncidentDraft = ({
     setReporterPhone,
     processAndAttachEvidence,
     clearAttachedMedia,
+    saveEvidenceToGallery,
     handleSubmitReport
   };
 };

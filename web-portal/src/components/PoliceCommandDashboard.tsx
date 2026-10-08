@@ -559,17 +559,19 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                         <p className="text-white font-bold text-xs">Generating Secure Evidence Stream (Act 772)...</p>
                       </div>
-                    ) : !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') || videoLoadError ? (
+                    ) : !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') || (currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED' || (currentMedia as any)?.uploadStatus === 'QUEUED' || videoLoadError ? (
                       <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-2.5">
                         <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-amber-400">
                           <AlertTriangle className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="text-white font-bold text-sm">Forensic Video Feed Unavailable</p>
+                          <p className="text-white font-bold text-sm">Evidence not uploaded / upload pending</p>
                           <p className="text-slate-400 text-xs mt-0.5 max-w-sm">
-                            {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://')
+                            {(currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED'
+                              ? 'Upload failed during transmission. Evidence sealed on citizen device under Act 720 Whistleblower Vault awaiting sync.'
+                              : resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && videoLoadError
                               ? 'Media stream could not be loaded or network error occurred.'
-                              : 'Video sealed on citizen device sandbox under Act 720 Whistleblower Vault.'}
+                              : 'Evidence video is queued on citizen device or pending verification.'}
                           </p>
                         </div>
                         {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && (

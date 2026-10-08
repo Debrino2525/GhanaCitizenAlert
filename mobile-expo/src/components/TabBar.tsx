@@ -1,15 +1,16 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Keyboard } from 'react-native';
-import { Video, AlertTriangle, Radio } from 'lucide-react-native';
+import { Video, AlertTriangle, Radio, Clock } from 'lucide-react-native';
 import { TabType } from '../types';
 import { tokens } from '../theme/tokens';
 
 interface TabBarProps {
   activeTab: TabType;
   onSelectTab: (tab: TabType) => void;
+  pendingCount?: number;
 }
 
-export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) => {
+export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pendingCount = 0 }) => {
   return (
     <View style={styles.tabBar}>
       <TouchableOpacity
@@ -23,10 +24,10 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
       >
         <Video
           color={activeTab === 'CAPTURE' ? tokens.colors.text.white : tokens.colors.text.secondary}
-          size={18}
+          size={16}
         />
         <Text style={[styles.tabText, activeTab === 'CAPTURE' && styles.tabTextActive]}>
-          60s Evidence
+          Capture
         </Text>
       </TouchableOpacity>
 
@@ -41,10 +42,10 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
       >
         <AlertTriangle
           color={activeTab === 'ALERTS' ? tokens.colors.text.white : tokens.colors.text.secondary}
-          size={18}
+          size={16}
         />
         <Text style={[styles.tabText, activeTab === 'ALERTS' && styles.tabTextActive]}>
-          Amber Alerts
+          Amber
         </Text>
       </TouchableOpacity>
 
@@ -59,10 +60,35 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
       >
         <Radio
           color={activeTab === 'SOS' ? tokens.colors.text.white : tokens.colors.text.secondary}
-          size={18}
+          size={16}
         />
         <Text style={[styles.tabText, activeTab === 'SOS' && styles.tabTextActive]}>
-          SOS Panic
+          SOS
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => {
+          Keyboard.dismiss();
+          onSelectTab('QUEUE');
+        }}
+        style={[styles.tabItem, activeTab === 'QUEUE' && styles.tabItemActiveQueue]}
+        accessibilityRole="tab"
+        accessibilityLabel="Pending Uploads Queue"
+      >
+        <View style={{ position: 'relative' }}>
+          <Clock
+            color={activeTab === 'QUEUE' ? tokens.colors.text.white : tokens.colors.text.secondary}
+            size={16}
+          />
+          {pendingCount > 0 && (
+            <View style={styles.badgeDot}>
+              <Text style={styles.badgeText}>{pendingCount > 9 ? '9+' : pendingCount}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={[styles.tabText, activeTab === 'QUEUE' && styles.tabTextActive]}>
+          Queue
         </Text>
       </TouchableOpacity>
     </View>
@@ -72,9 +98,9 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: tokens.spacing.md,
+    paddingHorizontal: tokens.spacing.sm,
     paddingVertical: tokens.spacing.xs,
-    gap: tokens.spacing.sm,
+    gap: 6,
     backgroundColor: tokens.colors.bg.subtle,
     borderBottomWidth: 1,
     borderBottomColor: tokens.colors.border.subtle
@@ -84,7 +110,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: tokens.spacing.xs,
+    gap: 4,
     minHeight: tokens.touchTarget.minHeight,
     borderRadius: tokens.radius.md,
     backgroundColor: tokens.colors.surface.card,
@@ -103,6 +129,10 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.status.emergency,
     borderColor: tokens.colors.status.danger
   },
+  tabItemActiveQueue: {
+    backgroundColor: tokens.colors.brand.gold,
+    borderColor: tokens.colors.brand.gold
+  },
   tabText: {
     fontSize: tokens.typography.fontSize.xs,
     fontWeight: '700',
@@ -110,5 +140,22 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: tokens.colors.text.white
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: tokens.colors.status.danger,
+    borderRadius: 8,
+    minWidth: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold'
   }
 });

@@ -1,6 +1,6 @@
 export type LanguageCode = 'en' | 'tw' | 'ga' | 'ee' | 'ha';
 
-export type TabType = 'CAPTURE' | 'ALERTS' | 'SOS';
+export type TabType = 'CAPTURE' | 'ALERTS' | 'SOS' | 'QUEUE';
 
 export type IncidentCategory =
   | 'CRIMINAL_OFFENSE'

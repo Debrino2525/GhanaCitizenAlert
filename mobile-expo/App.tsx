@@ -44,6 +44,8 @@ import { CitizenProfileSheet } from './src/components/CitizenProfileSheet';
 import { EvidenceCaptureScreen } from './src/screens/EvidenceCaptureScreen';
 import { AmberAlertsScreen } from './src/screens/AmberAlertsScreen';
 import { SosPanicScreen } from './src/screens/SosPanicScreen';
+import { PendingReportsScreen } from './src/screens/PendingReportsScreen';
+import { getPendingReports, initAutoSyncNetworkListener } from './src/services/pendingReportsQueue';
 import { tokens } from './src/theme/tokens';
 
 function MainApp() {
@@ -72,6 +74,24 @@ function MainApp() {
   });
   const [isCitizenProfileOpen, setIsCitizenProfileOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const items = await getPendingReports();
+      setPendingCount(items.length);
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    refreshPendingCount();
+    const unsubscribe = initAutoSyncNetworkListener(() => {
+      refreshPendingCount();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [refreshPendingCount]);
 
   // GPS Location Hook
   const gps = useGpsLocation();
@@ -262,7 +282,7 @@ function MainApp() {
       </View>
 
       {/* Navigation Tabs */}
-      <TabBar activeTab={activeTab} onSelectTab={setActiveTab} />
+      <TabBar activeTab={activeTab} onSelectTab={setActiveTab} pendingCount={pendingCount} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -327,6 +347,7 @@ function MainApp() {
               onLandmarkChange={draft.setLandmark}
               onAnonymousChange={draft.setIsAnonymous}
               onReporterPhoneChange={draft.setReporterPhone}
+              onSaveToGallery={draft.saveEvidenceToGallery}
               onSubmitReport={draft.handleSubmitReport}
             />
           )}
@@ -356,6 +377,11 @@ function MainApp() {
               isAnonymous={draft.isAnonymous}
               reporterPhone={draft.reporterPhone}
             />
+          )}
+
+          {/* TAB 4: Encrypted Offline Queue */}
+          {activeTab === 'QUEUE' && (
+            <PendingReportsScreen onQueueCountChange={setPendingCount} />
           )}
         </ScrollView>
       </KeyboardAvoidingView>

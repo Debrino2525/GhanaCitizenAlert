@@ -27,7 +27,8 @@ import {
   Send,
   Lock,
   Sparkles,
-  Check
+  Check,
+  Download
 } from 'lucide-react-native';
 import { TranslationMap, LANDMARK_SUGGESTIONS } from '../constants/i18n';
 import { GpsCoordinates, GpsLockStatus, IncidentCategory } from '../types';
@@ -82,6 +83,7 @@ interface EvidenceCaptureScreenProps {
   onLandmarkChange: (text: string) => void;
   onAnonymousChange: (anon: boolean) => void;
   onReporterPhoneChange: (phone: string) => void;
+  onSaveToGallery?: () => void;
   onSubmitReport: () => void;
 }
 
@@ -135,6 +137,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
   onLandmarkChange,
   onAnonymousChange,
   onReporterPhoneChange,
+  onSaveToGallery,
   onSubmitReport
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -606,6 +609,32 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
               </View>
             )}
           </TouchableOpacity>
+
+          {/* Save a copy to device button */}
+          {hasRecordedMedia && onSaveToGallery && (
+            <TouchableOpacity
+              onPress={onSaveToGallery}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: tokens.spacing.xs,
+                backgroundColor: tokens.colors.surface.card,
+                borderWidth: 1,
+                borderColor: tokens.colors.border.subtle,
+                paddingVertical: 12,
+                borderRadius: tokens.radius.md,
+                marginTop: tokens.spacing.xs
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Save a copy to my device"
+            >
+              <Download color={tokens.colors.brand.gold} size={16} />
+              <Text style={{ color: tokens.colors.text.white, fontSize: tokens.typography.fontSize.xs, fontWeight: '700' }}>
+                Save a Copy to My Device Gallery
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Step 3 Back Button */}
           <TouchableOpacity

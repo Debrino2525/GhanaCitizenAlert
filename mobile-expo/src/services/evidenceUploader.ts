@@ -7,137 +7,233 @@ export interface UploadEvidenceOptions {
   fileUri: string;
   fileName: string;
   mimeType: string;
+  expectedFileSize?: number;
   onProgress?: (progressRatio: number, statusText: string) => void;
 }
 
 export interface UploadEvidenceResult {
   success: boolean;
   publicUrl: string;
+  statusCode?: number;
   error?: string;
+  verifiedSize?: number;
+}
+
+/**
+ * Verifies that the uploaded file exists at the public storage URL and its Content-Length
+ * matches the local recorded file size.
+ */
+async function verifyRemoteStorageFile(
+  publicUrl: string,
+  localFileSize?: number
+): Promise<{ verified: boolean; statusCode: number; remoteSize?: number; error?: string }> {
+  try {
+    const headRes = await fetch(publicUrl, { method: 'HEAD' });
+    const statusCode = headRes.status;
+
+    if (!headRes.ok) {
+      return {
+        verified: false,
+        statusCode,
+        error: `Remote storage HEAD verification returned HTTP ${statusCode}`
+      };
+    }
+
+    const contentLengthHeader = headRes.headers.get('content-length');
+    const remoteSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : undefined;
+
+    if (localFileSize && remoteSize !== undefined) {
+      // Allow minor variation only if compression/chunked, but Supabase S3 gives exact byte size
+      const isSizeMatch = Math.abs(remoteSize - localFileSize) <= 128;
+      if (!isSizeMatch && remoteSize !== localFileSize) {
+        return {
+          verified: false,
+          statusCode,
+          remoteSize,
+          error: `Size mismatch: local is ${localFileSize} bytes, remote is ${remoteSize} bytes`
+        };
+      }
+    }
+
+    return {
+      verified: true,
+      statusCode,
+      remoteSize
+    };
+  } catch (err: any) {
+    return {
+      verified: false,
+      statusCode: 0,
+      error: `Verification network error: ${err.message || String(err)}`
+    };
+  }
 }
 
 /**
  * High-performance disk-streaming evidence uploader.
- * Streams HD video and photo binary directly from disk to Supabase storage without loading
- * large files into JavaScript heap memory, avoiding Out-of-Memory crashes on entry/mid-tier devices.
+ * Uploads evidence directly to Supabase storage without upsert (insert-only policy compliant).
+ * Performs post-upload HEAD verification to ensure binary integrity on the National Evidence Vault.
  */
 export async function uploadEvidenceStreaming({
   fileUri,
   fileName,
   mimeType,
+  expectedFileSize,
   onProgress
 }: UploadEvidenceOptions): Promise<UploadEvidenceResult> {
   const publicStorageUrl = supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl;
 
   try {
-    // 1. Retrieve current auth token if available (or fallback to anon key)
+    // 1. Get exact local file size if not provided
+    let localFileSize = expectedFileSize;
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (fileInfo.exists && typeof fileInfo.size === 'number') {
+        localFileSize = fileInfo.size;
+      }
+    } catch (sizeErr) {
+      console.warn('Could not inspect local file size before upload:', sizeErr);
+    }
+
+    // 2. Retrieve current auth token if available (or fallback to anon key)
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token || supabaseAnonKey;
 
     const endpointUrl = `${supabaseUrl}/storage/v1/object/evidence/${encodeURIComponent(fileName)}`;
 
-    const headers = {
+    const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       apikey: supabaseAnonKey,
-      'Content-Type': mimeType,
-      'x-upsert': 'true'
+      'Content-Type': mimeType
+      // Note: No x-upsert header to strictly comply with insert-only RLS policy
     };
 
-    onProgress?.(0.5, 'Streaming binary directly from storage sandbox...');
+    onProgress?.(0.1, 'Securing direct channel to Evidence Vault...');
 
     if (Platform.OS !== 'web') {
-      // Native iOS & Android: Direct zero-copy disk-streaming upload via NSURLSession / OkHttpClient
-      let uploadResult = await FileSystem.uploadAsync(endpointUrl, fileUri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-        headers
-      });
+      // Native iOS & Android: createUploadTask with real-time byte progress reporting
+      let uploadStatus = 0;
+      let uploadBody = '';
 
-      console.log('Native FileSystem upload response:', uploadResult.status, uploadResult.body);
-
-      if (uploadResult.status >= 200 && uploadResult.status < 300) {
-        onProgress?.(0.85, 'Cryptographic checksum locked in Vault...');
-        return {
-          success: true,
-          publicUrl: publicStorageUrl
-        };
-      }
-
-      // Retry once on failure with backoff
-      onProgress?.(0.6, 'Retrying streaming upload to Evidence Vault...');
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
-      uploadResult = await FileSystem.uploadAsync(endpointUrl, fileUri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-        headers
-      });
-
-      console.log('Native FileSystem retry response:', uploadResult.status, uploadResult.body);
-
-      if (uploadResult.status >= 200 && uploadResult.status < 300) {
-        onProgress?.(0.85, 'Cryptographic checksum locked in Vault...');
-        return {
-          success: true,
-          publicUrl: publicStorageUrl
-        };
-      }
-
-      // Final fallback: standard Supabase SDK binary upload
       try {
-        const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.Base64
+        const uploadTask = FileSystem.createUploadTask(
+          endpointUrl,
+          fileUri,
+          {
+            httpMethod: 'POST',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers
+          },
+          (progressData) => {
+            if (progressData.totalBytesExpectedToSend > 0) {
+              const ratio = progressData.totalBytesSent / progressData.totalBytesExpectedToSend;
+              // Map byte progress from 10% to 85%
+              const progressPct = 0.1 + Math.min(0.75, Math.max(0, ratio * 0.75));
+              const mbSent = (progressData.totalBytesSent / (1024 * 1024)).toFixed(1);
+              const mbTotal = (progressData.totalBytesExpectedToSend / (1024 * 1024)).toFixed(1);
+              onProgress?.(progressPct, `Streaming evidence to Vault (${mbSent}/${mbTotal} MB)...`);
+            }
+          }
+        );
+
+        const res = await uploadTask.uploadAsync();
+        if (res) {
+          uploadStatus = res.status;
+          uploadBody = res.body || '';
+        }
+      } catch (taskErr: any) {
+        console.warn('createUploadTask error, falling back to uploadAsync:', taskErr);
+        // Fallback to uploadAsync if uploadTask fails to instantiate
+        const res = await FileSystem.uploadAsync(endpointUrl, fileUri, {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+          headers
         });
-        const binaryArrayBuffer = decode(base64Data);
+        uploadStatus = res.status;
+        uploadBody = res.body || '';
+      }
 
-        const { data, error } = await supabase.storage
-          .from('evidence')
-          .upload(fileName, binaryArrayBuffer, {
-            contentType: mimeType,
-            upsert: true
-          });
+      console.log('Native FileSystem upload response:', uploadStatus, uploadBody);
 
-        if (!error && data) {
-          onProgress?.(0.85, 'Evidence sealed in National Vault...');
+      // Handle 409 Conflict ("already exists")
+      if (uploadStatus === 409) {
+        onProgress?.(0.88, 'Object exists in Vault. Verifying integrity...');
+        const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
+        if (verifyRes.verified) {
+          onProgress?.(1.0, 'Integrity confirmed. Evidence sealed.');
           return {
             success: true,
-            publicUrl: publicStorageUrl
+            publicUrl: publicStorageUrl,
+            statusCode: 200,
+            verifiedSize: verifyRes.remoteSize
           };
         }
-      } catch (fallbackErr) {
-        console.warn('Fallback upload error:', fallbackErr);
       }
 
+      // Handle 200-299 Success
+      if (uploadStatus >= 200 && uploadStatus < 300) {
+        onProgress?.(0.9, 'Verifying forensic byte integrity on Evidence Vault...');
+        const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
+
+        if (verifyRes.verified) {
+          onProgress?.(1.0, 'Evidence verified and locked in National Vault.');
+          return {
+            success: true,
+            publicUrl: publicStorageUrl,
+            statusCode: uploadStatus,
+            verifiedSize: verifyRes.remoteSize
+          };
+        } else {
+          return {
+            success: false,
+            publicUrl: '',
+            statusCode: verifyRes.statusCode || 422,
+            error: verifyRes.error || 'Remote evidence verification failed after upload'
+          };
+        }
+      }
+
+      // If status indicates failure, return exact HTTP status and error body
       return {
         success: false,
         publicUrl: '',
-        error: `Upload returned HTTP ${uploadResult.status}: ${uploadResult.body}`
+        statusCode: uploadStatus,
+        error: `Storage upload failed (HTTP ${uploadStatus}): ${uploadBody || 'Unknown storage error'}`
       };
     } else {
-      // Web fallback
+      // Web fallback: Supabase JS upload without upsert
+      onProgress?.(0.3, 'Reading evidence buffer for web transmission...');
       const base64Data = await FileSystem.readAsStringAsync(fileUri, {
         encoding: FileSystem.EncodingType.Base64
       });
       const binaryArrayBuffer = decode(base64Data);
 
+      onProgress?.(0.6, 'Transmitting evidence to National Vault...');
       const { data, error } = await supabase.storage
         .from('evidence')
         .upload(fileName, binaryArrayBuffer, {
           contentType: mimeType,
-          upsert: true
+          upsert: false
         });
 
       if (!error && data) {
-        onProgress?.(0.85, 'Evidence sealed in National Vault...');
-        return {
-          success: true,
-          publicUrl: publicStorageUrl
-        };
+        onProgress?.(0.9, 'Verifying forensic integrity...');
+        const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
+        if (verifyRes.verified) {
+          onProgress?.(1.0, 'Evidence sealed in National Vault.');
+          return {
+            success: true,
+            publicUrl: publicStorageUrl,
+            statusCode: 200,
+            verifiedSize: verifyRes.remoteSize
+          };
+        }
       }
 
       return {
         success: false,
         publicUrl: '',
+        statusCode: (error as any)?.status || 400,
         error: error?.message || 'Web upload failed'
       };
     }
@@ -145,7 +241,8 @@ export async function uploadEvidenceStreaming({
     return {
       success: false,
       publicUrl: '',
-      error: err?.message || 'Streaming upload failed'
+      statusCode: 500,
+      error: err?.message || 'Streaming upload failed due to network or client error'
     };
   }
 }
@@ -162,7 +259,6 @@ export async function cleanupCachedEvidence(fileUri: string | null): Promise<voi
       await FileSystem.deleteAsync(fileUri, { idempotent: true });
     }
   } catch (err) {
-    // Non-fatal cache cleanup failure
     console.warn('Failed to delete temporary evidence cache:', err);
   }
 }
