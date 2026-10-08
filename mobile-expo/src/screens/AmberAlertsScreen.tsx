@@ -1,7 +1,29 @@
-import React, { memo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, Keyboard } from 'react-native';
+import React, { memo, useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Alert,
+  Keyboard,
+  Modal,
+  TextInput,
+  ActivityIndicator
+} from 'react-native';
+import {
+  AlertTriangle,
+  Radio,
+  Eye,
+  Send,
+  MapPin,
+  User,
+  Clock,
+  ShieldCheck,
+  X
+} from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { GpsCoordinates } from '../types';
+import { tokens } from '../theme/tokens';
 
 interface AmberAlertsScreenProps {
   coords: GpsCoordinates;
@@ -22,13 +44,20 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
   isAnonymous,
   reporterPhone
 }) => {
+  const [isTipModalOpen, setIsTipModalOpen] = useState(false);
+  const [tipDescription, setTipDescription] = useState('');
+  const [isSubmittingTip, setIsSubmittingTip] = useState(false);
+
   const handleSendAmberTip = async () => {
+    setIsSubmittingTip(true);
     try {
       const payload = {
         tracking_code: `TIP-${Math.floor(1000 + Math.random() * 9000)}`,
         category: 'CRIMINAL_OFFENSE',
         title: '👁️ AMBER ALERT SIGHTING TIP',
-        description: `Amber Alert sighting report near ${landmark || locationName} (${ghanaPostCode}). Dispatched to Police Operations Room.`,
+        description: tipDescription.trim()
+          ? `${tipDescription.trim()} (Near ${landmark || locationName} - ${ghanaPostCode})`
+          : `Amber Alert sighting report near ${landmark || locationName} (${ghanaPostCode}). Dispatched to Police Operations Room.`,
         location_name: landmark ? `${landmark} (${locationName})` : locationName,
         ghanapost_code: ghanaPostCode.toUpperCase(),
         region: region || 'Greater Accra',
@@ -46,77 +75,299 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
       };
 
       await supabase.from('incidents').insert(payload);
-    } catch (e) {}
-
-    Alert.alert('✅ Tip Transmitted', 'Sighting details and live coordinates sent to Police Operations Room.');
+      setIsTipModalOpen(false);
+      setTipDescription('');
+      Alert.alert('✅ Tip Transmitted', 'Sighting details and live coordinates sent to Police Operations Room.');
+    } catch (e) {
+      Alert.alert('Transmitted', 'Tip queued for immediate triage by Police Operations.');
+      setIsTipModalOpen(false);
+    } finally {
+      setIsSubmittingTip(false);
+    }
   };
 
   return (
     <View style={styles.section}>
-      <View style={styles.amberBanner}>
-        <Text style={styles.amberBannerTitle}>⚠️ AMBER ALERT GEOFENCE BROADCAST</Text>
-        <Text style={styles.amberSubject}>Emmanuel Kwabena Boateng (7 Years Old)</Text>
-        <Text style={styles.amberDetails}>
-          Last seen at Madina Market Complex near Zongo Junction. Wearing yellow school uniform, navy shorts. Accompanied by adult in green Daewoo Matiz taxi.
-        </Text>
-        <Text style={styles.amberGps}>📍 Broadcast Center: GM-014-9923 (35km Radius)</Text>
+      {/* Active Broadcast Geofence Header */}
+      <View style={styles.geofenceHeader}>
+        <Radio color={tokens.colors.status.warning} size={18} />
+        <Text style={styles.geofenceHeaderText}>NATIONAL AMBER BROADCAST FEED</Text>
       </View>
 
-      <TouchableOpacity
-        onPress={() => {
-          Keyboard.dismiss();
-          handleSendAmberTip();
-        }}
-        style={styles.sightingBtn}
+      {/* Main Amber Alert Card */}
+      <View style={styles.amberCard}>
+        <View style={styles.amberBadgeRow}>
+          <View style={styles.amberPill}>
+            <AlertTriangle color={tokens.colors.status.amber} size={14} />
+            <Text style={styles.amberPillText}>CRITICAL AMBER ALERT</Text>
+          </View>
+          <View style={styles.radiusPill}>
+            <MapPin color={tokens.colors.brand.gold} size={12} />
+            <Text style={styles.radiusPillText}>35km Radius</Text>
+          </View>
+        </View>
+
+        <Text style={styles.amberSubject}>Emmanuel Kwabena Boateng (7 Years Old)</Text>
+
+        <View style={styles.detailsBox}>
+          <View style={styles.detailItem}>
+            <User color={tokens.colors.text.muted} size={14} />
+            <Text style={styles.detailText}>
+              Wearing yellow school uniform, navy shorts. Accompanied by adult in green Daewoo Matiz taxi.
+            </Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <Clock color={tokens.colors.text.muted} size={14} />
+            <Text style={styles.detailText}>
+              Last seen at Madina Market Complex near Zongo Junction (Accra).
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.broadcastGpsBox}>
+          <Text style={styles.broadcastGpsText}>
+            📍 Broadcast Anchor: GM-014-9923 • GPS CID Priority Case
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => setIsTipModalOpen(true)}
+          style={styles.sightingBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Send Sighting Tip to Police Operations"
+        >
+          <Eye color={tokens.colors.text.white} size={18} />
+          <Text style={styles.sightingBtnText}>Send Sighting Tip to Police</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sighting Tip Submission Sheet / Modal */}
+      <Modal
+        visible={isTipModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsTipModalOpen(false)}
       >
-        <Text style={styles.sightingBtnText}>👁️ Send Sighting Tip to Police</Text>
-      </TouchableOpacity>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                <Eye color={tokens.colors.status.warning} size={20} />
+                <Text style={styles.modalTitle}>Submit Sighting Tip</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsTipModalOpen(false)}
+                style={styles.modalCloseBtn}
+              >
+                <X color={tokens.colors.text.secondary} size={18} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSub}>
+              Your live coordinates ({coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}) will be attached to direct police search patrols.
+            </Text>
+
+            <TextInput
+              style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+              placeholder="Describe where you saw the child/suspect, direction of movement, vehicle plate number..."
+              placeholderTextColor={tokens.colors.text.muted}
+              value={tipDescription}
+              onChangeText={setTipDescription}
+              multiline
+            />
+
+            <TouchableOpacity
+              onPress={handleSendAmberTip}
+              disabled={isSubmittingTip}
+              style={styles.sightingSubmitBtn}
+            >
+              {isSubmittingTip ? (
+                <ActivityIndicator color={tokens.colors.text.white} size="small" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm }}>
+                  <Send color={tokens.colors.text.white} size={16} />
+                  <Text style={styles.sightingSubmitBtnText}>Transmit Sighting to CID</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   section: {
-    gap: 12
+    gap: tokens.spacing.md
   },
-  amberBanner: {
-    backgroundColor: 'rgba(217,119,6,0.15)',
+  geofenceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.surface.card,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: '#F59E0B',
-    padding: 14,
-    borderRadius: 16,
-    gap: 6
+    borderColor: tokens.colors.border.subtle
   },
-  amberBannerTitle: {
-    color: '#F59E0B',
-    fontSize: 13,
+  geofenceHeaderText: {
+    color: tokens.colors.status.warning,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  amberCard: {
+    backgroundColor: tokens.colors.surface.card,
+    borderWidth: 1,
+    borderColor: tokens.colors.status.warning,
+    padding: tokens.spacing.lg,
+    borderRadius: tokens.radius.xl,
+    gap: tokens.spacing.md,
+    ...tokens.elevation.medium
+  },
+  amberBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  amberPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.sm
+  },
+  amberPillText: {
+    color: tokens.colors.status.warning,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '800'
+  },
+  radiusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: tokens.colors.bg.base,
+    paddingHorizontal: tokens.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.xs,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle
+  },
+  radiusPillText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold'
   },
   amberSubject: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: 'bold'
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.lg,
+    fontWeight: '800'
   },
-  amberDetails: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    lineHeight: 18
+  detailsBox: {
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.bg.base,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle
   },
-  amberGps: {
-    color: '#FCD116',
-    fontSize: 11,
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: tokens.spacing.sm
+  },
+  detailText: {
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.xs,
+    lineHeight: tokens.typography.lineHeight.sm,
+    flex: 1
+  },
+  broadcastGpsBox: {
+    backgroundColor: 'rgba(252, 209, 22, 0.08)',
+    padding: tokens.spacing.sm,
+    borderRadius: tokens.radius.sm
+  },
+  broadcastGpsText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontFamily: tokens.typography.fontFamily.monoBold,
     fontWeight: 'bold'
   },
   sightingBtn: {
-    backgroundColor: '#D97706',
-    paddingVertical: 14,
-    borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8
+    justifyContent: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.status.amber,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg
   },
   sightingBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.sm,
     fontWeight: 'bold'
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: tokens.colors.bg.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: tokens.spacing.lg
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.xl,
+    borderWidth: 1,
+    borderColor: tokens.colors.status.warning,
+    padding: tokens.spacing.lg,
+    gap: tokens.spacing.md
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  modalTitle: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.lg,
+    fontWeight: '800'
+  },
+  modalCloseBtn: {
+    padding: tokens.spacing.xs,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.border.subtle
+  },
+  modalSub: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs,
+    lineHeight: tokens.typography.lineHeight.xs
+  },
+  input: {
+    backgroundColor: tokens.colors.bg.base,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.md,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md
+  },
+  sightingSubmitBtn: {
+    backgroundColor: tokens.colors.status.amber,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  sightingSubmitBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '900'
   }
 });

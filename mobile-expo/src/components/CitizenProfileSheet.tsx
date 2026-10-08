@@ -1,8 +1,20 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert } from 'react-native';
+import {
+  ShieldCheck,
+  Mail,
+  Phone,
+  CreditCard,
+  Lock,
+  LogOut,
+  X,
+  Award,
+  ShieldAlert
+} from 'lucide-react-native';
 import { CitizenUser } from './CitizenAccessWall';
 import { supabase } from '../lib/supabase';
 import { GoogleSignin } from '../lib/googleAuth';
+import { tokens } from '../theme/tokens';
 
 interface CitizenProfileSheetProps {
   isOpen: boolean;
@@ -57,49 +69,80 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ fontSize: 24 }}>🇬🇭</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm }}>
+              <View style={styles.shieldIconWrapper}>
+                <ShieldCheck color={tokens.colors.brand.gold} size={20} />
+              </View>
               <View>
                 <Text style={styles.modalTitle}>Citizen Profile & Trust Vault</Text>
                 <Text style={styles.modalSubtitle}>Active Verified Citizen Session</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
-              <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: 'bold' }}>✕</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.modalCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Close Citizen Profile"
+            >
+              <X color={tokens.colors.text.secondary} size={18} />
             </TouchableOpacity>
           </View>
 
-          {/* Profile Overview Card */}
-          <View style={styles.profileOverview}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '800' }}>
-                {citizen.name}
-              </Text>
-              <View style={{ backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                <Text style={{ color: '#070B13', fontSize: 10, fontWeight: '900' }}>
-                  {citizen.trustScore}/100 TRUST
-                </Text>
+          {/* Trust Score Meter Card */}
+          <View style={styles.trustScoreCard}>
+            <View style={styles.trustScoreHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                <Award color={tokens.colors.brand.gold} size={18} />
+                <Text style={styles.trustScoreLabel}>CIVIC TRUST RATING</Text>
+              </View>
+              <View style={styles.trustPill}>
+                <Text style={styles.trustPillText}>{citizen.trustScore}/100 TRUST</Text>
               </View>
             </View>
 
-            <Text style={{ color: '#94a3b8', fontSize: 12 }}>
-              📧 {citizen.email}
+            <View style={styles.trustBarTrack}>
+              <View style={[styles.trustBarFill, { width: `${citizen.trustScore}%` }]} />
+            </View>
+            <Text style={styles.trustExplainer}>
+              Higher trust ratings provide expedited investigation priority with Ghana Police CID.
             </Text>
+          </View>
+
+          {/* Profile Details List */}
+          <View style={styles.profileOverview}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailName}>{citizen.name}</Text>
+              {citizen.isVerified && (
+                <View style={styles.verifiedBadge}>
+                  <ShieldCheck color={tokens.colors.status.success} size={12} />
+                  <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.infoRow}>
+              <Mail color={tokens.colors.text.muted} size={14} />
+              <Text style={styles.infoText}>{citizen.email}</Text>
+            </View>
 
             {citizen.phone ? (
-              <Text style={{ color: '#94a3b8', fontSize: 12 }}>
-                📞 {citizen.phone}
-              </Text>
+              <View style={styles.infoRow}>
+                <Phone color={tokens.colors.text.muted} size={14} />
+                <Text style={styles.infoText}>{citizen.phone}</Text>
+              </View>
             ) : null}
 
             {citizen.ghanaCard ? (
-              <Text style={{ color: '#FCD116', fontSize: 11, fontWeight: 'bold' }}>
-                🇬🇭 Ghana Card: {citizen.ghanaCard} (Verified)
-              </Text>
+              <View style={styles.infoRow}>
+                <CreditCard color={tokens.colors.brand.gold} size={14} />
+                <Text style={[styles.infoText, { color: tokens.colors.brand.gold, fontWeight: 'bold' }]}>
+                  Ghana Card: {citizen.ghanaCard}
+                </Text>
+              </View>
             ) : null}
 
-            <Text style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>
-              Auth Provider: {citizen.loginMethod} • Act 720 Whistleblower Protected
+            <Text style={styles.authProviderText}>
+              Auth: {citizen.loginMethod} • Whistleblower Act 720 Immunity Active
             </Text>
           </View>
 
@@ -115,18 +158,20 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
                   : 'Transmissions will include your verified contact details for expedited police follow-up.'
               );
             }}
-            style={{
-              backgroundColor: isAnonymous ? '#006B3F' : '#1E293B',
-              borderWidth: 1,
-              borderColor: isAnonymous ? '#10B981' : '#334155',
-              paddingVertical: 12,
-              borderRadius: 12,
-              alignItems: 'center',
-              marginTop: 4
-            }}
+            style={[
+              styles.whistleblowerToggleBtn,
+              isAnonymous ? styles.whistleblowerActive : styles.whistleblowerInactive
+            ]}
+            accessibilityRole="switch"
+            accessibilityLabel="Toggle Whistleblower Mode"
           >
-            <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>
-              {isAnonymous ? '🛡️ Anonymous Whistleblower: ACTIVE' : '🛡️ Enable Anonymous Whistleblower Mode'}
+            {isAnonymous ? (
+              <ShieldAlert color={tokens.colors.text.white} size={16} />
+            ) : (
+              <ShieldCheck color={tokens.colors.text.secondary} size={16} />
+            )}
+            <Text style={styles.whistleblowerBtnText}>
+              {isAnonymous ? 'Anonymous Whistleblower: ACTIVE' : 'Enable Anonymous Whistleblower Mode'}
             </Text>
           </TouchableOpacity>
 
@@ -136,19 +181,15 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Sign Out & Lock App */}
+          {/* Sign Out Button */}
           <TouchableOpacity
             onPress={handleSignOutPress}
-            style={{
-              backgroundColor: '#DC2626',
-              paddingVertical: 12,
-              borderRadius: 12,
-              alignItems: 'center'
-            }}
+            style={styles.signOutBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Sign Out and Lock App"
           >
-            <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>
-              🔒 Sign Out & Lock App
-            </Text>
+            <LogOut color={tokens.colors.text.white} size={16} />
+            <Text style={styles.signOutBtnText}>Sign Out & Lock App</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -159,64 +200,199 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: tokens.colors.bg.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20
+    padding: tokens.spacing.lg
   },
   modalCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.xl,
     borderWidth: 1,
-    borderColor: '#334155',
-    padding: 20,
-    gap: 12
+    borderColor: tokens.colors.border.medium,
+    padding: tokens.spacing.lg,
+    gap: tokens.spacing.md
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  shieldIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.bg.base,
     alignItems: 'center',
-    marginBottom: 4
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: tokens.colors.brand.gold
   },
   modalTitle: {
-    color: '#ffffff',
-    fontSize: 16,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.lg,
     fontWeight: '800'
   },
   modalSubtitle: {
-    color: '#94a3b8',
-    fontSize: 11
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs
   },
   modalCloseBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#1E293B'
+    padding: tokens.spacing.xs,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.border.subtle,
+    minHeight: 36,
+    minWidth: 36,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  trustScoreCard: {
+    backgroundColor: tokens.colors.bg.base,
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    gap: tokens.spacing.xs
+  },
+  trustScoreHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  trustScoreLabel: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: 'bold',
+    letterSpacing: 0.5
+  },
+  trustPill: {
+    backgroundColor: tokens.colors.status.success,
+    paddingHorizontal: tokens.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.xs
+  },
+  trustPillText: {
+    color: tokens.colors.bg.base,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '900'
+  },
+  trustBarTrack: {
+    height: 6,
+    backgroundColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.xs,
+    overflow: 'hidden',
+    marginTop: tokens.spacing.xs
+  },
+  trustBarFill: {
+    height: '100%',
+    backgroundColor: tokens.colors.status.success,
+    borderRadius: tokens.radius.xs
+  },
+  trustExplainer: {
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
+    lineHeight: tokens.typography.lineHeight.xxs,
+    marginTop: 2
   },
   profileOverview: {
-    backgroundColor: '#070B13',
-    padding: 14,
-    borderRadius: 14,
+    backgroundColor: tokens.colors.bg.base,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: '#1E293B',
-    gap: 6
+    borderColor: tokens.colors.border.subtle,
+    gap: tokens.spacing.xs
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: tokens.spacing.xxs
+  },
+  detailName: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.lg,
+    fontWeight: '800'
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: tokens.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.xs
+  },
+  verifiedText: {
+    color: tokens.colors.status.success,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: 'bold'
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs
+  },
+  infoText: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs
+  },
+  authProviderText: {
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
+    marginTop: tokens.spacing.xs
+  },
+  whistleblowerToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.sm,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1
+  },
+  whistleblowerActive: {
+    backgroundColor: tokens.colors.brand.green,
+    borderColor: tokens.colors.status.success
+  },
+  whistleblowerInactive: {
+    backgroundColor: tokens.colors.border.subtle,
+    borderColor: tokens.colors.border.medium
+  },
+  whistleblowerBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: 'bold'
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginVertical: 4
+    gap: tokens.spacing.sm
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#334155'
+    backgroundColor: tokens.colors.border.medium
   },
   dividerText: {
-    color: '#64748b',
-    fontSize: 10,
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold',
     letterSpacing: 0.5
+  },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.status.emergency,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg
+  },
+  signOutBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: 'bold'
   }
 });

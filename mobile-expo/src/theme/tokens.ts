@@ -4,14 +4,16 @@ export const tokens = {
       base: '#070B13',
       subtle: '#0B1120',
       surface: '#0F172A',
-      overlay: 'rgba(7, 11, 19, 0.85)',
-      glass: 'rgba(15, 23, 42, 0.75)'
+      overlay: 'rgba(7, 11, 19, 0.88)',
+      glass: 'rgba(15, 23, 42, 0.75)',
+      glassLight: 'rgba(30, 41, 59, 0.65)'
     },
     surface: {
       card: '#0F172A',
       cardHover: '#1E293B',
       cardSubtle: '#0B1E38',
-      modal: '#0F172A'
+      modal: '#0F172A',
+      input: '#070B13'
     },
     border: {
       subtle: '#1E293B',
@@ -20,7 +22,8 @@ export const tokens = {
       glass: 'rgba(255, 255, 255, 0.08)',
       gold: '#FCD116',
       police: '#3B82F6',
-      emergency: '#EF4444'
+      emergency: '#EF4444',
+      success: '#10B981'
     },
     text: {
       primary: '#E2E8F0',
@@ -36,6 +39,7 @@ export const tokens = {
     brand: {
       gold: '#FCD116',
       goldHover: '#E5BD10',
+      goldMuted: 'rgba(252, 209, 22, 0.15)',
       red: '#CE1126',
       green: '#006B3F',
       greenLight: '#6EE7B7',
@@ -45,7 +49,8 @@ export const tokens = {
       primary: '#2563EB',
       accent: '#3B82F6',
       dark: '#1E3A8A',
-      badge: '#60A5FA'
+      badge: '#60A5FA',
+      glow: 'rgba(59, 130, 246, 0.3)'
     },
     status: {
       success: '#10B981',
@@ -59,28 +64,26 @@ export const tokens = {
   },
   typography: {
     fontFamily: {
-      sans: 'System',
-      mono: 'monospace'
+      sans: 'PlusJakartaSans_600SemiBold',
+      sansBold: 'PlusJakartaSans_800ExtraBold',
+      sansRegular: 'PlusJakartaSans_400Regular',
+      sansMedium: 'PlusJakartaSans_500Medium',
+      mono: 'JetBrainsMono_400Regular',
+      monoBold: 'JetBrainsMono_700Bold'
     },
     fontSize: {
-      xs: 10,
+      xxs: 10,
+      xs: 11,
       sm: 12,
       md: 14,
       lg: 16,
       xl: 20,
       xxl: 28
     },
-    fontWeight: {
-      regular: '400' as const,
-      medium: '500' as const,
-      semibold: '600' as const,
-      bold: '700' as const,
-      heavy: '800' as const,
-      black: '900' as const
-    },
     lineHeight: {
-      xs: 14,
-      sm: 16,
+      xxs: 14,
+      xs: 16,
+      sm: 18,
       md: 20,
       lg: 24,
       xl: 28,
@@ -88,6 +91,7 @@ export const tokens = {
     }
   },
   spacing: {
+    xxs: 2,
     xs: 4,
     sm: 8,
     md: 12,
@@ -97,7 +101,8 @@ export const tokens = {
     xxxl: 32
   },
   radius: {
-    sm: 6,
+    xs: 4,
+    sm: 8,
     md: 10,
     lg: 14,
     xl: 20,

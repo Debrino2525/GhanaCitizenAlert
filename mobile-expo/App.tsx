@@ -8,9 +8,30 @@ import {
   StatusBar,
   RefreshControl,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_800ExtraBold
+} from '@expo-google-fonts/plus-jakarta-sans';
+import {
+  JetBrainsMono_400Regular,
+  JetBrainsMono_700Bold
+} from '@expo-google-fonts/jetbrains-mono';
+import {
+  Shield,
+  ShieldCheck,
+  Globe,
+  Radio,
+  UserCheck,
+  Lock,
+  ChevronDown
+} from 'lucide-react-native';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
 import { supabase } from './src/lib/supabase';
 import { GHANAIAN_LANGUAGES } from './src/constants/i18n';
@@ -23,8 +44,18 @@ import { CitizenProfileSheet } from './src/components/CitizenProfileSheet';
 import { EvidenceCaptureScreen } from './src/screens/EvidenceCaptureScreen';
 import { AmberAlertsScreen } from './src/screens/AmberAlertsScreen';
 import { SosPanicScreen } from './src/screens/SosPanicScreen';
+import { tokens } from './src/theme/tokens';
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_800ExtraBold,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_700Bold
+  });
+
   const [lang, setLang] = useState<LanguageCode>('en');
   const [activeTab, setActiveTab] = useState<TabType>('CAPTURE');
 
@@ -133,6 +164,14 @@ export default function App() {
 
   const t = GHANAIAN_LANGUAGES[lang] || GHANAIAN_LANGUAGES.en;
 
+  if (!fontsLoaded) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={tokens.colors.brand.gold} size="large" />
+      </View>
+    );
+  }
+
   // ACCESS CONTROL GATEKEEPER: Render full-screen wall until citizen authenticates
   if (!isAuthenticated) {
     return <CitizenAccessWall onAuthenticated={handleAuthenticated} />;
@@ -140,22 +179,25 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#070B13" />
+      <StatusBar barStyle="light-content" backgroundColor={tokens.colors.bg.base} />
 
       {/* Ghana Flag Header Accent */}
       <View style={styles.flagHeader}>
-        <View style={{ flex: 1, backgroundColor: '#CE1126' }} />
-        <View style={{ flex: 1, backgroundColor: '#FCD116' }} />
-        <View style={{ flex: 1, backgroundColor: '#006B3F' }} />
+        <View style={{ flex: 1, backgroundColor: tokens.colors.brand.red }} />
+        <View style={{ flex: 1, backgroundColor: tokens.colors.brand.gold }} />
+        <View style={{ flex: 1, backgroundColor: tokens.colors.brand.green }} />
       </View>
 
-      {/* Top Bar */}
+      {/* Top Header Bar */}
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.appTitle}>
-            CITIZEN<Text style={{ color: '#FCD116' }}>ALERT</Text> 🇬🇭
-          </Text>
-          <Text style={styles.appSubtitle}>National Civic Safety & Evidence Vault</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+          <ShieldCheck color={tokens.colors.brand.gold} size={22} />
+          <View>
+            <Text style={styles.appTitle}>
+              CITIZEN<Text style={{ color: tokens.colors.brand.gold }}>ALERT</Text>
+            </Text>
+            <Text style={styles.appSubtitle}>National Evidence Vault 🇬🇭</Text>
+          </View>
         </View>
 
         {/* Language Selector */}
@@ -165,6 +207,8 @@ export default function App() {
               key={l}
               onPress={() => setLang(l)}
               style={[styles.langBtn, lang === l && styles.langBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel={`Select language ${l.toUpperCase()}`}
             >
               <Text style={[styles.langBtnText, lang === l && styles.langBtnTextActive]}>
                 {l.toUpperCase()}
@@ -174,17 +218,21 @@ export default function App() {
         </View>
       </View>
 
-      {/* Citizen Identity & Access Control Bar */}
+      {/* Citizen Identity Bar */}
       <View style={styles.citizenProfileBar}>
         <TouchableOpacity
           onPress={() => setIsCitizenProfileOpen(true)}
           style={styles.citizenBadgePill}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Open Citizen Profile"
         >
           <View style={styles.citizenAvatar}>
-            <Text style={{ fontSize: 13 }}>
-              {citizen.loginMethod === 'ANONYMOUS' ? '🛡️' : '🇬🇭'}
-            </Text>
+            {citizen.loginMethod === 'ANONYMOUS' ? (
+              <Shield color={tokens.colors.brand.gold} size={16} />
+            ) : (
+              <UserCheck color={tokens.colors.police.badge} size={16} />
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -192,7 +240,7 @@ export default function App() {
                 {citizen.loginMethod === 'ANONYMOUS' ? 'Anonymous Whistleblower' : citizen.name}
               </Text>
               {citizen.isVerified && (
-                <Text style={{ color: '#10B981', fontSize: 11, fontWeight: 'bold' }}>✓</Text>
+                <ShieldCheck color={tokens.colors.status.success} size={12} />
               )}
             </View>
             <Text style={styles.citizenMetaText}>
@@ -200,13 +248,14 @@ export default function App() {
                 ? `Google Verified • ${citizen.trustScore}% Trust`
                 : citizen.loginMethod === 'PHONE'
                 ? `Phone Verified • ${citizen.trustScore}% Trust`
-                : 'Whistleblower Act 720 Active'}
+                : 'Whistleblower Act 720 Immunity Active'}
             </Text>
           </View>
           <View style={styles.citizenAuthBtn}>
             <Text style={styles.citizenAuthBtnText}>
-              {citizen.loginMethod === 'ANONYMOUS' ? 'Sign In' : 'Account'}
+              {citizen.loginMethod === 'ANONYMOUS' ? 'Sign In' : 'Profile'}
             </Text>
+            <ChevronDown color={tokens.colors.police.badge} size={12} />
           </View>
         </TouchableOpacity>
       </View>
@@ -226,11 +275,11 @@ export default function App() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor="#FCD116"
+              tintColor={tokens.colors.brand.gold}
             />
           }
         >
-          {/* TAB 1: 60s In-App Camera Capture & Ingestion */}
+          {/* TAB 1: 60s Evidence Capture */}
           {activeTab === 'CAPTURE' && (
             <EvidenceCaptureScreen
               t={t}
@@ -281,7 +330,7 @@ export default function App() {
             />
           )}
 
-          {/* TAB 2: Amber & Red Alerts */}
+          {/* TAB 2: Amber Alerts */}
           {activeTab === 'ALERTS' && (
             <AmberAlertsScreen
               coords={gps.coords}
@@ -294,7 +343,7 @@ export default function App() {
             />
           )}
 
-          {/* TAB 3: SOS Emergency Panic */}
+          {/* TAB 3: SOS Panic */}
           {activeTab === 'SOS' && (
             <SosPanicScreen
               coords={gps.coords}
@@ -310,7 +359,7 @@ export default function App() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Citizen Profile & Active Session Management Sheet */}
+      {/* Citizen Profile Sheet */}
       <CitizenProfileSheet
         isOpen={isCitizenProfileOpen}
         citizen={citizen}
@@ -326,107 +375,117 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070B13'
+    backgroundColor: tokens.colors.bg.base
   },
   flagHeader: {
-    height: 6,
+    height: 4,
     flexDirection: 'row'
   },
   topBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: tokens.spacing.lg,
+    paddingVertical: tokens.spacing.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
+    borderBottomColor: tokens.colors.border.subtle,
+    backgroundColor: tokens.colors.bg.subtle
   },
   appTitle: {
-    fontSize: 18,
+    fontSize: tokens.typography.fontSize.lg,
     fontWeight: '900',
-    color: '#ffffff'
+    color: tokens.colors.text.white,
+    letterSpacing: 0.5
   },
   appSubtitle: {
-    fontSize: 11,
-    color: '#94a3b8'
+    fontSize: tokens.typography.fontSize.xxs,
+    color: tokens.colors.text.secondary
   },
   langSelector: {
     flexDirection: 'row',
-    gap: 4
+    gap: 3
   },
   langBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: '#0F172A',
+    paddingHorizontal: tokens.spacing.xs,
+    paddingVertical: 4,
+    borderRadius: tokens.radius.xs,
+    backgroundColor: tokens.colors.surface.card,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: tokens.colors.border.medium,
+    minHeight: 28,
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   langBtnActive: {
-    backgroundColor: '#FCD116',
-    borderColor: '#FCD116'
+    backgroundColor: tokens.colors.brand.gold,
+    borderColor: tokens.colors.brand.gold
   },
   langBtnText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
-    color: '#94a3b8'
+    color: tokens.colors.text.secondary
   },
   langBtnTextActive: {
-    color: '#070B13'
+    color: tokens.colors.bg.base
   },
   citizenProfileBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#0B1120',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    backgroundColor: tokens.colors.bg.base,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
+    borderBottomColor: tokens.colors.border.subtle
   },
   citizenBadgePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: tokens.colors.surface.card,
     borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 10
+    borderColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.lg,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    gap: tokens.spacing.sm,
+    minHeight: tokens.touchTarget.minHeight
   },
   citizenAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1E293B',
+    backgroundColor: tokens.colors.border.subtle,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#475569'
+    borderColor: tokens.colors.border.medium
   },
   citizenNameText: {
-    color: '#ffffff',
-    fontSize: 13,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.sm,
     fontWeight: '700'
   },
   citizenMetaText: {
-    color: '#94a3b8',
+    color: tokens.colors.text.secondary,
     fontSize: 10,
     fontWeight: '500'
   },
   citizenAuthBtn: {
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: tokens.colors.border.subtle,
+    paddingHorizontal: tokens.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: tokens.radius.sm,
     borderWidth: 1,
-    borderColor: '#3B82F6'
+    borderColor: tokens.colors.police.primary
   },
   citizenAuthBtnText: {
-    color: '#60A5FA',
-    fontSize: 11,
+    color: tokens.colors.police.badge,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold'
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40
+    padding: tokens.spacing.md,
+    paddingBottom: tokens.spacing.xxxl
   }
 });

@@ -1,6 +1,8 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Keyboard } from 'react-native';
+import { Video, AlertTriangle, Radio } from 'lucide-react-native';
 import { TabType } from '../types';
+import { tokens } from '../theme/tokens';
 
 interface TabBarProps {
   activeTab: TabType;
@@ -15,10 +17,16 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
           Keyboard.dismiss();
           onSelectTab('CAPTURE');
         }}
-        style={[styles.tabItem, activeTab === 'CAPTURE' && styles.tabItemActive]}
+        style={[styles.tabItem, activeTab === 'CAPTURE' && styles.tabItemActiveCapture]}
+        accessibilityRole="tab"
+        accessibilityLabel="60s Evidence Capture"
       >
+        <Video
+          color={activeTab === 'CAPTURE' ? tokens.colors.text.white : tokens.colors.text.secondary}
+          size={18}
+        />
         <Text style={[styles.tabText, activeTab === 'CAPTURE' && styles.tabTextActive]}>
-          📹 60s Evidence
+          60s Evidence
         </Text>
       </TouchableOpacity>
 
@@ -27,10 +35,16 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
           Keyboard.dismiss();
           onSelectTab('ALERTS');
         }}
-        style={[styles.tabItem, activeTab === 'ALERTS' && styles.tabItemActiveAmber]}
+        style={[styles.tabItem, activeTab === 'ALERTS' && styles.tabItemActiveAlerts]}
+        accessibilityRole="tab"
+        accessibilityLabel="Amber Alerts Hub"
       >
+        <AlertTriangle
+          color={activeTab === 'ALERTS' ? tokens.colors.text.white : tokens.colors.text.secondary}
+          size={18}
+        />
         <Text style={[styles.tabText, activeTab === 'ALERTS' && styles.tabTextActive]}>
-          ⚠️ Amber Alerts
+          Amber Alerts
         </Text>
       </TouchableOpacity>
 
@@ -39,10 +53,16 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
           Keyboard.dismiss();
           onSelectTab('SOS');
         }}
-        style={[styles.tabItem, activeTab === 'SOS' && styles.tabItemActiveRed]}
+        style={[styles.tabItem, activeTab === 'SOS' && styles.tabItemActiveSos]}
+        accessibilityRole="tab"
+        accessibilityLabel="Emergency SOS Panic Beacon"
       >
+        <Radio
+          color={activeTab === 'SOS' ? tokens.colors.text.white : tokens.colors.text.secondary}
+          size={18}
+        />
         <Text style={[styles.tabText, activeTab === 'SOS' && styles.tabTextActive]}>
-          🚨 SOS Panic
+          SOS Panic
         </Text>
       </TouchableOpacity>
     </View>
@@ -52,39 +72,43 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab }) =
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.bg.subtle,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
+    borderBottomColor: tokens.colors.border.subtle
   },
   tabItem: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#0F172A',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.xs,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.surface.card,
     borderWidth: 1,
-    borderColor: '#1E293B'
+    borderColor: tokens.colors.border.subtle
   },
-  tabItemActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#3B82F6'
+  tabItemActiveCapture: {
+    backgroundColor: tokens.colors.police.primary,
+    borderColor: tokens.colors.police.accent
   },
-  tabItemActiveAmber: {
-    backgroundColor: '#D97706',
-    borderColor: '#F59E0B'
+  tabItemActiveAlerts: {
+    backgroundColor: tokens.colors.status.amber,
+    borderColor: tokens.colors.status.warning
   },
-  tabItemActiveRed: {
-    backgroundColor: '#DC2626',
-    borderColor: '#EF4444'
+  tabItemActiveSos: {
+    backgroundColor: tokens.colors.status.emergency,
+    borderColor: tokens.colors.status.danger
   },
   tabText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#94a3b8'
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '700',
+    color: tokens.colors.text.secondary
   },
   tabTextActive: {
-    color: '#ffffff'
+    color: tokens.colors.text.white
   }
 });

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,14 +7,35 @@ import {
   ScrollView,
   TextInput,
   Keyboard,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
+import {
+  Camera,
+  Video,
+  Image as ImageIcon,
+  MapPin,
+  ChevronRight,
+  ChevronLeft,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  TreePine,
+  Car,
+  Trash2,
+  FileCheck,
+  Send,
+  Lock,
+  Sparkles,
+  Check
+} from 'lucide-react-native';
 import { TranslationMap, LANDMARK_SUGGESTIONS } from '../constants/i18n';
 import { GpsCoordinates, GpsLockStatus, IncidentCategory } from '../types';
 import { GpsTelemetryCard } from '../components/GpsTelemetryCard';
 import { ViewfinderOverlay } from '../components/ViewfinderOverlay';
 import { UploadProgressHud } from '../components/UploadProgressHud';
 import { CameraType } from 'expo-camera';
+import { tokens } from '../theme/tokens';
 
 interface EvidenceCaptureScreenProps {
   t: TranslationMap;
@@ -64,12 +85,12 @@ interface EvidenceCaptureScreenProps {
   onSubmitReport: () => void;
 }
 
-const CATEGORIES: { id: IncidentCategory; label: string }[] = [
-  { id: 'CRIMINAL_OFFENSE', label: '🚨 Armed Crime / Robbery' },
-  { id: 'DOMESTIC_ABUSE', label: '🛡️ Domestic Abuse (DOVVSU)' },
-  { id: 'GALAMSEY_ENVIRONMENTAL', label: '🌲 Galamsey / Pollution' },
-  { id: 'TRAFFIC_RECKLESS', label: '🚗 Dangerous Driving (MTTD)' },
-  { id: 'SANITATION_ZONING', label: '🗑️ Sanitation / Dumping' }
+const CATEGORIES: { id: IncidentCategory; label: string; icon: any }[] = [
+  { id: 'CRIMINAL_OFFENSE', label: 'Armed Crime / Robbery', icon: AlertTriangle },
+  { id: 'DOMESTIC_ABUSE', label: 'Domestic Abuse (DOVVSU)', icon: ShieldAlert },
+  { id: 'GALAMSEY_ENVIRONMENTAL', label: 'Galamsey / Mining', icon: TreePine },
+  { id: 'TRAFFIC_RECKLESS', label: 'Dangerous Driving (MTTD)', icon: Car },
+  { id: 'SANITATION_ZONING', label: 'Sanitation / Dumping', icon: Trash2 }
 ];
 
 export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(({
@@ -116,312 +137,586 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
   onReporterPhoneChange,
   onSubmitReport
 }) => {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
   return (
     <View style={styles.section}>
-      {/* Safety Warning */}
-      <View style={styles.warningBox}>
-        <Text style={styles.warningText}>⚠️ {t.safetyNotice}</Text>
-      </View>
-
-      {/* Live GPS Coordinates HUD */}
-      <GpsTelemetryCard
-        coords={coords}
-        gpsAccuracy={gpsAccuracy}
-        isLocating={isLocating}
-        gpsStatus={gpsStatus}
-        t={t}
-        onRefreshGps={onRefreshGps}
-      />
-
-      {/* Live Hardware Viewfinder & Evidence Box */}
-      <ViewfinderOverlay
-        cameraRef={cameraRef}
-        hasCameraPermission={hasCameraPermission}
-        facing={facing}
-        isRecording={isRecording}
-        recordingSeconds={recordingSeconds}
-        recordedDuration={recordedDuration}
-        hasRecordedMedia={hasRecordedMedia}
-        recordedUri={recordedUri}
-        mediaType={mediaType}
-        coords={coords}
-        ghanaPostCode={ghanaPostCode}
-        gpsAccuracy={gpsAccuracy}
-        onFlipCamera={onFlipCamera}
-        onRetake={onRetake}
-        onRequestPermissions={onRequestCameraPermissions}
-      />
-
-      {/* Direct In-App Capture Toolbar */}
-      <View style={styles.captureOptionsRow}>
-        <TouchableOpacity
-          onPress={onSnapPhoto}
-          disabled={isRecording}
-          style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
-        >
-          <Text style={styles.sideActionText}>📸 Photo</Text>
-        </TouchableOpacity>
-
-        <View style={styles.recordBtnContainer}>
+      {/* 3-Step Flow Progress Indicator */}
+      <View style={styles.stepIndicatorContainer}>
+        {[
+          { stepNum: 1, label: 'Capture' },
+          { stepNum: 2, label: 'Details' },
+          { stepNum: 3, label: 'Review & Send' }
+        ].map((s) => (
           <TouchableOpacity
-            onPress={onToggleRecording}
-            style={[styles.recordBtnPulse, isRecording && styles.recordBtnPulseActive]}
-            activeOpacity={0.7}
-            accessibilityLabel={isRecording ? 'Stop Recording' : 'Start 60s Recording'}
+            key={s.stepNum}
+            onPress={() => setStep(s.stepNum as any)}
+            style={styles.stepItem}
+            activeOpacity={0.8}
           >
-            <View style={[styles.recordBtn, isRecording && styles.recordBtnActive]}>
-              <View style={isRecording ? styles.stopSquare : styles.recordBtnInner} />
-            </View>
-          </TouchableOpacity>
-          <Text style={[styles.recordBtnLabel, isRecording && { color: '#EF4444' }]}>
-            {isRecording
-              ? '⏹️ STOP RECORDING'
-              : hasRecordedMedia
-              ? 'RE-RECORD (60s)'
-              : '🔴 TAP TO RECORD (60s)'}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          onPress={onPickFromGallery}
-          disabled={isRecording}
-          style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
-        >
-          <Text style={styles.sideActionText}>📁 Gallery</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Real-time Upload Reading / Attachment Progress HUD */}
-      <UploadProgressHud
-        uploadProgress={uploadProgress}
-        uploadStatusText={uploadStatusText}
-        isUploadingMedia={isUploadingMedia}
-        hasRecordedMedia={hasRecordedMedia}
-        mediaType={mediaType}
-        recordedDuration={recordedDuration}
-      />
-
-      {/* Closest Landmark / Famous Place */}
-      <View style={styles.landmarkSection}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={styles.fieldLabelGold}>📍 {t.landmarkLabel}</Text>
-          <TouchableOpacity onPress={Keyboard.dismiss}>
-            <Text style={{ color: '#FCD116', fontSize: 11, fontWeight: 'bold' }}>✕ Hide</Text>
-          </TouchableOpacity>
-        </View>
-        <TextInput
-          style={[styles.input, styles.landmarkInput]}
-          placeholder={t.landmarkPlaceholder}
-          placeholderTextColor="#64748b"
-          value={landmark}
-          onChangeText={onLandmarkChange}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
-          blurOnSubmit={true}
-        />
-
-        {/* Quick Landmark Suggestion Chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          style={styles.chipsScroll}
-        >
-          {LANDMARK_SUGGESTIONS.map((chip, idx) => (
-            <TouchableOpacity
-              key={idx}
-              onPress={() => {
-                Keyboard.dismiss();
-                const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
-                onLandmarkChange(landmark ? `${landmark}, ${cleanChip}` : cleanChip);
-              }}
-              style={styles.chip}
+            <View
+              style={[
+                styles.stepBadge,
+                step === s.stepNum && styles.stepBadgeActive,
+                step > s.stepNum && styles.stepBadgeCompleted
+              ]}
             >
-              <Text style={styles.chipText}>{chip}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Detected Area / Street Name */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-        <Text style={styles.fieldLabel}>{t.locationLabel}</Text>
-        <TouchableOpacity onPress={Keyboard.dismiss}>
-          <Text style={{ color: '#94a3b8', fontSize: 11 }}>✕ Hide Keyboard</Text>
-        </TouchableOpacity>
-      </View>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Boundary Road, East Legon, Accra"
-        placeholderTextColor="#64748b"
-        value={locationName}
-        onChangeText={onLocationNameChange}
-        returnKeyType="done"
-        onSubmitEditing={Keyboard.dismiss}
-        blurOnSubmit={true}
-      />
-
-      {/* GhanaPost GPS */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
-        <Text style={{ color: '#94a3b8', fontSize: 10 }}>Auto-Generated from GPS</Text>
-      </View>
-      <TextInput
-        style={[styles.input, { color: '#FCD116', fontFamily: 'monospace', fontWeight: 'bold' }]}
-        placeholder="e.g. GA-382-9104"
-        placeholderTextColor="#64748b"
-        value={ghanaPostCode}
-        onChangeText={onGhanaPostCodeChange}
-        autoCapitalize="characters"
-        returnKeyType="done"
-        onSubmitEditing={Keyboard.dismiss}
-        blurOnSubmit={true}
-      />
-
-      {/* Incident Category */}
-      <Text style={styles.fieldLabel}>{t.categories}</Text>
-      <View style={styles.categoryGrid}>
-        {CATEGORIES.map((c) => (
-          <TouchableOpacity
-            key={c.id}
-            onPress={() => {
-              Keyboard.dismiss();
-              onCategoryChange(c.id);
-            }}
-            style={[styles.categoryCard, category === c.id && styles.categoryCardActive]}
-          >
-            <Text style={[styles.categoryText, category === c.id && styles.categoryTextActive]}>
-              {c.label}
+              {step > s.stepNum ? (
+                <Check color={tokens.colors.bg.base} size={12} />
+              ) : (
+                <Text
+                  style={[
+                    styles.stepBadgeText,
+                    step === s.stepNum && styles.stepBadgeTextActive
+                  ]}
+                >
+                  {s.stepNum}
+                </Text>
+              )}
+            </View>
+            <Text
+              style={[
+                styles.stepLabel,
+                step === s.stepNum && styles.stepLabelActive
+              ]}
+            >
+              {s.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Incident Title */}
-      <Text style={styles.fieldLabel}>Incident Title</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Armed robbery attempt near junction"
-        placeholderTextColor="#64748b"
-        value={title}
-        onChangeText={onTitleChange}
-        returnKeyType="done"
-        onSubmitEditing={Keyboard.dismiss}
-        blurOnSubmit={true}
-      />
-
-      {/* Description */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={styles.fieldLabel}>Situation Details & Suspect Description</Text>
-        <TouchableOpacity onPress={Keyboard.dismiss}>
-          <Text style={{ color: '#FCD116', fontSize: 11, fontWeight: 'bold' }}>✕ Done</Text>
-        </TouchableOpacity>
+      {/* Safety Notice Banner */}
+      <View style={styles.warningBox}>
+        <AlertTriangle color={tokens.colors.brand.gold} size={16} />
+        <Text style={styles.warningText}>{t.safetyNotice}</Text>
       </View>
-      <TextInput
-        style={[styles.input, { height: 85, textAlignVertical: 'top' }]}
-        placeholder="Describe suspects, weapons, vehicle license plates, direction of escape..."
-        placeholderTextColor="#64748b"
-        value={description}
-        onChangeText={onDescriptionChange}
-        multiline
-        returnKeyType="default"
-      />
 
-      {/* Anonymous Toggle (Act 720) */}
-      <TouchableOpacity
-        onPress={() => {
-          Keyboard.dismiss();
-          onAnonymousChange(!isAnonymous);
-        }}
-        style={styles.anonToggleBox}
-      >
-        <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={styles.anonTitle}>
-            {isAnonymous ? '🛡️ Anonymous Whistleblower Active' : '👤 Citizen Safety Report'}
-          </Text>
-          <Text style={styles.anonSubtitle}>
-            {isAnonymous
-              ? 'All identifiers stripped under Whistleblower Act (Act 720)'
-              : 'Coordinates and landmark attached for emergency dispatch'}
-          </Text>
-        </View>
-        <View style={[styles.togglePill, isAnonymous && styles.togglePillActive]} />
-      </TouchableOpacity>
-
-      {!isAnonymous && (
-        <View>
-          <Text style={styles.fieldLabel}>Contact Phone Number (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 0244 123 456"
-            placeholderTextColor="#64748b"
-            value={reporterPhone}
-            onChangeText={onReporterPhoneChange}
-            keyboardType="phone-pad"
-            returnKeyType="done"
-            onSubmitEditing={Keyboard.dismiss}
-            blurOnSubmit={true}
+      {/* STEP 1: CAPTURE MEDIA & GPS TELEMETRY */}
+      {step === 1 && (
+        <View style={styles.stepContent}>
+          {/* Live GPS Coordinates HUD */}
+          <GpsTelemetryCard
+            coords={coords}
+            gpsAccuracy={gpsAccuracy}
+            isLocating={isLocating}
+            gpsStatus={gpsStatus}
+            t={t}
+            onRefreshGps={onRefreshGps}
           />
+
+          {/* Live Hardware Viewfinder & Evidence Box */}
+          <ViewfinderOverlay
+            cameraRef={cameraRef}
+            hasCameraPermission={hasCameraPermission}
+            facing={facing}
+            isRecording={isRecording}
+            recordingSeconds={recordingSeconds}
+            recordedDuration={recordedDuration}
+            hasRecordedMedia={hasRecordedMedia}
+            recordedUri={recordedUri}
+            mediaType={mediaType}
+            coords={coords}
+            ghanaPostCode={ghanaPostCode}
+            gpsAccuracy={gpsAccuracy}
+            onFlipCamera={onFlipCamera}
+            onRetake={onRetake}
+            onRequestPermissions={onRequestCameraPermissions}
+          />
+
+          {/* Direct In-App Capture Toolbar */}
+          <View style={styles.captureOptionsRow}>
+            <TouchableOpacity
+              onPress={onSnapPhoto}
+              disabled={isRecording}
+              style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Snap Photo"
+            >
+              <Camera color={tokens.colors.text.primary} size={18} />
+              <Text style={styles.sideActionText}>Photo</Text>
+            </TouchableOpacity>
+
+            <View style={styles.recordBtnContainer}>
+              <TouchableOpacity
+                onPress={onToggleRecording}
+                style={[styles.recordBtnPulse, isRecording && styles.recordBtnPulseActive]}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={isRecording ? 'Stop Recording' : 'Start 60s Recording'}
+              >
+                <View style={[styles.recordBtn, isRecording && styles.recordBtnActive]}>
+                  {isRecording ? (
+                    <View style={styles.stopSquare} />
+                  ) : (
+                    <View style={styles.recordBtnInner} />
+                  )}
+                </View>
+              </TouchableOpacity>
+              <Text style={[styles.recordBtnLabel, isRecording && { color: tokens.colors.status.danger }]}>
+                {isRecording
+                  ? 'STOP RECORDING'
+                  : hasRecordedMedia
+                  ? 'RE-RECORD (60s)'
+                  : 'TAP TO RECORD (60s)'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={onPickFromGallery}
+              disabled={isRecording}
+              style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Choose from Gallery"
+            >
+              <ImageIcon color={tokens.colors.text.primary} size={18} />
+              <Text style={styles.sideActionText}>Gallery</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Upload / Encrypt HUD */}
+          <UploadProgressHud
+            uploadProgress={uploadProgress}
+            uploadStatusText={uploadStatusText}
+            isUploadingMedia={isUploadingMedia}
+            hasRecordedMedia={hasRecordedMedia}
+            mediaType={mediaType}
+            recordedDuration={recordedDuration}
+          />
+
+          {/* Step 1 Next Button */}
+          <TouchableOpacity
+            onPress={() => setStep(2)}
+            style={styles.stepNextBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Proceed to Incident Details"
+          >
+            <Text style={styles.stepNextBtnText}>
+              {hasRecordedMedia ? 'Continue to Incident Details' : 'Continue (With/Without Media)'}
+            </Text>
+            <ChevronRight color={tokens.colors.bg.base} size={18} />
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Submit Button */}
-      <TouchableOpacity
-        onPress={onSubmitReport}
-        disabled={isSubmitting}
-        style={styles.submitBtn}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="#070B13" size="small" />
-        ) : (
-          <Text style={styles.submitBtnText}>{t.submitReport}</Text>
-        )}
-      </TouchableOpacity>
+      {/* STEP 2: INCIDENT DETAILS & LOCATION */}
+      {step === 2 && (
+        <View style={styles.stepContent}>
+          {/* Closest Landmark Section */}
+          <View style={styles.landmarkSection}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <MapPin color={tokens.colors.brand.gold} size={16} />
+                <Text style={styles.fieldLabelGold}>{t.landmarkLabel}</Text>
+              </View>
+              <TouchableOpacity onPress={Keyboard.dismiss}>
+                <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
+                  ✕ Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.input, styles.landmarkInput]}
+              placeholder={t.landmarkPlaceholder}
+              placeholderTextColor={tokens.colors.text.muted}
+              value={landmark}
+              onChangeText={onLandmarkChange}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit={true}
+            />
+
+            {/* Quick Landmark Suggestion Chips */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={styles.chipsScroll}
+            >
+              {LANDMARK_SUGGESTIONS.map((chip, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
+                    onLandmarkChange(landmark ? `${landmark}, ${cleanChip}` : cleanChip);
+                  }}
+                  style={styles.chip}
+                >
+                  <Text style={styles.chipText}>{chip}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Detected Area / Street Name */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.fieldLabel}>{t.locationLabel}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Boundary Road, East Legon, Accra"
+              placeholderTextColor={tokens.colors.text.muted}
+              value={locationName}
+              onChangeText={onLocationNameChange}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit={true}
+            />
+          </View>
+
+          {/* GhanaPost GPS (Auto-Calculated) */}
+          <View style={styles.inputGroup}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
+              <Text style={{ color: tokens.colors.text.muted, fontSize: tokens.typography.fontSize.xxs }}>
+                Auto-Generated from GPS
+              </Text>
+            </View>
+            <TextInput
+              style={[styles.input, { color: tokens.colors.brand.gold, fontFamily: tokens.typography.fontFamily.monoBold }]}
+              placeholder="e.g. GA-382-9104"
+              placeholderTextColor={tokens.colors.text.muted}
+              value={ghanaPostCode}
+              onChangeText={onGhanaPostCodeChange}
+              autoCapitalize="characters"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit={true}
+            />
+          </View>
+
+          {/* Incident Category Selection */}
+          <Text style={styles.fieldLabel}>{t.categories}</Text>
+          <View style={styles.categoryGrid}>
+            {CATEGORIES.map((c) => {
+              const IconComp = c.icon;
+              const isSelected = category === c.id;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    onCategoryChange(c.id);
+                  }}
+                  style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
+                  accessibilityRole="button"
+                  accessibilityLabel={c.label}
+                >
+                  <IconComp
+                    color={isSelected ? tokens.colors.text.white : tokens.colors.police.badge}
+                    size={16}
+                  />
+                  <Text style={[styles.categoryText, isSelected && styles.categoryTextActive]}>
+                    {c.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Incident Title */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.fieldLabel}>Incident Title *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Armed robbery attempt near junction"
+              placeholderTextColor={tokens.colors.text.muted}
+              value={title}
+              onChangeText={onTitleChange}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit={true}
+            />
+          </View>
+
+          {/* Description */}
+          <View style={styles.inputGroup}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.fieldLabel}>Situation Details & Suspects *</Text>
+              <TouchableOpacity onPress={Keyboard.dismiss}>
+                <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
+                  ✕ Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+              placeholder="Describe suspects, weapons, vehicle license plates, direction of escape..."
+              placeholderTextColor={tokens.colors.text.muted}
+              value={description}
+              onChangeText={onDescriptionChange}
+              multiline
+              returnKeyType="default"
+            />
+          </View>
+
+          {/* Anonymous Toggle (Act 720) */}
+          <TouchableOpacity
+            onPress={() => {
+              Keyboard.dismiss();
+              onAnonymousChange(!isAnonymous);
+            }}
+            style={styles.anonToggleBox}
+            accessibilityRole="switch"
+            accessibilityLabel="Toggle Anonymous Whistleblower Report"
+          >
+            <View style={{ flex: 1, paddingRight: tokens.spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {isAnonymous ? (
+                  <ShieldAlert color={tokens.colors.status.success} size={16} />
+                ) : (
+                  <ShieldCheck color={tokens.colors.text.secondary} size={16} />
+                )}
+                <Text style={styles.anonTitle}>
+                  {isAnonymous ? 'Anonymous Whistleblower Active' : 'Citizen Safety Report'}
+                </Text>
+              </View>
+              <Text style={styles.anonSubtitle}>
+                {isAnonymous
+                  ? 'All identifiers stripped under Whistleblower Act (Act 720)'
+                  : 'Coordinates and landmark attached for emergency dispatch'}
+              </Text>
+            </View>
+            <View style={[styles.togglePill, isAnonymous && styles.togglePillActive]} />
+          </TouchableOpacity>
+
+          {!isAnonymous && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Contact Phone Number (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 0244 123 456"
+                placeholderTextColor={tokens.colors.text.muted}
+                value={reporterPhone}
+                onChangeText={onReporterPhoneChange}
+                keyboardType="phone-pad"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
+              />
+            </View>
+          )}
+
+          {/* Step 2 Buttons */}
+          <View style={styles.stepBtnRow}>
+            <TouchableOpacity
+              onPress={() => setStep(1)}
+              style={styles.stepBackBtn}
+            >
+              <ChevronLeft color={tokens.colors.text.primary} size={18} />
+              <Text style={styles.stepBackBtnText}>Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setStep(3)}
+              style={[styles.stepNextBtn, { flex: 2 }]}
+            >
+              <Text style={styles.stepNextBtnText}>Review & Transmit</Text>
+              <ChevronRight color={tokens.colors.bg.base} size={18} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* STEP 3: REVIEW & TRANSMIT */}
+      {step === 3 && (
+        <View style={styles.stepContent}>
+          {/* Dossier Summary Card */}
+          <View style={styles.dossierCard}>
+            <View style={styles.dossierHeader}>
+              <FileCheck color={tokens.colors.brand.gold} size={20} />
+              <Text style={styles.dossierTitle}>OFFICIAL INCIDENT DOSSIER</Text>
+            </View>
+
+            {/* Media Summary */}
+            <View style={styles.dossierRow}>
+              <Text style={styles.dossierLabel}>EVIDENCE MEDIA</Text>
+              <Text style={styles.dossierValue}>
+                {hasRecordedMedia
+                  ? `${mediaType} (${recordedDuration}s) • Act 772 Watermarked`
+                  : 'No Video/Photo Attached'}
+              </Text>
+            </View>
+
+            {/* Title & Category */}
+            <View style={styles.dossierRow}>
+              <Text style={styles.dossierLabel}>TITLE & CATEGORY</Text>
+              <Text style={styles.dossierValue}>
+                {title || 'Untitled Report'} • {category}
+              </Text>
+            </View>
+
+            {/* Location & GPS */}
+            <View style={styles.dossierRow}>
+              <Text style={styles.dossierLabel}>LOCATION & DIGITAL POST</Text>
+              <Text style={styles.dossierValue}>
+                {landmark ? `${landmark}, ` : ''}{locationName} ({ghanaPostCode})
+              </Text>
+            </View>
+
+            {/* Legal Status */}
+            <View style={styles.dossierRow}>
+              <Text style={styles.dossierLabel}>DISPATCH DESTINATION</Text>
+              <Text style={[styles.dossierValue, { color: tokens.colors.police.badge }]}>
+                {category === 'DOMESTIC_ABUSE'
+                  ? 'DOVVSU Special Unit'
+                  : category === 'GALAMSEY_ENVIRONMENTAL'
+                  ? 'EPA / Minerals Commission'
+                  : category === 'TRAFFIC_RECKLESS'
+                  ? 'Police MTTD Division'
+                  : 'Ghana Police CID Dispatch'}
+              </Text>
+            </View>
+
+            {/* Whistleblower Seal */}
+            <View style={styles.sealBox}>
+              <ShieldCheck color={tokens.colors.status.success} size={16} />
+              <Text style={styles.sealText}>
+                {isAnonymous
+                  ? 'Protected under Whistleblower Act 720 (Zero Identity Leak)'
+                  : 'Authenticated Citizen Submission (Verified Trust Chain)'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Upload Progress Card if Submitting */}
+          <UploadProgressHud
+            uploadProgress={uploadProgress}
+            uploadStatusText={uploadStatusText}
+            isUploadingMedia={isUploadingMedia}
+            hasRecordedMedia={hasRecordedMedia}
+            mediaType={mediaType}
+            recordedDuration={recordedDuration}
+          />
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            onPress={onSubmitReport}
+            disabled={isSubmitting}
+            style={styles.submitBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Transmit Official Report"
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm }}>
+                <Send color={tokens.colors.bg.base} size={18} />
+                <Text style={styles.submitBtnText}>{t.submitReport}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Step 3 Back Button */}
+          <TouchableOpacity
+            onPress={() => setStep(2)}
+            style={styles.stepBackBtn}
+          >
+            <ChevronLeft color={tokens.colors.text.primary} size={18} />
+            <Text style={styles.stepBackBtnText}>Edit Details</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   section: {
-    gap: 12
+    gap: tokens.spacing.md
+  },
+  stepIndicatorContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.sm,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle
+  },
+  stepItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.xs
+  },
+  stepBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: tokens.colors.border.subtle,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  stepBadgeActive: {
+    backgroundColor: tokens.colors.brand.gold
+  },
+  stepBadgeCompleted: {
+    backgroundColor: tokens.colors.status.success
+  },
+  stepBadgeText: {
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: 'bold'
+  },
+  stepBadgeTextActive: {
+    color: tokens.colors.bg.base
+  },
+  stepLabel: {
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600'
+  },
+  stepLabelActive: {
+    color: tokens.colors.text.white,
+    fontWeight: 'bold'
   },
   warningBox: {
-    backgroundColor: '#1E293B',
-    padding: 10,
-    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.border.subtle,
+    padding: tokens.spacing.sm,
+    borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: tokens.colors.border.medium
   },
   warningText: {
-    color: '#FCD116',
-    fontSize: 11,
-    fontWeight: '600'
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600',
+    flex: 1
+  },
+  stepContent: {
+    gap: tokens.spacing.md
   },
   captureOptionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.xl,
+    paddingHorizontal: tokens.spacing.lg,
+    paddingVertical: tokens.spacing.sm,
     borderWidth: 1,
-    borderColor: '#1E293B',
-    marginVertical: 4
+    borderColor: tokens.colors.border.subtle
   },
   sideActionBtn: {
-    backgroundColor: '#1E293B',
+    backgroundColor: tokens.colors.border.subtle,
     borderWidth: 1,
-    borderColor: '#334155',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    borderColor: tokens.colors.border.medium,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
+    borderRadius: tokens.radius.md,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    gap: 2,
+    minHeight: tokens.touchTarget.minHeight
   },
   sideActionText: {
-    color: '#cbd5e1',
-    fontSize: 11,
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold'
   },
   recordBtnContainer: {
@@ -432,165 +727,254 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: 'rgba(239,68,68,0.2)',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#EF4444'
+    borderColor: tokens.colors.status.danger
   },
   recordBtnPulseActive: {
-    backgroundColor: 'rgba(239,68,68,0.4)',
-    borderColor: '#ffffff',
+    backgroundColor: 'rgba(239, 68, 68, 0.4)',
+    borderColor: tokens.colors.text.white,
     transform: [{ scale: 1.05 }]
   },
   recordBtn: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#EF4444',
+    backgroundColor: tokens.colors.status.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 8
+    ...tokens.elevation.high
   },
   recordBtnActive: {
-    backgroundColor: '#991B1B'
+    backgroundColor: tokens.colors.status.emergencyDark
   },
   recordBtnInner: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#ffffff'
+    backgroundColor: tokens.colors.text.white
   },
   stopSquare: {
     width: 18,
     height: 18,
     borderRadius: 4,
-    backgroundColor: '#ffffff'
+    backgroundColor: tokens.colors.text.white
   },
   recordBtnLabel: {
-    color: '#FCD116',
-    fontSize: 10,
+    color: tokens.colors.brand.gold,
+    fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.5
   },
-  landmarkSection: {
-    backgroundColor: '#0B1E38',
-    padding: 12,
-    borderRadius: 14,
+  stepNextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: tokens.colors.brand.gold,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg
+  },
+  stepNextBtnText: {
+    color: tokens.colors.bg.base,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '900'
+  },
+  stepBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: tokens.colors.surface.card,
     borderWidth: 1,
-    borderColor: '#FCD116',
-    gap: 8
+    borderColor: tokens.colors.border.subtle,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    flex: 1
+  },
+  stepBackBtnText: {
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: '700'
+  },
+  stepBtnRow: {
+    flexDirection: 'row',
+    gap: tokens.spacing.md,
+    marginTop: tokens.spacing.xs
+  },
+  landmarkSection: {
+    backgroundColor: tokens.colors.surface.cardSubtle,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: tokens.colors.brand.gold,
+    gap: tokens.spacing.xs
   },
   landmarkInput: {
-    backgroundColor: '#070B13',
-    borderColor: '#FCD116'
+    backgroundColor: tokens.colors.bg.base,
+    borderColor: tokens.colors.brand.gold
   },
   chipsScroll: {
     flexDirection: 'row',
-    marginTop: 4
+    marginTop: tokens.spacing.xs
   },
   chip: {
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginRight: 6,
+    backgroundColor: tokens.colors.border.subtle,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.full,
+    marginRight: tokens.spacing.xs,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: tokens.colors.border.medium
   },
   chipText: {
-    color: '#cbd5e1',
-    fontSize: 11,
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: '600'
   },
+  inputGroup: {
+    gap: tokens.spacing.xs
+  },
   fieldLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 4
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: 'bold'
   },
   fieldLabelGold: {
-    color: '#FCD116',
-    fontSize: 12,
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: 'bold'
   },
   categoryGrid: {
-    gap: 6
+    gap: tokens.spacing.xs
   },
   categoryCard: {
-    backgroundColor: '#0F172A',
-    padding: 10,
-    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.surface.card,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: '#1E293B'
+    borderColor: tokens.colors.border.subtle
   },
   categoryCardActive: {
-    backgroundColor: '#1E3A8A',
-    borderColor: '#3B82F6'
+    backgroundColor: tokens.colors.police.dark,
+    borderColor: tokens.colors.police.accent
   },
   categoryText: {
-    color: '#cbd5e1',
-    fontSize: 12,
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.sm,
     fontWeight: '600'
   },
   categoryTextActive: {
-    color: '#ffffff',
+    color: tokens.colors.text.white,
     fontWeight: 'bold'
   },
   input: {
-    backgroundColor: '#0F172A',
+    backgroundColor: tokens.colors.surface.card,
     borderWidth: 1,
-    borderColor: '#1E293B',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#ffffff',
-    fontSize: 13
+    borderColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.md,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md
   },
   anonToggleBox: {
-    backgroundColor: '#0F172A',
-    padding: 12,
-    borderRadius: 14,
+    backgroundColor: tokens.colors.surface.card,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: tokens.colors.border.subtle,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6
+    alignItems: 'center'
   },
   anonTitle: {
-    color: '#ffffff',
-    fontSize: 12,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: 'bold'
   },
   anonSubtitle: {
-    color: '#64748b',
-    fontSize: 10,
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
     marginTop: 2
   },
   togglePill: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#334155'
+    backgroundColor: tokens.colors.border.medium
   },
   togglePillActive: {
-    backgroundColor: '#10B981'
+    backgroundColor: tokens.colors.status.success
+  },
+  dossierCard: {
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.xl,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    padding: tokens.spacing.lg,
+    gap: tokens.spacing.md
+  },
+  dossierHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.border.subtle,
+    paddingBottom: tokens.spacing.sm
+  },
+  dossierTitle: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  dossierRow: {
+    gap: 2
+  },
+  dossierLabel: {
+    color: tokens.colors.text.muted,
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.5
+  },
+  dossierValue: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '600'
+  },
+  sealBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    padding: tokens.spacing.sm,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.status.success
+  },
+  sealText: {
+    color: tokens.colors.brand.greenLight,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600',
+    flex: 1
   },
   submitBtn: {
-    backgroundColor: '#FCD116',
-    paddingVertical: 14,
-    borderRadius: 14,
+    backgroundColor: tokens.colors.brand.gold,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
     alignItems: 'center',
-    marginTop: 8
+    justifyContent: 'center',
+    marginTop: tokens.spacing.xs
   },
   submitBtnText: {
-    color: '#070B13',
-    fontSize: 14,
+    color: tokens.colors.bg.base,
+    fontSize: tokens.typography.fontSize.md,
     fontWeight: '900'
   }
 });

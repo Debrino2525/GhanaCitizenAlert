@@ -1,7 +1,17 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { CameraView, CameraType } from 'expo-camera';
+import {
+  Camera,
+  RotateCcw,
+  Trash2,
+  ShieldCheck,
+  MapPin,
+  Lock,
+  Sparkles
+} from 'lucide-react-native';
 import { GpsCoordinates } from '../types';
+import { tokens } from '../theme/tokens';
 
 interface ViewfinderOverlayProps {
   cameraRef: React.RefObject<any>;
@@ -40,6 +50,12 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
 }) => {
   return (
     <View style={styles.cameraWrapper}>
+      {/* Tactical Corner Brackets Overlay */}
+      <View style={[styles.cornerBracket, styles.cornerTopLeft]} pointerEvents="none" />
+      <View style={[styles.cornerBracket, styles.cornerTopRight]} pointerEvents="none" />
+      <View style={[styles.cornerBracket, styles.cornerBottomLeft]} pointerEvents="none" />
+      <View style={[styles.cornerBracket, styles.cornerBottomRight]} pointerEvents="none" />
+
       {recordedUri ? (
         <View style={StyleSheet.absoluteFill}>
           <Image
@@ -48,8 +64,9 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
             resizeMode="cover"
           />
           <View style={styles.previewBadge}>
-            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
-              🎬 Attached Evidence ({recordedDuration}s {mediaType})
+            <ShieldCheck color={tokens.colors.text.white} size={14} />
+            <Text style={styles.previewBadgeText}>
+              Attached Evidence ({recordedDuration}s {mediaType})
             </Text>
           </View>
         </View>
@@ -62,16 +79,17 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         />
       ) : (
         <View style={styles.permissionBox}>
-          <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 10, fontSize: 12 }}>
-            Camera access enables live in-app hardware viewfinder and evidence recording
+          <Camera color={tokens.colors.brand.gold} size={40} style={{ marginBottom: tokens.spacing.sm }} />
+          <Text style={styles.permissionText}>
+            Camera access enables live hardware viewfinder and encrypted evidence capture
           </Text>
           <TouchableOpacity
             onPress={onRequestPermissions}
             style={styles.permBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Enable Live Viewfinder"
           >
-            <Text style={{ color: '#070B13', fontWeight: 'bold', fontSize: 12 }}>
-              Enable Live Viewfinder
-            </Text>
+            <Text style={styles.permBtnText}>Enable Live Viewfinder</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -86,16 +104,26 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
           </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ flexDirection: 'row', gap: tokens.spacing.xs }}>
           {recordedUri ? (
-            <TouchableOpacity onPress={onRetake} style={styles.retakeBtn}>
-              <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>
-                🗑️ Retake
-              </Text>
+            <TouchableOpacity
+              onPress={onRetake}
+              style={styles.retakeBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Retake evidence"
+            >
+              <Trash2 color={tokens.colors.text.white} size={14} />
+              <Text style={styles.retakeBtnText}>Retake</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={onFlipCamera} style={styles.flipBtn}>
-              <Text style={{ color: '#ffffff', fontSize: 12 }}>🔄 Flip</Text>
+            <TouchableOpacity
+              onPress={onFlipCamera}
+              style={styles.flipBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Flip camera"
+            >
+              <RotateCcw color={tokens.colors.text.white} size={14} />
+              <Text style={styles.flipBtnText}>Flip</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -103,34 +131,47 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
 
       {/* Viewfinder Status Banner */}
       <View style={styles.viewfinderCenter}>
-        <Text
-          style={{
-            color: isRecording ? '#ffffff' : '#FCD116',
-            fontSize: 11,
-            fontWeight: '800',
-            backgroundColor: isRecording ? '#DC2626' : 'rgba(0,0,0,0.75)',
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 8
-          }}
+        <View
+          style={[
+            styles.statusPill,
+            isRecording ? styles.statusPillRecording : styles.statusPillIdle
+          ]}
         >
-          {isRecording
-            ? `🔴 IN-APP RECORDING (${60 - recordingSeconds}s remaining)`
-            : hasRecordedMedia
-            ? '✅ EVIDENCE ATTACHED & HASH-LOCKED'
-            : 'HARDWARE SENSOR LIVE'}
-        </Text>
+          {isRecording ? (
+            <View style={styles.pulseDot} />
+          ) : (
+            <Lock color={tokens.colors.brand.gold} size={12} />
+          )}
+          <Text
+            style={[
+              styles.statusPillText,
+              isRecording ? { color: tokens.colors.text.white } : { color: tokens.colors.brand.gold }
+            ]}
+          >
+            {isRecording
+              ? `RECORDING (${60 - recordingSeconds}s left)`
+              : hasRecordedMedia
+              ? 'EVIDENCE HASH-LOCKED'
+              : 'HARDWARE SENSOR LIVE'}
+          </Text>
+        </View>
       </View>
 
-      {/* Tamper-Evident Watermark Overlay */}
+      {/* Tamper-Evident Watermark Overlay (Act 772) */}
       <View style={styles.watermarkBox}>
-        <Text style={styles.watermarkGold}>🇬🇭 WATERMARK ENCRYPTED (ACT 772)</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <ShieldCheck color={tokens.colors.brand.gold} size={12} />
+          <Text style={styles.watermarkGold}>WATERMARK ENCRYPTED (ACT 772)</Text>
+        </View>
         <Text style={styles.watermarkWhite}>
           UTC: {new Date().toISOString().substring(11, 19)} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
         </Text>
-        <Text style={styles.watermarkGold}>
-          DIGITAL POST: {ghanaPostCode} (±{gpsAccuracy || 3.2}m)
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <MapPin color={tokens.colors.brand.gold} size={11} />
+          <Text style={styles.watermarkGold}>
+            DIGITAL POST: {ghanaPostCode} (±{gpsAccuracy || 3.2}m)
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -138,36 +179,88 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
 
 const styles = StyleSheet.create({
   cameraWrapper: {
-    height: 250,
+    height: 270,
     backgroundColor: '#000000',
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#334155',
+    borderRadius: tokens.radius.xl,
+    borderWidth: 1.5,
+    borderColor: tokens.colors.border.medium,
     overflow: 'hidden',
     position: 'relative',
     justifyContent: 'space-between',
-    padding: 12
+    padding: tokens.spacing.md
+  },
+  cornerBracket: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderColor: tokens.colors.brand.gold,
+    zIndex: 5
+  },
+  cornerTopLeft: {
+    top: 10,
+    left: 10,
+    borderTopWidth: 2.5,
+    borderLeftWidth: 2.5
+  },
+  cornerTopRight: {
+    top: 10,
+    right: 10,
+    borderTopWidth: 2.5,
+    borderRightWidth: 2.5
+  },
+  cornerBottomLeft: {
+    bottom: 10,
+    left: 10,
+    borderBottomWidth: 2.5,
+    borderLeftWidth: 2.5
+  },
+  cornerBottomRight: {
+    bottom: 10,
+    right: 10,
+    borderBottomWidth: 2.5,
+    borderRightWidth: 2.5
   },
   permissionBox: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16
+    padding: tokens.spacing.lg
+  },
+  permissionText: {
+    color: tokens.colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: tokens.spacing.md,
+    fontSize: tokens.typography.fontSize.xs,
+    lineHeight: tokens.typography.lineHeight.xs
   },
   permBtn: {
-    backgroundColor: '#FCD116',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8
+    backgroundColor: tokens.colors.brand.gold,
+    paddingHorizontal: tokens.spacing.lg,
+    paddingVertical: tokens.spacing.sm,
+    borderRadius: tokens.radius.md
+  },
+  permBtnText: {
+    color: tokens.colors.bg.base,
+    fontWeight: '800',
+    fontSize: tokens.typography.fontSize.xs
   },
   previewBadge: {
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: 'rgba(16,185,129,0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md,
+    zIndex: 10
+  },
+  previewBadgeText: {
+    color: tokens.colors.text.white,
+    fontWeight: 'bold',
+    fontSize: tokens.typography.fontSize.xs
   },
   viewfinderTop: {
     flexDirection: 'row',
@@ -178,59 +271,108 @@ const styles = StyleSheet.create({
   recBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 6
+    backgroundColor: 'rgba(7, 11, 19, 0.85)',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md,
+    gap: tokens.spacing.xs,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.glass
   },
   recDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: '#64748b'
+    borderRadius: tokens.radius.full,
+    backgroundColor: tokens.colors.text.muted
   },
   recDotActive: {
-    backgroundColor: '#EF4444'
+    backgroundColor: tokens.colors.status.danger
   },
   recText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontFamily: 'monospace',
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontFamily: tokens.typography.fontFamily.monoBold,
     fontWeight: 'bold'
   },
   flipBtn: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: 'rgba(7, 11, 19, 0.85)',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.glass
+  },
+  flipBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: 'bold'
   },
   retakeBtn: {
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: tokens.colors.status.danger,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md
+  },
+  retakeBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: 'bold'
   },
   viewfinderCenter: {
     alignItems: 'center',
     zIndex: 10
   },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md
+  },
+  statusPillIdle: {
+    backgroundColor: 'rgba(7, 11, 19, 0.85)',
+    borderWidth: 1,
+    borderColor: tokens.colors.brand.goldMuted
+  },
+  statusPillRecording: {
+    backgroundColor: tokens.colors.status.emergency
+  },
+  pulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ffffff'
+  },
+  statusPillText: {
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
   watermarkBox: {
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    padding: 8,
-    borderRadius: 10,
-    gap: 2,
-    zIndex: 10
+    backgroundColor: 'rgba(7, 11, 19, 0.92)',
+    padding: tokens.spacing.sm,
+    borderRadius: tokens.radius.md,
+    gap: tokens.spacing.xxs,
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.glass
   },
   watermarkGold: {
-    color: '#FCD116',
+    color: tokens.colors.brand.gold,
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: tokens.typography.fontFamily.monoBold,
     fontWeight: 'bold'
   },
   watermarkWhite: {
-    color: '#ffffff',
+    color: tokens.colors.text.white,
     fontSize: 9,
-    fontFamily: 'monospace'
+    fontFamily: tokens.typography.fontFamily.mono
   }
 });

@@ -1,5 +1,7 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { UploadCloud, CheckCircle2, ShieldCheck, FileVideo, FileImage } from 'lucide-react-native';
+import { tokens } from '../theme/tokens';
 
 interface UploadProgressHudProps {
   uploadProgress: number;
@@ -23,13 +25,12 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
   return (
     <View style={styles.uploadProgressCard}>
       <View style={styles.uploadHeaderRow}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <View
-            style={[
-              styles.statusDot,
-              isUploadingMedia ? styles.statusDotUploading : styles.statusDotComplete
-            ]}
-          />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+          {isUploadingMedia ? (
+            <UploadCloud color={tokens.colors.police.accent} size={16} />
+          ) : (
+            <CheckCircle2 color={tokens.colors.status.success} size={16} />
+          )}
           <Text style={styles.uploadTitle}>
             {isUploadingMedia ? 'UPLOADING & ENCRYPTING EVIDENCE...' : 'EVIDENCE SECURELY ATTACHED & LOCKED'}
           </Text>
@@ -43,21 +44,31 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
             styles.progressBarFill,
             {
               width: `${uploadProgress}%`,
-              backgroundColor: isUploadingMedia ? '#3B82F6' : '#10B981'
+              backgroundColor: isUploadingMedia ? tokens.colors.police.accent : tokens.colors.status.success
             }
           ]}
         />
       </View>
 
       <View style={styles.uploadMetaRow}>
-        <Text style={styles.uploadStatusSubtext}>
-          {uploadStatusText || 'Act 772 Forensic Chain of Custody'}
-        </Text>
-        <Text style={styles.uploadSizeText}>
-          {mediaType === 'VIDEO'
-            ? `${recordedDuration}s • 720p HD • MP4`
-            : 'High-Res Photo • JPEG'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <ShieldCheck color={tokens.colors.text.muted} size={12} />
+          <Text style={styles.uploadStatusSubtext}>
+            {uploadStatusText || 'Act 772 Forensic Chain of Custody'}
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          {mediaType === 'VIDEO' ? (
+            <FileVideo color={tokens.colors.brand.sky} size={12} />
+          ) : (
+            <FileImage color={tokens.colors.brand.sky} size={12} />
+          )}
+          <Text style={styles.uploadSizeText}>
+            {mediaType === 'VIDEO'
+              ? `${recordedDuration}s • 720p HD`
+              : 'Photo • JPEG'}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -65,57 +76,42 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
 
 const styles = StyleSheet.create({
   uploadProgressCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: '#3B82F6',
-    padding: 12,
-    marginVertical: 4,
-    gap: 8,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4
+    borderColor: tokens.colors.police.accent,
+    padding: tokens.spacing.md,
+    marginVertical: tokens.spacing.xs,
+    gap: tokens.spacing.sm,
+    ...tokens.elevation.medium
   },
   uploadHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4
-  },
-  statusDotUploading: {
-    backgroundColor: '#3B82F6'
-  },
-  statusDotComplete: {
-    backgroundColor: '#10B981'
-  },
   uploadTitle: {
-    color: '#ffffff',
-    fontSize: 11,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: '800',
     letterSpacing: 0.5
   },
   uploadPercentageText: {
-    color: '#FCD116',
-    fontSize: 12,
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.sm,
     fontWeight: '900',
-    fontFamily: 'monospace'
+    fontFamily: tokens.typography.fontFamily.monoBold
   },
   progressBarTrack: {
     height: 6,
-    backgroundColor: '#1E293B',
-    borderRadius: 3,
+    backgroundColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.xs,
     overflow: 'hidden',
     width: '100%'
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 3
+    borderRadius: tokens.radius.xs
   },
   uploadMetaRow: {
     flexDirection: 'row',
@@ -123,13 +119,13 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   uploadStatusSubtext: {
-    color: '#94a3b8',
-    fontSize: 10,
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: '500'
   },
   uploadSizeText: {
-    color: '#38BDF8',
-    fontSize: 10,
+    color: tokens.colors.brand.sky,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold'
   }
 });

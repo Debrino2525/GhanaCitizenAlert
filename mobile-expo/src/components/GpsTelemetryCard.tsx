@@ -1,7 +1,9 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Crosshair, RefreshCw, Radio } from 'lucide-react-native';
 import { GpsCoordinates, GpsLockStatus } from '../types';
 import { TranslationMap } from '../constants/i18n';
+import { tokens } from '../theme/tokens';
 
 interface GpsTelemetryCardProps {
   coords: GpsCoordinates;
@@ -24,15 +26,15 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
     <View style={styles.gpsCard}>
       <View style={styles.gpsCardHeader}>
         <View style={styles.gpsIndicatorRow}>
-          <View
-            style={[
-              styles.gpsDot,
+          <Radio
+            color={
               gpsStatus === 'LOCKED'
-                ? styles.gpsDotLocked
+                ? tokens.colors.status.success
                 : isLocating
-                ? styles.gpsDotLocating
-                : styles.gpsDotError
-            ]}
+                ? tokens.colors.status.warning
+                : tokens.colors.status.danger
+            }
+            size={16}
           />
           <Text style={styles.gpsCardTitle}>
             {isLocating
@@ -46,11 +48,16 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
           onPress={onRefreshGps}
           disabled={isLocating}
           style={styles.recalibrateBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Recalibrate GPS Coordinates"
         >
           {isLocating ? (
-            <ActivityIndicator size="small" color="#070B13" />
+            <ActivityIndicator size="small" color={tokens.colors.bg.base} />
           ) : (
-            <Text style={styles.recalibrateBtnText}>{t.recalibrateGps}</Text>
+            <View style={styles.btnInnerRow}>
+              <RefreshCw color={tokens.colors.bg.base} size={12} />
+              <Text style={styles.recalibrateBtnText}>Refresh GPS</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -60,13 +67,18 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
           <Text style={styles.gpsCoordLabel}>LATITUDE</Text>
           <Text style={styles.gpsCoordVal}>{coords.latitude.toFixed(5)}° N</Text>
         </View>
+        <View style={styles.gpsCoordDivider} />
         <View style={styles.gpsCoordItem}>
           <Text style={styles.gpsCoordLabel}>LONGITUDE</Text>
           <Text style={styles.gpsCoordVal}>{coords.longitude.toFixed(5)}° W</Text>
         </View>
+        <View style={styles.gpsCoordDivider} />
         <View style={styles.gpsCoordItem}>
-          <Text style={styles.gpsCoordLabel}>PRECISION</Text>
-          <Text style={[styles.gpsCoordVal, { color: '#10B981' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            <Crosshair color={tokens.colors.status.success} size={10} />
+            <Text style={styles.gpsCoordLabel}>ACCURACY</Text>
+          </View>
+          <Text style={[styles.gpsCoordVal, { color: tokens.colors.status.success }]}>
             ±{gpsAccuracy || 3.2}m
           </Text>
         </View>
@@ -77,12 +89,12 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
 
 const styles = StyleSheet.create({
   gpsCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: '#1E3A8A',
-    padding: 12,
-    gap: 8
+    borderColor: tokens.colors.police.dark,
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.sm
   },
   gpsCardHeader: {
     flexDirection: 'row',
@@ -92,63 +104,60 @@ const styles = StyleSheet.create({
   gpsIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
-  },
-  gpsDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5
-  },
-  gpsDotLocked: {
-    backgroundColor: '#10B981',
-    shadowColor: '#10B981',
-    shadowRadius: 6,
-    shadowOpacity: 0.8
-  },
-  gpsDotLocating: {
-    backgroundColor: '#F59E0B'
-  },
-  gpsDotError: {
-    backgroundColor: '#EF4444'
+    gap: tokens.spacing.xs
   },
   gpsCardTitle: {
-    color: '#93C5FD',
-    fontSize: 11,
+    color: tokens.colors.police.badge,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: '800',
     letterSpacing: 0.5
   },
   recalibrateBtn: {
-    backgroundColor: '#FCD116',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6
+    backgroundColor: tokens.colors.brand.gold,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.sm,
+    minHeight: 32,
+    justifyContent: 'center'
+  },
+  btnInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
   },
   recalibrateBtnText: {
-    color: '#070B13',
-    fontSize: 11,
+    color: tokens.colors.bg.base,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: 'bold'
   },
   gpsCoordsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#070B13',
-    padding: 8,
-    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: tokens.colors.bg.base,
+    padding: tokens.spacing.sm,
+    borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: '#1E293B'
+    borderColor: tokens.colors.border.subtle
   },
   gpsCoordItem: {
-    alignItems: 'center'
+    alignItems: 'center',
+    flex: 1
+  },
+  gpsCoordDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: tokens.colors.border.subtle
   },
   gpsCoordLabel: {
-    color: '#64748B',
+    color: tokens.colors.text.muted,
     fontSize: 9,
     fontWeight: 'bold'
   },
   gpsCoordVal: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontFamily: 'monospace',
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontFamily: tokens.typography.fontFamily.monoBold,
     fontWeight: 'bold',
     marginTop: 2
   }
