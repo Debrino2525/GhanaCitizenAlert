@@ -653,10 +653,10 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                     target="_blank"
                     rel="noreferrer"
                     className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs flex items-center space-x-1 transition"
-                    title="Open Scene in Google Street View"
+                    title="Open Scene in Google Earth / Satellite HD"
                   >
-                    <Compass className="w-3 h-3" />
-                    <span className="hidden sm:inline">Street View</span>
+                    <Compass className="w-3 h-3 text-amber-400" />
+                    <span className="hidden sm:inline">Satellite HD</span>
                   </a>
                 </div>
               </>
