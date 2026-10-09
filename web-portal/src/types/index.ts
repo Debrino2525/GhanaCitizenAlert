@@ -28,16 +28,21 @@ export type IncidentStatus =
 export type SeverityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'AMBER' | 'RED';
 
 export interface EvidenceMedia {
-  id: string;
+  id?: string;
   type: 'VIDEO' | 'PHOTO';
   durationSeconds?: number;
   url: string;
+  rawS3Url?: string;
+  video_storage_path?: string;
+  uploadStatus?: 'QUEUED' | 'UPLOADING' | 'UPLOADED' | 'UPLOAD_FAILED';
   thumbnailUrl: string;
-  sha256Hash: string;
+  sha256Hash?: string;
+  sha256Checksum?: string | null;
   timestampUtc: string;
   gpsWatermark: {
     lat: number;
     lng: number;
+    landmark?: string;
     ghanaPostCode: string;
     accuracyMeters: number;
   };

@@ -285,8 +285,11 @@ export const App: React.FC = () => {
             }
             parsedMedia = parsedMedia.map((m: any) => ({
               ...m,
-              rawS3Url: m.rawS3Url || '',
-              thumbnailUrl: m.thumbnailUrl || ''
+              url: m.url || m.rawS3Url || '',
+              rawS3Url: m.rawS3Url || m.url || '',
+              video_storage_path: m.video_storage_path || m.storage_path || '',
+              uploadStatus: m.uploadStatus || (m.rawS3Url || m.url ? 'UPLOADED' : 'QUEUED'),
+              thumbnailUrl: m.thumbnailUrl || m.rawS3Url || m.url || ''
             }));
 
             const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
@@ -365,8 +368,11 @@ export const App: React.FC = () => {
         }
         parsedMedia = parsedMedia.map((m: any) => ({
           ...m,
-          rawS3Url: m.rawS3Url || '',
-          thumbnailUrl: m.thumbnailUrl || ''
+          url: m.url || m.rawS3Url || '',
+          rawS3Url: m.rawS3Url || m.url || '',
+          video_storage_path: m.video_storage_path || m.storage_path || '',
+          uploadStatus: m.uploadStatus || (m.rawS3Url || m.url ? 'UPLOADED' : 'QUEUED'),
+          thumbnailUrl: m.thumbnailUrl || m.rawS3Url || m.url || ''
         }));
 
         const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;

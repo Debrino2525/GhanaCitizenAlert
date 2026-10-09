@@ -25,7 +25,8 @@ import {
   Download,
   X,
   Activity,
-  UploadCloud
+  UploadCloud,
+  RotateCcw
 } from 'lucide-react';
 import { generateCourtCertificate, CourtCertificate } from '../services/evidenceVault';
 import { supabase } from '../services/supabaseClient';
@@ -260,14 +261,15 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   }, [selectedIncident?.media]);
 
   const activeMediaStr = JSON.stringify(activeMedia || {});
+  const mediaSerialized = JSON.stringify(selectedIncident?.media ?? []);
 
   const resolveMediaUrl = useCallback(async () => {
     setIsPlaying(false);
     setCurrentTime(0);
-    setVideoLoadError(false);
 
     if (!activeMedia) {
       setResolvedVideoUrl('');
+      setVideoLoadError(false);
       setIsResolvingUrl(false);
       return;
     }
@@ -276,9 +278,10 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
     const uploadStatus = (activeMedia as any).uploadStatus;
 
-    // If upload is QUEUED and no valid rawUrl yet, it's in-flight from citizen device
+    // If upload is QUEUED/UPLOADING and no valid remote URL yet, it's still in-flight from citizen device
     if ((uploadStatus === 'QUEUED' || uploadStatus === 'UPLOADING') && (!rawUrl || rawUrl.startsWith('file://'))) {
       setResolvedVideoUrl('');
+      setVideoLoadError(false);
       setIsResolvingUrl(false);
       return;
     }
@@ -288,7 +291,15 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
       // 1. Direct Data URI or HTTP Stream (instant zero-latency playback)
       if (rawUrl && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
         setResolvedVideoUrl(rawUrl);
+        setVideoLoadError(false);
+        setIsPlaying(false);
         setIsResolvingUrl(false);
+        if (videoRef.current) {
+          videoRef.current.currentTime = 0;
+          try {
+            videoRef.current.load();
+          } catch (e) {}
+        }
         return;
       }
 
@@ -300,27 +311,61 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
         if (!signedErr && signedData?.signedUrl) {
           setResolvedVideoUrl(signedData.signedUrl);
+          setVideoLoadError(false);
+          setIsPlaying(false);
           setIsResolvingUrl(false);
+          if (videoRef.current) {
+            videoRef.current.currentTime = 0;
+            try {
+              videoRef.current.load();
+            } catch (e) {}
+          }
           return;
         }
 
         const { data: pubData } = supabase.storage.from('evidence').getPublicUrl(storagePath);
         if (pubData?.publicUrl) {
           setResolvedVideoUrl(pubData.publicUrl);
+          setVideoLoadError(false);
+          setIsPlaying(false);
           setIsResolvingUrl(false);
+          if (videoRef.current) {
+            videoRef.current.currentTime = 0;
+            try {
+              videoRef.current.load();
+            } catch (e) {}
+          }
           return;
         }
       }
 
       if (rawUrl && !rawUrl.startsWith('file://')) {
         setResolvedVideoUrl(rawUrl);
+        setVideoLoadError(false);
+        setIsPlaying(false);
+        if (videoRef.current) {
+          videoRef.current.currentTime = 0;
+          try {
+            videoRef.current.load();
+          } catch (e) {}
+        }
       } else {
         setResolvedVideoUrl('');
       }
     } catch (e) {
       console.warn('Media URL resolution warning:', e);
       const fallback = (activeMedia as any).rawS3Url || '';
-      setResolvedVideoUrl(fallback.startsWith('file://') ? '' : fallback);
+      const cleanFallback = fallback.startsWith('file://') ? '' : fallback;
+      setResolvedVideoUrl(cleanFallback);
+      if (cleanFallback) {
+        setVideoLoadError(false);
+        if (videoRef.current) {
+          videoRef.current.currentTime = 0;
+          try {
+            videoRef.current.load();
+          } catch (loadErr) {}
+        }
+      }
     } finally {
       setIsResolvingUrl(false);
     }
@@ -335,7 +380,18 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         videoRef.current.load();
       } catch (e) {}
     }
-  }, [resolveMediaUrl, selectedIncident?.id, selectedIncident?.trackingCode]);
+  }, [resolveMediaUrl, selectedIncident?.id, selectedIncident?.trackingCode, mediaSerialized]);
+
+  const handleForceRefreshMedia = useCallback(() => {
+    setVideoLoadError(false);
+    resolveMediaUrl();
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      try {
+        videoRef.current.load();
+      } catch (e) {}
+    }
+  }, [resolveMediaUrl]);
 
   const filteredIncidents = incidents.filter(inc => {
     if (filterAgency !== 'ALL' && inc.assignedAgency !== filterAgency) return false;
@@ -743,9 +799,19 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   <span>Digital Evidence Review & Forensic Telemetry</span>
                 </span>
-                <span className="text-slate-400 font-mono text-[11px]">
-                  {currentMedia?.durationSeconds || 15}s • {currentMedia?.type || 'VIDEO'}
-                </span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleForceRefreshMedia}
+                    title="Force refresh signed media streams from National Vault"
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold flex items-center space-x-1 transition border border-slate-700/60"
+                  >
+                    <RotateCcw className="w-3 h-3 text-blue-400" />
+                    <span>Refresh Media</span>
+                  </button>
+                  <span className="text-slate-400 font-mono text-[11px]">
+                    {currentMedia?.durationSeconds || 15}s • {currentMedia?.type || 'VIDEO'}
+                  </span>
+                </div>
               </div>
 
               <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black shadow-inner group">
@@ -770,13 +836,22 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                               : 'Citizen device is streaming video evidence to National Vault. Playback will activate automatically once sealed.'}
                           </p>
                         </div>
-                        <button
-                          onClick={() => resolveMediaUrl()}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition"
-                        >
-                          <Activity className="w-3.5 h-3.5 text-blue-400" />
-                          <span>Check Ingestion Status</span>
-                        </button>
+                        <div className="flex items-center space-x-2 pt-1">
+                          <button
+                            onClick={handleForceRefreshMedia}
+                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow transition"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Force Refresh Media</span>
+                          </button>
+                          <button
+                            onClick={() => resolveMediaUrl()}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition"
+                          >
+                            <Activity className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Check Ingestion Status</span>
+                          </button>
+                        </div>
                       </div>
                     ) : videoLoadError ? (
                       <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-2.5">
@@ -792,11 +867,20 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && (
                           <div className="flex items-center space-x-2 pt-1">
                             <button
+                              onClick={handleForceRefreshMedia}
+                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow flex items-center space-x-1.5"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Force Refresh Media</span>
+                            </button>
+                            <button
                               onClick={() => {
                                 setVideoLoadError(false);
-                                resolveMediaUrl();
+                                if (videoRef.current) {
+                                  videoRef.current.load();
+                                }
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow"
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
                             >
                               Retry Playback
                             </button>
@@ -840,8 +924,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           onPlay={() => setIsPlaying(true)}
                           onPause={() => setIsPlaying(false)}
                         >
-                          <source src={resolvedVideoUrl} type={resolvedVideoUrl.includes('.mov') ? 'video/quicktime' : 'video/mp4'} />
-                          <source src={resolvedVideoUrl} type="video/mp4" />
+                          {resolvedVideoUrl.toLowerCase().includes('.mov') ? (
+                            <source src={resolvedVideoUrl} type="video/quicktime" />
+                          ) : (
+                            <source src={resolvedVideoUrl} type="video/mp4" />
+                          )}
                         </video>
 
                         {/* Centered Play Overlay */}
