@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { GpsCoordinates, GpsLockStatus } from '../types';
+import { generateGhanaPostGpsCode } from '../utils/ghanaPostGps';
 
 export interface UseGpsLocationResult {
   coords: GpsCoordinates | null;
@@ -52,6 +53,8 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       setGpsAccuracy(acc !== null ? Math.round(acc * 10) / 10 : null);
       setGpsStatus('LOCKED');
 
+      let detectedRegion = 'Greater Accra';
+
       try {
         const reverseResults = await Location.reverseGeocodeAsync({
           latitude: lat,
@@ -72,11 +75,18 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             setLocationName(autoAreaName);
           }
           if (rev.region) {
+            detectedRegion = rev.region;
             setRegion(rev.region);
           }
         }
       } catch (geoErr) {
         console.warn('Reverse geocode notice:', geoErr);
+      }
+
+      // Automatically generate and populate the official GhanaPost GPS Digital Address
+      const autoGhanaPostCode = generateGhanaPostGpsCode(lat, lng, detectedRegion);
+      if (autoGhanaPostCode) {
+        setGhanaPostCode(autoGhanaPostCode);
       }
     } catch (e: any) {
       setGpsStatus('ERROR');
