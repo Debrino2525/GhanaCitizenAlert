@@ -87,13 +87,10 @@ export const PublicWebFeed: React.FC = () => {
   useEffect(() => {
     fetchPublicFeed();
 
-    // Subscribe to realtime changes on incidents table and view
+    // Subscribe to realtime changes on incidents table
     const channel = supabase
       .channel('realtime_public_feed_broadcast')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
-        fetchPublicFeed();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'public_feed_incidents' }, () => {
         fetchPublicFeed();
       })
       .subscribe();
