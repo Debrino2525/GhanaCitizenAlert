@@ -348,11 +348,13 @@ export const App: React.FC = () => {
     fetchSupabaseData();
     fetchPings();
 
-    // Subscribe to Realtime Incidents channel
+    // Subscribe to Realtime Incidents channel (INSERT, UPDATE, DELETE)
     const channel = supabase
       .channel('realtime_incidents')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
         const r: any = payload.new;
+        if (!r || !r.id) return;
+
         let parsedMedia = Array.isArray(r.media) ? r.media : [];
         if (typeof r.media === 'string') {
           try {
@@ -370,7 +372,7 @@ export const App: React.FC = () => {
         const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
         const lng = typeof r.longitude === 'number' && !isNaN(r.longitude) ? r.longitude : -0.1870;
 
-        const newInc: IncidentReport = {
+        const incomingInc: IncidentReport = {
           id: r.id,
           trackingCode: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
           title: r.title || 'Civic Incident Report',
@@ -393,8 +395,14 @@ export const App: React.FC = () => {
           updatedAt: r.updated_at || new Date().toISOString(),
           investigatorNotes: r.investigator_notes || []
         };
-        setIncidents(prev => [newInc, ...prev]);
-        setSelectedIncident(newInc);
+
+        if (payload.eventType === 'INSERT') {
+          setIncidents(prev => [incomingInc, ...prev.filter(i => i.id !== incomingInc.id)]);
+          setSelectedIncident(incomingInc);
+        } else if (payload.eventType === 'UPDATE') {
+          setIncidents(prev => prev.map(i => i.id === incomingInc.id ? incomingInc : i));
+          setSelectedIncident(prev => prev?.id === incomingInc.id ? incomingInc : prev);
+        }
       })
       .subscribe();
 

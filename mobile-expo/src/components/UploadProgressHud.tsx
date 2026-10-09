@@ -7,6 +7,7 @@ interface UploadProgressHudProps {
   uploadProgress: number;
   uploadStatusText: string;
   isUploadingMedia: boolean;
+  isSubmitting?: boolean;
   hasRecordedMedia: boolean;
   mediaType: 'VIDEO' | 'IMAGE';
   recordedDuration: number;
@@ -16,25 +17,27 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
   uploadProgress,
   uploadStatusText,
   isUploadingMedia,
+  isSubmitting,
   hasRecordedMedia,
   mediaType,
   recordedDuration
 }) => {
-  if (!isUploadingMedia && !hasRecordedMedia) return null;
+  const isActivelyWorking = isUploadingMedia || Boolean(isSubmitting);
+  if (!isActivelyWorking && !hasRecordedMedia) return null;
 
-  const displayProgress = isUploadingMedia ? uploadProgress : 100;
+  const displayProgress = isActivelyWorking ? Math.max(5, Math.min(100, uploadProgress)) : 100;
 
   return (
     <View style={styles.uploadProgressCard}>
       <View style={styles.uploadHeaderRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
-          {isUploadingMedia ? (
+          {isActivelyWorking ? (
             <UploadCloud color={tokens.colors.police.accent} size={16} />
           ) : (
             <CheckCircle2 color={tokens.colors.status.success} size={16} />
           )}
           <Text style={styles.uploadTitle}>
-            {isUploadingMedia ? 'UPLOADING & ENCRYPTING EVIDENCE...' : 'EVIDENCE SECURELY ATTACHED & LOCKED'}
+            {isActivelyWorking ? 'UPLOADING & ENCRYPTING EVIDENCE...' : 'EVIDENCE SECURELY ATTACHED & LOCKED'}
           </Text>
         </View>
         <Text style={styles.uploadPercentageText}>{displayProgress}%</Text>

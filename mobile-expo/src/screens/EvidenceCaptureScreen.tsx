@@ -608,6 +608,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             uploadProgress={uploadProgress}
             uploadStatusText={uploadStatusText}
             isUploadingMedia={isUploadingMedia}
+            isSubmitting={isSubmitting}
             hasRecordedMedia={hasRecordedMedia}
             mediaType={mediaType}
             recordedDuration={recordedDuration}
@@ -622,7 +623,12 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             accessibilityLabel="Transmit Official Report"
           >
             {isSubmitting ? (
-              <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing.sm, paddingHorizontal: 8 }}>
+                <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+                <Text style={[styles.submitBtnText, { fontSize: tokens.typography.fontSize.xs }]} numberOfLines={1}>
+                  {uploadStatusText || 'Transmitting Report & Evidence...'}
+                </Text>
+              </View>
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm }}>
                 <Send color={tokens.colors.bg.base} size={18} />

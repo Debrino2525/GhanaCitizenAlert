@@ -13,7 +13,7 @@ import {
 } from '../types';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult, formatPlainLanguageUploadError } from '../services/evidenceUploader';
-import { savePendingReport, removePendingReport } from '../services/pendingReportsQueue';
+import { savePendingReport, removePendingReport, updatePendingReportStatus } from '../services/pendingReportsQueue';
 import { computeFileSha256 } from '../utils/fileHashing';
 import { getRealFileSizeBytes, formatBytesToMB } from '../utils/fileSize';
 
@@ -176,7 +176,9 @@ export const useIncidentDraft = ({
     }
 
     setIsSubmitting(true);
+    setIsUploadingMedia(true);
     setUploadProgress(5);
+    setUploadStatusText('Securing incident dossier...');
 
     const generateTrackingCode = (): string => {
       const bytes = Crypto.getRandomBytes(6);
@@ -238,7 +240,9 @@ export const useIncidentDraft = ({
 
         if (fileSize > 45 * 1024 * 1024) {
           setIsSubmitting(false);
+          setIsUploadingMedia(false);
           setUploadProgress(0);
+          setUploadStatusText('');
           safeHaptics.warning();
           Alert.alert(
             'File Too Large',
@@ -257,7 +261,7 @@ export const useIncidentDraft = ({
       }
 
       // STEP A: INSERT REPORT INTO DATABASE FIRST (REPORT FIRST PROTOCOL)
-      setUploadProgress(30);
+      setUploadProgress(25);
       setUploadStatusText('Transmitting incident dossier to Police CAD Dispatch...');
 
       const initialMediaList: EvidenceMediaItem[] = (hasRecordedMedia && permanentUri)
@@ -393,6 +397,7 @@ export const useIncidentDraft = ({
         }
 
         setIsSubmitting(false);
+        setIsUploadingMedia(false);
         setUploadProgress(0);
         setUploadStatusText('');
         safeHaptics.medium();
@@ -417,6 +422,7 @@ export const useIncidentDraft = ({
       // If no media attached, we are 100% done!
       if (!hasRecordedMedia || !permanentUri) {
         setIsSubmitting(false);
+        setIsUploadingMedia(false);
         setUploadProgress(100);
         setUploadStatusText('✅ Report Transmitted');
         safeHaptics.success();
@@ -441,8 +447,8 @@ export const useIncidentDraft = ({
       }
 
       // STEP C: UPLOAD MEDIA SEPARATELY (MEDIA SECOND PROTOCOL)
-      setUploadProgress(50);
-      setUploadStatusText('Report delivered. Uploading evidence video to Vault...');
+      setUploadProgress(40);
+      setUploadStatusText('Report delivered. Streaming evidence to Vault...');
 
       // Save to queue with reportInserted = true so that any crash/abort retries media only
       await savePendingReport({
@@ -483,21 +489,27 @@ export const useIncidentDraft = ({
         mimeType,
         expectedFileSize: fileSize,
         onProgress: (ratio, txt) => {
-          setUploadProgress(Math.round(50 + ratio * 45));
+          setUploadProgress(Math.round(40 + ratio * 55));
           setUploadStatusText(txt);
         }
       });
 
       if (!uploadResult.success || !uploadResult.publicUrl) {
-        // Report is already delivered! Show plain language status
+        // Report is already delivered! Update queue and show plain language notification
+        await updatePendingReportStatus(trackingCode, 'QUEUED', uploadResult.error, {
+          reportInserted: true,
+          mediaUploaded: false
+        });
+
         setIsSubmitting(false);
+        setIsUploadingMedia(false);
         setUploadProgress(0);
         setUploadStatusText('');
         safeHaptics.medium();
 
         Alert.alert(
-          'Report Sent • Video Upload Waiting',
-          `Tracking Code: ${trackingCode}\n\nYour written report was received by Police Command. The video evidence is safely preserved on your device and will continue uploading in the background.`,
+          '✅ Report Delivered • Video Queued in Background',
+          `Tracking Code: ${trackingCode}\n\nYour written report was successfully received by Police Command.\n\nThe video evidence is safely preserved on your device and will continue uploading in the background.`,
           [{ text: 'OK' }]
         );
 
@@ -545,6 +557,7 @@ export const useIncidentDraft = ({
       if (recordedUri) await cleanupCachedEvidence(recordedUri);
 
       setIsSubmitting(false);
+      setIsUploadingMedia(false);
       setUploadProgress(100);
       setUploadStatusText('✅ Report & Evidence Sealed');
       safeHaptics.success();
@@ -567,6 +580,7 @@ export const useIncidentDraft = ({
       setUploadStatusText('');
     } catch (e: any) {
       setIsSubmitting(false);
+      setIsUploadingMedia(false);
       setUploadProgress(0);
       setUploadStatusText('');
       safeHaptics.warning();
