@@ -135,7 +135,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           `)
           .openPopup();
 
-        map.flyTo([latitude, longitude], 15, { duration: 1 });
+        map.flyTo([latitude, longitude], 18, { duration: 1 });
       },
       (err) => {
         setIsLocatingUser(false);
@@ -144,6 +144,48 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       { enableHighAccuracy: true, timeout: 8000 }
     );
   }, []);
+
+  // Quick action: Narrow down Leaflet map directly to exact closest coordinates (Zoom 19 in Satellite/Hybrid)
+  const handleNarrowToEvidence = useCallback(() => {
+    if (!selectedIncident || !mapInstanceRef.current) return;
+    const selPing = latestPings?.[selectedIncident.id];
+    const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+
+    if (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') {
+      setCurrentStyle('google-hybrid');
+    }
+    mapInstanceRef.current.flyTo(selCoords, 19, {
+      duration: 1.0,
+      easeLinearity: 0.25
+    });
+  }, [selectedIncident, latestPings, currentStyle]);
+
+  // Quick action: Zoom out to show the complete CAD dispatch corridor from origin police station
+  const handleFitRouteBounds = useCallback(() => {
+    if (!selectedIncident || !activeRoute || !mapInstanceRef.current) return;
+    const selPing = latestPings?.[selectedIncident.id];
+    const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+    const bounds = L.latLngBounds([
+      activeRoute.originStation.coordinates,
+      selCoords
+    ]);
+    mapInstanceRef.current.flyToBounds(bounds, { padding: [60, 60], maxZoom: 14, duration: 0.75 });
+  }, [selectedIncident, activeRoute, latestPings]);
+
+  // Expose global callback for Leaflet popup HTML buttons
+  useEffect(() => {
+    (window as any).__cadNarrowToCoords = (lat: number, lng: number) => {
+      if (mapInstanceRef.current) {
+        if (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') {
+          setCurrentStyle('google-hybrid');
+        }
+        mapInstanceRef.current.flyTo([lat, lng], 19, { duration: 1.0 });
+      }
+    };
+    return () => {
+      delete (window as any).__cadNarrowToCoords;
+    };
+  }, [currentStyle]);
 
   /**
    * Note: Direct mt1.google.com tile layer fetching is for prototyping.
@@ -428,8 +470,10 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         onSelectIncident(inc);
       });
 
+      const googleSatUrl = `https://www.google.com/maps?q=${effectiveCoords[0]},${effectiveCoords[1]}&ll=${effectiveCoords[0]},${effectiveCoords[1]}&z=20&t=k`;
+
       marker.bindPopup(`
-        <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; color: #0f172a; min-width: 240px; padding: 6px;">
+        <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; color: #0f172a; min-width: 250px; padding: 6px;">
           ${livePing ? `
             <div style="background: #dc2626; color: white; padding: 2px 7px; border-radius: 4px; font-weight: 900; font-size: 10px; display: inline-block; margin-bottom: 5px; letter-spacing: 0.5px;">
               🚨 LIVE SOS DISTRESS BEACON ACTIVE
@@ -437,7 +481,11 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             <p style="margin: 0 0 4px 0; color: #dc2626; font-family: monospace; font-weight: bold; font-size: 11px;">
               GPS: ${livePing.lat.toFixed(5)}° N, ${livePing.lng.toFixed(5)}° W (±${livePing.accuracy}m)
             </p>
-          ` : ''}
+          ` : `
+            <p style="margin: 0 0 4px 0; color: #0284c7; font-family: monospace; font-weight: bold; font-size: 10.5px;">
+              GPS: ${effectiveCoords[0].toFixed(5)}° N, ${effectiveCoords[1].toFixed(5)}° W
+            </p>
+          `}
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
             <span style="background: #0B1E38; color: #FCD116; padding: 2px 7px; border-radius: 6px; font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 10px;">${inc.trackingCode}</span>
             <span style="color: #475569; font-size: 11px; font-weight: 700;">${inc.assignedAgency}</span>
@@ -447,6 +495,14 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
             <span style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 11px;">📍 ${inc.ghanaPostCode || `${effectiveCoords[0].toFixed(3)}, ${effectiveCoords[1].toFixed(3)}`}</span>
             <span style="color: #059669; font-weight: 700; font-size: 10px; background: #ecfdf5; padding: 1px 5px; border-radius: 4px;">Act 772 Sealed</span>
+          </div>
+          <div style="margin-top: 8px; display: flex; gap: 4px;">
+            <button onclick="window.__cadNarrowToCoords && window.__cadNarrowToCoords(${effectiveCoords[0]}, ${effectiveCoords[1]})" style="flex: 1; background: #0284c7; color: white; border: none; border-radius: 6px; padding: 5px 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              🎯 Narrow GPS (Zoom 19)
+            </button>
+            <a href="${googleSatUrl}" target="_blank" rel="noreferrer" style="background: #0f172a; color: #fcd34d; border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; font-weight: bold; font-size: 11px; text-decoration: none; display: flex; align-items: center; justify-content: center;">
+              🛰️ Satellite HD
+            </a>
           </div>
         </div>
       `);
@@ -520,12 +576,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
       routeLayerRef.current = polyline;
 
-      // Fit bounds smoothly with flyToBounds
-      const bounds = L.latLngBounds([
-        route.originStation.coordinates,
-        selCoords
-      ]);
-      map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 14, duration: 0.75 });
+      // Smoothly narrow down and focus directly on the incident / evidence capture coordinates
+      map.flyTo(selCoords, 18.5, { duration: 0.85 });
     } else {
       setActiveRoute(null);
     }
@@ -630,11 +682,29 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                   </div>
                 </div>
 
-                {/* Corridor */}
-                <p className="text-[11px] text-slate-300 font-medium flex items-center space-x-1">
-                  <Car className="w-3 h-3 text-amber-400 shrink-0" />
-                  <span className="truncate">{activeRoute.primaryHighway}</span>
-                </p>
+                {/* Corridor & Quick Narrow Controls */}
+                <div className="flex items-center justify-between text-[11px] text-slate-300 font-medium">
+                  <p className="flex items-center space-x-1 truncate">
+                    <Car className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span className="truncate">{activeRoute.primaryHighway}</span>
+                  </p>
+                  <button
+                    onClick={handleFitRouteBounds}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold shrink-0 ml-2"
+                    title="Zoom Out to Full Police Dispatch Corridor"
+                  >
+                    🛣️ View Route
+                  </button>
+                </div>
+
+                {/* Quick Action: Narrow Down to Coordinates (Zoom 19) */}
+                <button
+                  onClick={handleNarrowToEvidence}
+                  className="w-full px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-blue-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 border border-amber-400/40 text-amber-300 font-extrabold text-xs flex items-center justify-center space-x-2 transition shadow-lg shadow-amber-500/10"
+                >
+                  <LocateFixed className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  <span>🎯 Narrow to Scene (Zoom 19 HD)</span>
+                </button>
 
                 {/* Navigation Deep Links */}
                 <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
@@ -649,11 +719,11 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                   </a>
 
                   <a
-                    href={activeRoute.googleStreetViewUrl}
+                    href={activeRoute.googleSatelliteUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs flex items-center space-x-1 transition"
-                    title="Open Scene in Google Earth / Satellite HD"
+                    title="Open Scene in Google Earth / Satellite HD (Zoom 20)"
                   >
                     <Compass className="w-3 h-3 text-amber-400" />
                     <span className="hidden sm:inline">Satellite HD</span>
@@ -667,6 +737,18 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
       {/* TOP-RIGHT CORNER OVERLAY CONTAINER (Layer Selector, Locate Me, & Fullscreen Controls) */}
       <div className="absolute top-3 right-3 z-map-ui pointer-events-none flex items-center gap-2">
+        {/* Quick Narrow to Evidence Coordinates Button */}
+        {selectedIncident && (
+          <button
+            onClick={handleNarrowToEvidence}
+            className="pointer-events-auto bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 backdrop-blur-md rounded-xl px-2.5 py-1.5 text-xs font-bold flex items-center space-x-1.5 shadow-xl transition"
+            title="Narrow Down to Closest Scene / Evidence Coordinate (Zoom 19 Satellite)"
+          >
+            <LocateFixed className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span className="hidden md:inline">Narrow to GPS (Zoom 19)</span>
+          </button>
+        )}
+
         {/* Locate My Position Button */}
         <button
           onClick={handleLocateMe}

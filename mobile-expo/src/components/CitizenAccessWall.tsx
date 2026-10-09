@@ -35,6 +35,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { tokens } from '../theme/tokens';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -59,6 +60,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER' | 'WHISTLEBLOWER'>('LOGIN');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
 
   // Form states
   const [email, setEmail] = useState('');
@@ -677,16 +679,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
           {/* Privacy Policy & Statutory Compliance Link */}
           <TouchableOpacity
-            onPress={() => {
-              Linking.openURL('https://ghanacitizenalert.globitechcybersolutions.com/privacy').catch(() => {
-                Alert.alert(
-                  'Privacy Policy',
-                  'Please visit https://ghanacitizenalert.globitechcybersolutions.com/privacy to read the Ghana Data Protection Act (Act 843) policy.'
-                );
-              });
-            }}
+            onPress={() => setIsPrivacyModalOpen(true)}
             style={styles.privacyLinkWrapper}
-            accessibilityRole="link"
+            accessibilityRole="button"
             accessibilityLabel="Statutory Privacy Policy"
           >
             <Text style={styles.privacyLinkText}>
@@ -704,6 +699,12 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* In-App Statutory Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+      />
     </SafeAreaView>
   );
 };

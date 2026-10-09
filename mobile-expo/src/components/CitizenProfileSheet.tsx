@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Linking } from 'react-native';
+import React, { memo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert } from 'react-native';
 import {
   ShieldCheck,
   Mail,
@@ -18,6 +18,7 @@ import { CitizenUser } from './CitizenAccessWall';
 import { supabase } from '../lib/supabase';
 import { GoogleSignin } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 interface CitizenProfileSheetProps {
   isOpen: boolean;
@@ -36,6 +37,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   onToggleAnonymous,
   onSignOut
 }) => {
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+
   const handleSignOutPress = () => {
     Alert.alert(
       '🔒 Sign Out & Lock App',
@@ -63,12 +66,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   };
 
   const handleOpenPrivacyPolicy = () => {
-    Linking.openURL('https://ghanacitizenalert.globitechcybersolutions.com/privacy').catch(() => {
-      Alert.alert(
-        'Privacy Policy',
-        'Please visit https://ghanacitizenalert.globitechcybersolutions.com/privacy to view our statutory Data Protection Policy (Act 843).'
-      );
-    });
+    setIsPrivacyModalOpen(true);
   };
 
   const handleDeleteAccountPress = () => {
@@ -274,6 +272,12 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* In-App Statutory Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+      />
     </Modal>
   );
 });

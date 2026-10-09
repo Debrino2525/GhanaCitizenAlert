@@ -589,7 +589,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
                 <div className="flex items-center space-x-2 shrink-0">
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}`}
+                    href={`https://www.google.com/maps?q=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}&ll=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}&z=20&t=k`}
                     target="_blank"
                     rel="noreferrer"
                     className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center space-x-1.5 transition shadow-lg shadow-red-600/30"
@@ -794,7 +794,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
                 {/* Direct Google Maps Satellite / OpenStreetMap link */}
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${selectedIncident?.coordinates?.[0] ?? 5.6037},${selectedIncident?.coordinates?.[1] ?? -0.1870}`}
+                  href={`https://www.google.com/maps?q=${selectedIncident?.coordinates?.[0] ?? 5.6037},${selectedIncident?.coordinates?.[1] ?? -0.1870}&ll=${selectedIncident?.coordinates?.[0] ?? 5.6037},${selectedIncident?.coordinates?.[1] ?? -0.1870}&z=20&t=k`}
                   target="_blank"
                   rel="noreferrer"
                   className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-lg backdrop-blur-md transition"
