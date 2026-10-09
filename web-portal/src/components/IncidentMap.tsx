@@ -76,6 +76,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const [isLayerDropdownOpen, setIsLayerDropdownOpen] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showTileErrorNotice, setShowTileErrorNotice] = useState<boolean>(false);
+  const [showResolved, setShowResolved] = useState<boolean>(false);
 
   // Quick action: Locate user's current GPS position
   const handleLocateMe = useCallback(() => {
@@ -401,15 +402,25 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         `);
     });
 
-    // B. Draw Incident Markers & Active SOS Distress Beacons
-    incidents.forEach(inc => {
+    // B. Draw Incident Markers & Active SOS Distress Beacons (Hide resolved by default)
+    const visibleIncidents = incidents.filter(inc => {
+      const isResolved = inc.status === 'RESOLVED' || inc.status === 'DISMISSED';
+      if (!isResolved) return true;
+      if (showResolved) return true;
+      if (selectedIncident?.id === inc.id) return true;
+      return false;
+    });
+
+    visibleIncidents.forEach(inc => {
       const livePing = latestPings?.[inc.id];
       const effectiveCoords: [number, number] = livePing ? [livePing.lat, livePing.lng] : inc.coordinates;
-      const isSos = Boolean(livePing) || inc.category === 'CRIMINAL_OFFENSE' && inc.title.includes('SOS');
+      const isSos = Boolean(livePing) || (inc.category === 'CRIMINAL_OFFENSE' && inc.title.includes('SOS'));
+      const isResolved = inc.status === 'RESOLVED' || inc.status === 'DISMISSED';
 
       let pinColor = '#3b82f6';
       let iconEmoji = '🚨';
-      if (isSos) { pinColor = '#dc2626'; iconEmoji = '📡'; }
+      if (isResolved) { pinColor = '#059669'; iconEmoji = '✅'; }
+      else if (isSos) { pinColor = '#dc2626'; iconEmoji = '📡'; }
       else if (inc.category === 'CRIMINAL_OFFENSE') { pinColor = '#ef4444'; iconEmoji = '🚨'; }
       else if (inc.category === 'DOMESTIC_ABUSE') { pinColor = '#ec4899'; iconEmoji = '🛡️'; }
       else if (inc.category === 'GALAMSEY_ENVIRONMENTAL') { pinColor = '#10b981'; iconEmoji = '🌲'; }
@@ -417,10 +428,10 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       else if (inc.category === 'SANITATION_ZONING') { pinColor = '#8b5cf6'; iconEmoji = '🏙️'; }
 
       const isSelected = selectedIncident?.id === inc.id;
-      const isUrgent = isSos || inc.severity === 'RED' || inc.severity === 'HIGH' || inc.severity === 'CRITICAL';
+      const isUrgent = !isResolved && (isSos || inc.severity === 'RED' || inc.severity === 'HIGH' || inc.severity === 'CRITICAL');
 
       // Draw glowing accuracy circle if live GPS ping is active
-      if (livePing) {
+      if (livePing && !isResolved) {
         L.circle(effectiveCoords, {
           color: '#ef4444',
           fillColor: '#ef4444',
@@ -581,7 +592,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     } else {
       setActiveRoute(null);
     }
-  }, [incidents, alerts, selectedIncident, selectedStation, latestPings]);
+  }, [incidents, alerts, selectedIncident, selectedStation, latestPings, showResolved]);
 
   const currentLayerObj = layerOptions.find(l => l.id === currentStyle) || layerOptions[0];
 
@@ -748,6 +759,19 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             <span className="hidden md:inline">Narrow to GPS (Zoom 19)</span>
           </button>
         )}
+
+        {/* Toggle Resolved Incidents on Map */}
+        <button
+          onClick={() => setShowResolved(!showResolved)}
+          className={`pointer-events-auto backdrop-blur-md border rounded-xl px-2.5 py-1.5 text-xs font-bold flex items-center space-x-1.5 shadow-xl transition ${
+            showResolved
+              ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900'
+              : 'bg-slate-900/90 border-slate-700/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title={showResolved ? "Resolved incidents visible on map (Click to hide)" : "Resolved incidents hidden from map (Click to show)"}
+        >
+          <span>{showResolved ? '✅ Resolved: Shown' : '🔒 Resolved: Hidden'}</span>
+        </button>
 
         {/* Locate My Position Button */}
         <button
