@@ -31,22 +31,53 @@ export const PublicWebFeed: React.FC = () => {
   const [appealReason, setAppealReason] = useState('');
   const [appealSubmitted, setAppealSubmitted] = useState(false);
 
-  // Fetch verified public safety bulletins from the public_feed_incidents view
+  // Fetch verified public safety bulletins from the public_feed_incidents view or direct published incidents
   const fetchPublicFeed = async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
+      // 1. Attempt to query public_feed_incidents view
       const { data, error } = await supabase
         .from('public_feed_incidents')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
+      if (!error && data && data.length > 0) {
+        setIncidents(data);
+        return;
       }
-      setIncidents(data || []);
+
+      // 2. Query fallback on incidents table directly where published
+      const { data: rawData, error: rawError } = await supabase
+        .from('incidents')
+        .select('*')
+        .eq('is_public_published', true)
+        .order('created_at', { ascending: false });
+
+      if (rawError && error) {
+        throw rawError || error;
+      }
+
+      const mapped: PublicFeedIncident[] = (rawData || []).map((r: any) => ({
+        id: r.id,
+        tracking_code: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
+        category: r.category || 'CIVIC_ALERT',
+        title: r.title,
+        description: r.description,
+        location_name: r.location_name,
+        region: r.region,
+        latitude: r.latitude || 5.6037,
+        longitude: r.longitude || -0.1870,
+        severity: r.severity || 'NORMAL',
+        status: r.status || 'RECEIVED_PENDING_TRIAGE',
+        public_corroborations: r.public_corroborations || 0,
+        created_at: r.created_at,
+        updated_at: r.updated_at
+      }));
+
+      setIncidents(mapped);
     } catch (err: any) {
-      console.warn('Error reading public_feed_incidents:', err);
+      console.warn('Error reading public safety bulletins:', err);
       setErrorMsg('Could not load public safety bulletins. Please refresh or check connection.');
     } finally {
       setLoading(false);
@@ -56,9 +87,12 @@ export const PublicWebFeed: React.FC = () => {
   useEffect(() => {
     fetchPublicFeed();
 
-    // Subscribe to realtime changes on public feed view / table
+    // Subscribe to realtime changes on incidents table and view
     const channel = supabase
-      .channel('realtime_public_feed')
+      .channel('realtime_public_feed_broadcast')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
+        fetchPublicFeed();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'public_feed_incidents' }, () => {
         fetchPublicFeed();
       })

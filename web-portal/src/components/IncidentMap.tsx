@@ -46,7 +46,10 @@ interface TileConfig {
   tileSize?: number;
   zoomOffset?: number;
   maxZoom?: number;
+  maxNativeZoom?: number;
 }
+
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 export const IncidentMap: React.FC<IncidentMapProps> = ({
   incidents,
@@ -78,7 +81,67 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const [showTileErrorNotice, setShowTileErrorNotice] = useState<boolean>(false);
   const [showResolved, setShowResolved] = useState<boolean>(false);
 
-  // Quick action: Locate user's current GPS position
+  const getTileConfig = useCallback((style: BasemapStyle): TileConfig => {
+    // If Mapbox token is unavailable, gracefully fallback all styles to OpenStreetMap
+    if (!MAPBOX_TOKEN && style !== 'osm') {
+      return {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        subdomains: ['a', 'b', 'c'],
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; Ghana Police CAD',
+        maxZoom: 19,
+        maxNativeZoom: 19
+      };
+    }
+
+    switch (style) {
+      case 'google-streets':
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
+          maxZoom: 20,
+          maxNativeZoom: 20
+        };
+      case 'google-satellite':
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; Maxar &copy; CNES/Airbus &copy; Ghana Police CAD',
+          maxZoom: 20,
+          maxNativeZoom: 20
+        };
+      case 'google-hybrid':
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; Maxar &copy; Ghana Police CAD',
+          maxZoom: 20,
+          maxNativeZoom: 20
+        };
+      case 'google-terrain':
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; Ghana Police CAD',
+          maxZoom: 20,
+          maxNativeZoom: 20
+        };
+      case 'mapbox-dark':
+        return {
+          url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; Ghana Police CAD',
+          maxZoom: 20,
+          maxNativeZoom: 20
+        };
+      case 'osm':
+      default:
+        return {
+          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          subdomains: ['a', 'b', 'c'],
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
+          maxZoom: 19,
+          maxNativeZoom: 19
+        };
+    }
+  }, []);
+
+  // Quick action: Locate user's current GPS position (clamped to active layer maxZoom)
   const handleLocateMe = useCallback(() => {
     if (!navigator.geolocation) {
       alert('Geolocation is not supported by your browser.');
@@ -136,7 +199,9 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           `)
           .openPopup();
 
-        map.flyTo([latitude, longitude], 18, { duration: 1 });
+        const activeCfg = getTileConfig(currentStyle);
+        const targetZoom = Math.min(18, activeCfg.maxZoom || 19);
+        map.flyTo([latitude, longitude], targetZoom, { duration: 1 });
       },
       (err) => {
         setIsLocatingUser(false);
@@ -144,22 +209,26 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
-  }, []);
+  }, [currentStyle, getTileConfig]);
 
-  // Quick action: Narrow down Leaflet map directly to exact closest coordinates (Zoom 19 in Satellite/Hybrid)
+  // Quick action: Narrow down Leaflet map directly to exact closest coordinates (Zoom 19 HD Satellite)
   const handleNarrowToEvidence = useCallback(() => {
     if (!selectedIncident || !mapInstanceRef.current) return;
     const selPing = latestPings?.[selectedIncident.id];
     const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
 
-    if (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') {
-      setCurrentStyle('google-hybrid');
+    const targetStyle = (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') ? 'google-hybrid' : currentStyle;
+    if (targetStyle !== currentStyle) {
+      setCurrentStyle(targetStyle);
     }
-    mapInstanceRef.current.flyTo(selCoords, 19, {
+    const targetCfg = getTileConfig(targetStyle);
+    const targetZoom = Math.min(19, targetCfg.maxZoom || 20);
+
+    mapInstanceRef.current.flyTo(selCoords, targetZoom, {
       duration: 1.0,
       easeLinearity: 0.25
     });
-  }, [selectedIncident, latestPings, currentStyle]);
+  }, [selectedIncident, latestPings, currentStyle, getTileConfig]);
 
   // Quick action: Zoom out to show the complete CAD dispatch corridor from origin police station
   const handleFitRouteBounds = useCallback(() => {
@@ -177,64 +246,19 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   useEffect(() => {
     (window as any).__cadNarrowToCoords = (lat: number, lng: number) => {
       if (mapInstanceRef.current) {
-        if (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') {
-          setCurrentStyle('google-hybrid');
+        const targetStyle = (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') ? 'google-hybrid' : currentStyle;
+        if (targetStyle !== currentStyle) {
+          setCurrentStyle(targetStyle);
         }
-        mapInstanceRef.current.flyTo([lat, lng], 19, { duration: 1.0 });
+        const targetCfg = getTileConfig(targetStyle);
+        const targetZoom = Math.min(19, targetCfg.maxZoom || 20);
+        mapInstanceRef.current.flyTo([lat, lng], targetZoom, { duration: 1.0 });
       }
     };
     return () => {
       delete (window as any).__cadNarrowToCoords;
     };
-  }, [currentStyle]);
-
-  /**
-   * Note: Direct mt1.google.com tile layer fetching is for prototyping.
-   * Direct use of google.com tile endpoints without official API keys may violate Google Terms of Service.
-   * The official Google Maps Tile API or a keyed provider is recommended for production deployments.
-   */
-  const getTileConfig = (style: BasemapStyle): TileConfig => {
-    switch (style) {
-      case 'google-streets':
-        return {
-          url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-          attribution: '&copy; Google Maps &copy; GhanaPost GPS',
-          maxZoom: 20
-        };
-      case 'google-satellite':
-        return {
-          url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-          attribution: '&copy; Google Earth / Satellite Imagery &copy; CNES / Airbus',
-          maxZoom: 20
-        };
-      case 'google-hybrid':
-        return {
-          url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-          attribution: '&copy; Google Maps Satellite &copy; Maxar Technologies',
-          maxZoom: 20
-        };
-      case 'google-terrain':
-        return {
-          url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-          attribution: '&copy; Google Maps Topography &copy; USGS',
-          maxZoom: 20
-        };
-      case 'mapbox-dark':
-        return {
-          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-          attribution: '&copy; Esri &copy; OpenStreetMap contributors &copy; Ghana Police CAD',
-          maxZoom: 19
-        };
-      case 'osm':
-      default:
-        return {
-          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          subdomains: ['a', 'b', 'c'],
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
-          maxZoom: 19
-        };
-    }
-  };
+  }, [currentStyle, getTileConfig]);
 
   const layerOptions: { id: BasemapStyle; label: string; badge: string }[] = [
     { id: 'google-hybrid', label: 'Hybrid Satellite', badge: 'HD' },
@@ -272,14 +296,16 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       subdomains: activeTile.subdomains || ['a', 'b', 'c'],
       attribution: activeTile.attribution,
       maxZoom: activeTile.maxZoom || 20,
+      maxNativeZoom: activeTile.maxNativeZoom || activeTile.maxZoom || 20,
       tileSize: activeTile.tileSize || 256,
       zoomOffset: activeTile.zoomOffset || 0
     });
 
     tileLayer.on('tileerror', () => {
       tileErrorCountRef.current += 1;
-      if (tileErrorCountRef.current >= 4) {
+      if (tileErrorCountRef.current >= 3 && currentStyle !== 'osm') {
         setShowTileErrorNotice(true);
+        setCurrentStyle('osm');
       }
     });
 
@@ -327,14 +353,16 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       subdomains: activeTile.subdomains || ['a', 'b', 'c'],
       attribution: activeTile.attribution,
       maxZoom: activeTile.maxZoom || 20,
+      maxNativeZoom: activeTile.maxNativeZoom || activeTile.maxZoom || 20,
       tileSize: activeTile.tileSize || 256,
       zoomOffset: activeTile.zoomOffset || 0
     });
 
     newLayer.on('tileerror', () => {
       tileErrorCountRef.current += 1;
-      if (tileErrorCountRef.current >= 4) {
+      if (tileErrorCountRef.current >= 3 && currentStyle !== 'osm') {
         setShowTileErrorNotice(true);
+        setCurrentStyle('osm');
       }
     });
 
@@ -345,7 +373,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     }
 
     tileLayerRef.current = newLayer;
-  }, [currentStyle]);
+  }, [currentStyle, getTileConfig]);
 
   // Trigger invalidateSize whenever fullscreen state changes
   useEffect(() => {
@@ -845,24 +873,32 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         </button>
       </div>
 
-      {/* TILE ERROR / OFFLINE SATELLITE NOTICE */}
+      {/* TILE ERROR / OSM FALLBACK NOTICE */}
       {showTileErrorNotice && (
-        <div className="absolute top-14 right-3 z-map-ui pointer-events-auto bg-amber-950/90 backdrop-blur-md border border-amber-600/60 rounded-xl p-2.5 max-w-xs text-xs text-amber-200 shadow-2xl animate-fade-in flex items-start space-x-2">
+        <div className="absolute top-14 right-3 z-map-ui pointer-events-auto bg-amber-950/95 backdrop-blur-md border border-amber-600/70 rounded-xl p-2.5 max-w-xs text-xs text-amber-200 shadow-2xl animate-fade-in flex items-start space-x-2">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1.5 flex-1">
             <p className="text-[11px] leading-tight font-medium">
-              Satellite tiles unavailable. Switch to Night Ops or OSM for active tracking.
+              Mapbox tile service rate-limited or unavailable. Automatically switched to OpenStreetMap fallback.
             </p>
-            <button
-              onClick={() => {
-                setCurrentStyle('mapbox-dark');
-                setShowTileErrorNotice(false);
-              }}
-              className="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[10px] flex items-center space-x-1"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Switch to Night Ops</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowTileErrorNotice(false)}
+                className="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[10px]"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => {
+                  setShowTileErrorNotice(false);
+                  setCurrentStyle('mapbox-dark');
+                }}
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-semibold flex items-center space-x-1"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>Retry Mapbox</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

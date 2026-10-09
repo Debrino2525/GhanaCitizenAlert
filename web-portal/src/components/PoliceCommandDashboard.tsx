@@ -44,6 +44,8 @@ interface PoliceCommandDashboardProps {
   onUpdateStatus: (incidentId: string, newStatus: IncidentStatus) => void;
   onReassignAgency: (incidentId: string, newAgency: AgencyType) => void;
   onOpenCertificateModal: (cert: CourtCertificate) => void;
+  onApprovePublicPublish?: (incidentId: string) => void;
+  onRejectPublicPublish?: (incidentId: string) => void;
 }
 
 export function formatPingAge(dateStr: string): string {
@@ -62,7 +64,9 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   onSelectIncident,
   onUpdateStatus,
   onReassignAgency,
-  onOpenCertificateModal
+  onOpenCertificateModal,
+  onApprovePublicPublish,
+  onRejectPublicPublish
 }) => {
   const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -1093,6 +1097,50 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     <span>✅</span>
                     <span>Mark Resolved</span>
                   </button>
+                </div>
+
+                {/* Public Civic Feed Quick Toggle */}
+                <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Civic Public Feed:</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      selectedIncident.isPublicPublished
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                        : selectedIncident.isPublicEligible
+                        ? 'bg-blue-950 text-blue-300 border border-blue-800'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800'
+                    }`}>
+                      {selectedIncident.isPublicPublished ? '✅ Live on Civic Feed' : selectedIncident.isPublicEligible ? '⏳ Pending Moderator' : '🔒 Internal Police Only'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {selectedIncident.isPublicPublished ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRejectPublicPublish?.(selectedIncident.id);
+                          setActionToast({ type: 'warning', message: `🚫 Incident ${selectedIncident.trackingCode} revoked from Civic Feed.` });
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 text-red-400 hover:text-red-300 font-bold text-[11px] transition border border-red-500/20 flex items-center space-x-1 cursor-pointer"
+                      >
+                        <span>🚫</span>
+                        <span>Revoke Public Feed</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onApprovePublicPublish?.(selectedIncident.id);
+                          setActionToast({ type: 'success', message: `✅ Incident ${selectedIncident.trackingCode} published live to Civic Feed.` });
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition shadow-sm flex items-center space-x-1 cursor-pointer"
+                      >
+                        <span>📢</span>
+                        <span>Publish to Public Feed</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

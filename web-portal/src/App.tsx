@@ -457,27 +457,43 @@ export const App: React.FC = () => {
   const handleApprovePublicPublish = async (incidentId: string) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
-        return { ...inc, isPublicPublished: true };
+        const updated = { ...inc, isPublicPublished: true, isPublicEligible: true, updatedAt: new Date().toISOString() };
+        if (selectedIncident?.id === incidentId) setSelectedIncident(updated);
+        return updated;
       }
       return inc;
     }));
 
     try {
-      await supabase.from('incidents').update({ is_public_published: true }).eq('id', incidentId);
-    } catch (e) {}
+      await supabase.from('incidents').update({ 
+        is_public_published: true, 
+        is_public_eligible: true, 
+        updated_at: new Date().toISOString() 
+      }).eq('id', incidentId);
+    } catch (e) {
+      console.warn('Supabase publish update error:', e);
+    }
   };
 
   const handleRejectPublicPublish = async (incidentId: string) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
-        return { ...inc, isPublicPublished: false, isPublicEligible: false };
+        const updated = { ...inc, isPublicPublished: false, isPublicEligible: false, updatedAt: new Date().toISOString() };
+        if (selectedIncident?.id === incidentId) setSelectedIncident(updated);
+        return updated;
       }
       return inc;
     }));
 
     try {
-      await supabase.from('incidents').update({ is_public_published: false, is_public_eligible: false }).eq('id', incidentId);
-    } catch (e) {}
+      await supabase.from('incidents').update({ 
+        is_public_published: false, 
+        is_public_eligible: false, 
+        updated_at: new Date().toISOString() 
+      }).eq('id', incidentId);
+    } catch (e) {
+      console.warn('Supabase reject update error:', e);
+    }
   };
 
   const handleCorroborate = async (incidentId: string) => {
@@ -661,6 +677,8 @@ export const App: React.FC = () => {
               onUpdateStatus={handleUpdateStatus}
               onReassignAgency={handleReassignAgency}
               onOpenCertificateModal={(cert) => setActiveCertificate(cert)}
+              onApprovePublicPublish={handleApprovePublicPublish}
+              onRejectPublicPublish={handleRejectPublicPublish}
             />
           </div>
         )}
