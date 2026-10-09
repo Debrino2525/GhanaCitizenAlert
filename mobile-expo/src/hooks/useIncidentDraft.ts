@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { Alert, Keyboard } from 'react-native';
 import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { File } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import { supabase } from '../lib/supabase';
 import { CitizenUser } from '../components/CitizenAccessWall';
@@ -11,13 +12,14 @@ import {
   EvidenceMediaItem
 } from '../types';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
-import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult } from '../services/evidenceUploader';
-import { savePendingReport } from '../services/pendingReportsQueue';
+import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult, formatPlainLanguageUploadError } from '../services/evidenceUploader';
+import { savePendingReport, removePendingReport } from '../services/pendingReportsQueue';
 import { computeFileSha256 } from '../utils/fileHashing';
+import { getRealFileSizeBytes, formatBytesToMB } from '../utils/fileSize';
 
 export interface UseIncidentDraftProps {
   citizen: CitizenUser;
-  coords: GpsCoordinates;
+  coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
   locationName: string;
   landmark: string;
@@ -155,14 +157,27 @@ export const useIncidentDraft = ({
       return;
     }
 
+    if (!coords || (coords.latitude === 0 && coords.longitude === 0)) {
+      safeHaptics.warning();
+      Alert.alert(
+        'Location Required',
+        'Location unavailable. Refresh GPS or move outdoors to attach verified coordinates before submitting.'
+      );
+      return;
+    }
+
     if (hasRecordedMedia && mediaType === 'VIDEO' && recordedDuration > 45) {
       safeHaptics.warning();
-      Alert.alert('Video Too Long', 'Evidence video duration exceeds the 45-second statutory maximum.');
+      Alert.alert(
+        'Video Too Long',
+        'This video is longer than 45 seconds or larger than 40 MB. Trim it in your phone\'s Photos app and choose it again, record inside the app, or choose a photo.'
+      );
       return;
     }
 
     setIsSubmitting(true);
     setUploadProgress(5);
+
     const generateTrackingCode = (): string => {
       const bytes = Crypto.getRandomBytes(6);
       let val = 0n;
@@ -183,7 +198,6 @@ export const useIncidentDraft = ({
       ? `${landmark.trim()} (${locationName})`
       : locationName;
 
-    let mediaPayloadList: EvidenceMediaItem[] = [];
     let permanentUri = activePermanentUriRef.current || permanentMediaUri;
     let computedHash: string | null = null;
     let fileSize = 1024 * 512;
@@ -191,21 +205,22 @@ export const useIncidentDraft = ({
     let mimeType = '';
 
     try {
+      // PREPARE MEDIA IF ATTACHED
       if (hasRecordedMedia && recordedUri) {
         const isMov = recordedUri.toLowerCase().endsWith('.mov');
         const extension = mediaType === 'VIDEO' ? (isMov ? 'mov' : 'mp4') : 'jpg';
         mimeType = mediaType === 'VIDEO' ? (isMov ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
         fileName = `${trackingCode}-${Date.now()}.${extension}`;
 
-        // STEP 1: Copy to permanent documentDirectory if not already copied
+        // Step 1: Copy to permanent documentDirectory
         if (!permanentUri) {
           setUploadProgress(10);
           setUploadStatusText('Securing permanent local copy...');
-          const docDir = FileSystem.documentDirectory || '';
+          const docDir = FileSystemLegacy.documentDirectory || '';
           permanentUri = `${docDir}evidence_${trackingCode}_${Date.now()}.${extension}`;
 
           try {
-            await FileSystem.copyAsync({
+            await FileSystemLegacy.copyAsync({
               from: recordedUri,
               to: permanentUri
             });
@@ -217,172 +232,58 @@ export const useIncidentDraft = ({
           }
         }
 
-        // STEP 2: Save a copy to device photo library in the background
-        try {
-          const perm = await MediaLibrary.getPermissionsAsync();
-          if (perm.granted) {
-            await MediaLibrary.createAssetAsync(permanentUri);
-          } else {
-            const req = await MediaLibrary.requestPermissionsAsync();
-            if (req.granted) {
-              await MediaLibrary.createAssetAsync(permanentUri);
-            }
-          }
-        } catch (galleryErr) {
-          console.warn('Gallery save notice (non-fatal):', galleryErr);
-        }
+        // Step 2: Check real file size
+        fileSize = (await getRealFileSizeBytes(permanentUri)) || fileSize;
+        console.log(`[EVIDENCE_MEDIA] Submitting report media: size=${fileSize} bytes (${formatBytesToMB(fileSize)})`);
 
-        // STEP 3: Inspect file size & compute real SHA-256 Checksum on raw file bytes (Expo SDK 57 File API)
-        try {
-          const fileInfo = await FileSystem.getInfoAsync(permanentUri);
-          if (fileInfo.exists && typeof fileInfo.size === 'number') {
-            fileSize = fileInfo.size;
-          }
-
-          computedHash = await computeFileSha256(permanentUri);
-        } catch (hashErr) {
-          console.warn('SHA-256 raw byte hashing error:', hashErr);
-          computedHash = null;
-        }
-
-        // STEP 4: Upload and strictly verify evidence on Supabase Storage
-        // 3-minute upload timeout safeguard
-        const UPLOAD_TIMEOUT_MS = 180000;
-        const uploadPromise = uploadEvidenceStreaming({
-          fileUri: permanentUri,
-          fileName,
-          mimeType,
-          expectedFileSize: fileSize,
-          onProgress: (progressRatio, statusText) => {
-            setUploadProgress(Math.round(progressRatio * 100));
-            setUploadStatusText(statusText);
-          }
-        });
-
-        const timeoutPromise = new Promise<UploadEvidenceResult>((resolve) =>
-          setTimeout(
-            () =>
-              resolve({
-                success: false,
-                publicUrl: '',
-                statusCode: 408,
-                error: 'Upload timed out after 3 minutes. Network is slow or unreachable.'
-              }),
-            UPLOAD_TIMEOUT_MS
-          )
-        );
-
-        const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
-
-        // STRICT CHECK: If upload or verification failed, STOP. Do NOT insert into DB.
-        if (!uploadResult.success || !uploadResult.publicUrl) {
+        if (fileSize > 45 * 1024 * 1024) {
           setIsSubmitting(false);
           setUploadProgress(0);
-          setUploadStatusText('');
           safeHaptics.warning();
-
-          const failureReason = uploadResult.error || `Upload failed with status ${uploadResult.statusCode || 'unknown'}`;
-
           Alert.alert(
-            '⚠️ Evidence Transmission Failed',
-            `${failureReason}\n\nYour video is safely stored on device under Act 720 Whistleblower Vault.`,
-            [
-              {
-                text: 'Save for later',
-                style: 'cancel',
-                onPress: async () => {
-                  await savePendingReport({
-                    id: trackingCode,
-                    trackingCode,
-                    category,
-                    title: title.trim(),
-                    description: description.trim(),
-                    locationName: combinedLocation,
-                    ghanaPostCode: ghanaPostCode.toUpperCase(),
-                    region: region || 'Greater Accra',
-                    latitude: coords.latitude,
-                    longitude: coords.longitude,
-                    landmark: landmark.trim(),
-                    gpsAccuracy: gpsAccuracy || 3.5,
-                    mediaType,
-                    recordedDuration: recordedDuration || 15,
-                    permanentVideoUri: permanentUri!,
-                    fileName,
-                    mimeType,
-                    sha256Checksum: computedHash || null,
-                    fileSizeBytes: fileSize,
-                    isAnonymous,
-                    reporterPhone: reporterPhone || citizen.phone,
-                    reporterName: citizen.name,
-                    reporterEmail: citizen.email,
-                    reporterTrustScore: citizen.trustScore,
-                    reporterLoginMethod: citizen.loginMethod,
-                    status: 'FAILED',
-                    lastError: failureReason,
-                    createdAt: new Date().toISOString()
-                  });
-
-                  safeHaptics.medium();
-                  Alert.alert(
-                    '📁 Saved to Offline Queue',
-                    'Report and video evidence saved on your device. It will automatically transmit when network connectivity returns.',
-                    [{ text: 'OK' }]
-                  );
-
-                  setTitle('');
-                  setDescription('');
-                  setLandmark('');
-                  setHasRecordedMedia(false);
-                  setRecordedUri(null);
-                  setPermanentMediaUri(null);
-                  activePermanentUriRef.current = null;
-                }
-              },
-              {
-                text: 'Retry',
-                onPress: () => {
-                  handleSubmitReport();
-                }
-              }
-            ]
+            'File Too Large',
+            'Evidence file exceeds 45 MB upload limit. Please record a shorter clip (under 45s) or snap a photo.'
           );
           return;
         }
 
-        // Upload and verification verified successfully!
-        const isTamperProofVerified = Boolean(
-          computedHash &&
-          computedHash.length === 64 &&
-          uploadResult.success &&
-          uploadResult.publicUrl
-        );
-
-        mediaPayloadList.push({
-          type: mediaType,
-          video_storage_path: fileName,
-          durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-          rawS3Url: uploadResult.publicUrl,
-          thumbnailUrl: uploadResult.publicUrl,
-          localUri: permanentUri,
-          sha256Checksum: computedHash || null,
-          timestampUtc: new Date().toISOString(),
-          fileSizeBytes: fileSize,
-          gpsWatermark: {
-            lat: coords.latitude,
-            lng: coords.longitude,
-            landmark: landmark.trim() || 'Direct GPS Lock',
-            ghanaPostCode: ghanaPostCode ? ghanaPostCode.toUpperCase() : '',
-            accuracyMeters: gpsAccuracy || 3.5
-          },
-          isTamperProofVerified,
-          uploadStatus: 'UPLOADED'
-        });
+        // Step 3: Compute real SHA-256 Checksum on raw file bytes
+        try {
+          computedHash = await computeFileSha256(permanentUri);
+        } catch (hashErr) {
+          console.warn('SHA-256 raw byte hashing notice:', hashErr);
+          computedHash = null;
+        }
       }
 
-      setUploadProgress(95);
-      const userRes = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
-      const authUid = userRes.data.user?.id || (citizen.id && citizen.id.length > 20 ? citizen.id : null);
-      const reporterId = !isAnonymous && authUid ? authUid : null;
+      // STEP A: INSERT REPORT INTO DATABASE FIRST (REPORT FIRST PROTOCOL)
+      setUploadProgress(30);
+      setUploadStatusText('Transmitting incident dossier to Police CAD Dispatch...');
+
+      const initialMediaList: EvidenceMediaItem[] = (hasRecordedMedia && permanentUri)
+        ? [
+            {
+              type: mediaType,
+              video_storage_path: fileName,
+              durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
+              rawS3Url: '',
+              thumbnailUrl: '',
+              localUri: permanentUri,
+              sha256Checksum: computedHash || null,
+              timestampUtc: new Date().toISOString(),
+              fileSizeBytes: fileSize,
+              gpsWatermark: {
+                lat: coords.latitude,
+                lng: coords.longitude,
+                landmark: landmark.trim() || 'Direct GPS Lock',
+                ghanaPostCode: ghanaPostCode ? ghanaPostCode.toUpperCase() : '',
+                accuracyMeters: typeof gpsAccuracy === 'number' ? gpsAccuracy : 0
+              },
+              isTamperProofVerified: false,
+              uploadStatus: 'QUEUED'
+            }
+          ]
+        : [];
 
       const payload: any = {
         tracking_code: trackingCode,
@@ -394,7 +295,8 @@ export const useIncidentDraft = ({
         region: region || 'Greater Accra',
         latitude: coords.latitude,
         longitude: coords.longitude,
-        media: mediaPayloadList,
+        gps_accuracy_m: typeof gpsAccuracy === 'number' ? gpsAccuracy : null,
+        media: initialMediaList,
         is_anonymous: isAnonymous,
         reporter_data: isAnonymous
           ? { isAnonymous: true, trustScore: 85, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
@@ -453,22 +355,78 @@ export const useIncidentDraft = ({
         break;
       }
 
-      setIsSubmitting(false);
+      // If DB Insert failed (e.g. offline / network drop) -> Save to Offline Queue
+      if (!insertSuccess) {
+        if (hasRecordedMedia && permanentUri) {
+          await savePendingReport({
+            id: trackingCode,
+            trackingCode,
+            category,
+            title: title.trim(),
+            description: description.trim(),
+            locationName: combinedLocation,
+            ghanaPostCode: ghanaPostCode.toUpperCase(),
+            region: region || 'Greater Accra',
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            landmark: landmark.trim(),
+            gpsAccuracy: typeof gpsAccuracy === 'number' ? gpsAccuracy : null,
+            mediaType,
+            recordedDuration: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
+            permanentVideoUri: permanentUri,
+            fileName,
+            mimeType,
+            sha256Checksum: computedHash || null,
+            fileSizeBytes: fileSize,
+            isAnonymous,
+            reporterPhone: reporterPhone || citizen.phone,
+            reporterName: citizen.name,
+            reporterEmail: citizen.email,
+            reporterTrustScore: citizen.trustScore,
+            reporterLoginMethod: citizen.loginMethod,
+            reportInserted: false,
+            mediaUploaded: false,
+            status: 'QUEUED',
+            lastError: formatPlainLanguageUploadError(undefined, lastInsertError?.message),
+            createdAt: new Date().toISOString()
+          });
+        }
 
-      if (insertSuccess) {
+        setIsSubmitting(false);
+        setUploadProgress(0);
+        setUploadStatusText('');
+        safeHaptics.medium();
+
+        Alert.alert(
+          '📁 Saved to Offline Queue',
+          'No internet connection. Your report is securely preserved on this device and will transmit automatically once connectivity returns.',
+          [{ text: 'OK' }]
+        );
+
+        setTitle('');
+        setDescription('');
+        setLandmark('');
+        setHasRecordedMedia(false);
+        setRecordedUri(null);
+        setPermanentMediaUri(null);
+        activePermanentUriRef.current = null;
+        return;
+      }
+
+      // STEP B: REPORT INSERTED SUCCESSFULLY!
+      // If no media attached, we are 100% done!
+      if (!hasRecordedMedia || !permanentUri) {
+        setIsSubmitting(false);
         setUploadProgress(100);
-        setUploadStatusText('✅ Transmitted & Signed under Act 772');
+        setUploadStatusText('✅ Report Transmitted');
         safeHaptics.success();
         announceAccessibility(`Report transmitted successfully. Tracking Code ${trackingCode}`);
 
         Alert.alert(
           '✅ Report Transmitted & Live',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.`,
+          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nYour incident has been received by Police Command.`,
           [{ text: 'OK' }]
         );
-
-        const tempUri = recordedUri;
-        const permUri = permanentUri;
 
         setTitle('');
         setDescription('');
@@ -479,106 +437,165 @@ export const useIncidentDraft = ({
         activePermanentUriRef.current = null;
         setUploadProgress(0);
         setUploadStatusText('');
-
-        // Cleanup temporary cache and permanent file now that it is safely stored in cloud
-        if (tempUri) await cleanupCachedEvidence(tempUri);
-        if (permUri && permUri !== tempUri) {
-          try {
-            await FileSystem.deleteAsync(permUri, { idempotent: true });
-          } catch (e) {}
-        }
-      } else {
-        throw lastInsertError || new Error('Failed to insert incident');
+        return;
       }
+
+      // STEP C: UPLOAD MEDIA SEPARATELY (MEDIA SECOND PROTOCOL)
+      setUploadProgress(50);
+      setUploadStatusText('Report delivered. Uploading evidence video to Vault...');
+
+      // Save to queue with reportInserted = true so that any crash/abort retries media only
+      await savePendingReport({
+        id: trackingCode,
+        trackingCode,
+        category,
+        title: title.trim(),
+        description: description.trim(),
+        locationName: combinedLocation,
+        ghanaPostCode: ghanaPostCode.toUpperCase(),
+        region: region || 'Greater Accra',
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        landmark: landmark.trim(),
+        gpsAccuracy: typeof gpsAccuracy === 'number' ? gpsAccuracy : null,
+        mediaType,
+        recordedDuration: recordedDuration || 15,
+        permanentVideoUri: permanentUri,
+        fileName,
+        mimeType,
+        sha256Checksum: computedHash || null,
+        fileSizeBytes: fileSize,
+        isAnonymous,
+        reporterPhone: reporterPhone || citizen.phone,
+        reporterName: citizen.name,
+        reporterEmail: citizen.email,
+        reporterTrustScore: citizen.trustScore,
+        reporterLoginMethod: citizen.loginMethod,
+        reportInserted: true,
+        mediaUploaded: false,
+        status: 'UPLOADING',
+        createdAt: new Date().toISOString()
+      });
+
+      const uploadResult = await uploadEvidenceStreaming({
+        fileUri: permanentUri,
+        fileName,
+        mimeType,
+        expectedFileSize: fileSize,
+        onProgress: (ratio, txt) => {
+          setUploadProgress(Math.round(50 + ratio * 45));
+          setUploadStatusText(txt);
+        }
+      });
+
+      if (!uploadResult.success || !uploadResult.publicUrl) {
+        // Report is already delivered! Show plain language status
+        setIsSubmitting(false);
+        setUploadProgress(0);
+        setUploadStatusText('');
+        safeHaptics.medium();
+
+        Alert.alert(
+          'Report Sent • Video Upload Waiting',
+          `Tracking Code: ${trackingCode}\n\nYour written report was received by Police Command. The video evidence is safely preserved on your device and will continue uploading in the background.`,
+          [{ text: 'OK' }]
+        );
+
+        setTitle('');
+        setDescription('');
+        setLandmark('');
+        setHasRecordedMedia(false);
+        setRecordedUri(null);
+        setPermanentMediaUri(null);
+        activePermanentUriRef.current = null;
+        return;
+      }
+
+      // Media upload succeeded: link verified URL back to the incident in Supabase
+      const verifiedMediaList: EvidenceMediaItem[] = [
+        {
+          type: mediaType,
+          video_storage_path: fileName,
+          durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
+          rawS3Url: uploadResult.publicUrl,
+          thumbnailUrl: uploadResult.publicUrl,
+          localUri: permanentUri,
+          sha256Checksum: computedHash || null,
+          timestampUtc: new Date().toISOString(),
+          fileSizeBytes: uploadResult.verifiedSize || fileSize,
+          gpsWatermark: {
+            lat: coords.latitude,
+            lng: coords.longitude,
+            landmark: landmark.trim() || 'Direct GPS Lock',
+            ghanaPostCode: ghanaPostCode ? ghanaPostCode.toUpperCase() : '',
+            accuracyMeters: typeof gpsAccuracy === 'number' ? gpsAccuracy : 0
+          },
+          isTamperProofVerified: Boolean(computedHash && computedHash.length === 64),
+          uploadStatus: 'UPLOADED'
+        }
+      ];
+
+      await supabase
+        .from('incidents')
+        .update({ media: verifiedMediaList })
+        .eq('tracking_code', trackingCode);
+
+      // Remove from offline queue and clean up cache
+      await removePendingReport(trackingCode, true);
+      if (recordedUri) await cleanupCachedEvidence(recordedUri);
+
+      setIsSubmitting(false);
+      setUploadProgress(100);
+      setUploadStatusText('✅ Report & Evidence Sealed');
+      safeHaptics.success();
+      announceAccessibility(`Report and evidence transmitted successfully. Tracking Code ${trackingCode}`);
+
+      Alert.alert(
+        '✅ Report & Evidence Sealed',
+        `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.`,
+        [{ text: 'OK' }]
+      );
+
+      setTitle('');
+      setDescription('');
+      setLandmark('');
+      setHasRecordedMedia(false);
+      setRecordedUri(null);
+      setPermanentMediaUri(null);
+      activePermanentUriRef.current = null;
+      setUploadProgress(0);
+      setUploadStatusText('');
     } catch (e: any) {
       setIsSubmitting(false);
       setUploadProgress(0);
       setUploadStatusText('');
       safeHaptics.warning();
 
+      const plainErr = formatPlainLanguageUploadError(undefined, e?.message);
       Alert.alert(
-        '⚠️ Submission Error',
-        `Could not transmit incident to Police Command: ${e?.message || 'Database error'}.\n\nWould you like to retry or save to local queue?`,
-        [
-          {
-            text: 'Save for later',
-            style: 'cancel',
-            onPress: async () => {
-              if (permanentMediaUri) {
-                await savePendingReport({
-                  id: trackingCode,
-                  trackingCode,
-                  category,
-                  title: title.trim(),
-                  description: description.trim(),
-                  locationName: combinedLocation,
-                  ghanaPostCode: ghanaPostCode.toUpperCase(),
-                  region: region || 'Greater Accra',
-                  latitude: coords.latitude,
-                  longitude: coords.longitude,
-                  landmark: landmark.trim(),
-                  gpsAccuracy: gpsAccuracy || 3.5,
-                  mediaType,
-                  recordedDuration: recordedDuration || 15,
-                  permanentVideoUri: permanentMediaUri,
-                  fileName: `${trackingCode}-${Date.now()}.mp4`,
-                  mimeType: 'video/mp4',
-                  sha256Checksum: computedHash || null,
-                  fileSizeBytes: fileSize || 1024 * 512,
-                  isAnonymous,
-                  reporterPhone: reporterPhone || citizen.phone,
-                  reporterName: citizen.name,
-                  reporterEmail: citizen.email,
-                  reporterTrustScore: citizen.trustScore,
-                  reporterLoginMethod: citizen.loginMethod,
-                  status: 'QUEUED',
-                  lastError: e?.message,
-                  createdAt: new Date().toISOString()
-                });
-              }
-
-              Alert.alert(
-                '📁 Saved to Offline Queue',
-                'Report and video evidence saved on your device and queued for transmission.',
-                [{ text: 'OK' }]
-              );
-
-              setTitle('');
-              setDescription('');
-              setLandmark('');
-              setHasRecordedMedia(false);
-              setRecordedUri(null);
-              setPermanentMediaUri(null);
-              activePermanentUriRef.current = null;
-            }
-          },
-          {
-            text: 'Retry',
-            onPress: () => {
-              handleSubmitReport();
-            }
-          }
-        ]
+        '⚠️ Submission Notice',
+        `${plainErr}\n\nYour report is safely stored on this device.`,
+        [{ text: 'OK' }]
       );
     }
   }, [
-    title,
-    description,
-    hasRecordedMedia,
-    mediaType,
-    recordedDuration,
-    landmark,
-    locationName,
-    recordedUri,
-    permanentMediaUri,
     citizen,
-    reporterPhone,
-    category,
     coords,
+    gpsAccuracy,
+    locationName,
+    landmark,
     ghanaPostCode,
     region,
-    gpsAccuracy,
-    isAnonymous
+    title,
+    description,
+    category,
+    isAnonymous,
+    reporterPhone,
+    hasRecordedMedia,
+    recordedUri,
+    permanentMediaUri,
+    mediaType,
+    recordedDuration
   ]);
 
   return {

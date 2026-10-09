@@ -31,7 +31,7 @@ import { safeHaptics, announceAccessibility } from '../utils/haptics';
 export const SOS_HOLD_MS = 1500; // Hold duration in milliseconds
 
 interface SosPanicScreenProps {
-  coords: GpsCoordinates;
+  coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
   locationName: string;
   landmark: string;
@@ -56,7 +56,7 @@ function generateSosTrackingCode(): string {
   return `SOS-${suffix}`;
 }
 
-async function getFreshGpsFix(timeoutMs = 8000): Promise<{ latitude: number; longitude: number; accuracy: number } | null> {
+async function getFreshGpsFix(timeoutMs = 8000): Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> {
   try {
     const locPromise = Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.High
@@ -66,7 +66,7 @@ async function getFreshGpsFix(timeoutMs = 8000): Promise<{ latitude: number; lon
     if (!loc || !loc.coords) return null;
     const { latitude, longitude, accuracy } = loc.coords;
     if (latitude === 0 && longitude === 0) return null;
-    return { latitude, longitude, accuracy: accuracy || 5.0 };
+    return { latitude, longitude, accuracy: typeof accuracy === 'number' ? accuracy : null };
   } catch (err) {
     return null;
   }
@@ -85,7 +85,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   const [sosActive, setSosActive] = useState(false);
   const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
   const [activeTrackingCode, setActiveTrackingCode] = useState<string | null>(null);
-  const [activeCoords, setActiveCoords] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [activeCoords, setActiveCoords] = useState<{ latitude: number; longitude: number; accuracy: number | null } | null>(null);
   const [isActivating, setIsActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
 
@@ -210,6 +210,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         region: region || 'Unknown',
         latitude: freshGps.latitude,
         longitude: freshGps.longitude,
+        gps_accuracy_m: freshGps.accuracy ?? null,
         media: [],
         is_anonymous: isAnonymous,
         reporter_data: {
@@ -436,7 +437,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
             Tracking Code: {activeTrackingCode || 'SOS-ACTIVE'}
           </Text>
           <Text style={styles.sosActiveSub}>
-            GPS: {activeCoords.latitude.toFixed(5)}, {activeCoords.longitude.toFixed(5)} (±{activeCoords.accuracy.toFixed(1)}m)
+            GPS: {activeCoords.latitude.toFixed(5)}, {activeCoords.longitude.toFixed(5)} {activeCoords.accuracy !== null ? `(±${activeCoords.accuracy.toFixed(1)}m)` : ''}
           </Text>
           <Text style={styles.sosActiveSub}>
             Successful Pings: {successfulPings} {failedPings > 0 ? `(${failedPings} failed)` : ''}

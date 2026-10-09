@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { File } from 'expo-file-system';
 import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
+import { getRealFileSizeBytes, formatBytesToMB } from '../utils/fileSize';
 
 export interface UploadEvidenceOptions {
   fileUri: string;
@@ -17,6 +18,29 @@ export interface UploadEvidenceResult {
   statusCode?: number;
   error?: string;
   verifiedSize?: number;
+}
+
+/**
+ * Translates raw HTTP and network exceptions into clear, citizen-friendly messages.
+ * Never exposes raw JSON or stack traces.
+ */
+export function formatPlainLanguageUploadError(statusCode?: number, rawError?: string): string {
+  if (statusCode === 413 || (rawError && /payload too large|entitytoolarge|exceeded the maximum/i.test(rawError))) {
+    return 'Evidence file exceeds 45 MB upload limit. Please record a shorter clip (under 45s) or snap a photo.';
+  }
+  if (statusCode === 408 || (rawError && /timeout|timed out/i.test(rawError))) {
+    return 'Evidence upload timed out due to slow connection. It is saved safely and will retry.';
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return 'Authentication notice with emergency vault. Your report is preserved locally.';
+  }
+  if (statusCode && statusCode >= 500) {
+    return 'Emergency Vault server is temporarily busy. Your evidence is safely preserved on device and will retry automatically.';
+  }
+  if (rawError && /network|offline|internet|reach/i.test(rawError)) {
+    return 'No internet connection. Evidence is safely stored on device and will transmit when connection returns.';
+  }
+  return 'Evidence could not be transmitted at this moment. It remains safely saved on your device and will retry.';
 }
 
 /**
@@ -43,7 +67,6 @@ async function verifyRemoteStorageFile(
     const remoteSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : undefined;
 
     if (localFileSize && remoteSize !== undefined) {
-      // Allow minor variation only if compression/chunked, but Supabase S3 gives exact byte size
       const isSizeMatch = Math.abs(remoteSize - localFileSize) <= 128;
       if (!isSizeMatch && remoteSize !== localFileSize) {
         return {
@@ -64,13 +87,14 @@ async function verifyRemoteStorageFile(
     return {
       verified: false,
       statusCode: 0,
-      error: `Verification network error: ${err.message || String(err)}`
+      error: `Verification network notice: ${err.message || String(err)}`
     };
   }
 }
 
 /**
  * High-performance disk-streaming evidence uploader.
+ * Performs a mandatory pre-upload file size check (≤ 45 MB).
  * Uploads evidence directly to Supabase storage without upsert (insert-only policy compliant).
  * Performs post-upload HEAD verification to ensure binary integrity on the National Evidence Vault.
  */
@@ -84,15 +108,19 @@ export async function uploadEvidenceStreaming({
   const publicStorageUrl = supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl;
 
   try {
-    // 1. Get exact local file size if not provided
-    let localFileSize = expectedFileSize;
-    try {
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists && typeof fileInfo.size === 'number') {
-        localFileSize = fileInfo.size;
-      }
-    } catch (sizeErr) {
-      console.warn('Could not inspect local file size before upload:', sizeErr);
+    // 1. Mandatory Pre-Upload Size Check using real file bytes
+    const localFileSize = (await getRealFileSizeBytes(fileUri)) || expectedFileSize || 0;
+    console.log(`[EVIDENCE_UPLOAD] Pre-upload check: size=${localFileSize} bytes (${formatBytesToMB(localFileSize)}), uri=${fileUri}`);
+
+    if (localFileSize > 45 * 1024 * 1024) {
+      const sizeErr = 'Evidence file exceeds 45 MB upload limit. Please record a shorter clip (under 45s) or snap a photo.';
+      console.warn(`[EVIDENCE_UPLOAD] Blocked oversized upload: ${localFileSize} bytes`);
+      return {
+        success: false,
+        publicUrl: '',
+        statusCode: 413,
+        error: sizeErr
+      };
     }
 
     // 2. Retrieve current auth token if available (or fallback to anon key)
@@ -105,7 +133,6 @@ export async function uploadEvidenceStreaming({
       Authorization: `Bearer ${token}`,
       apikey: supabaseAnonKey,
       'Content-Type': mimeType
-      // Note: No x-upsert header to strictly comply with insert-only RLS policy
     };
 
     onProgress?.(0.1, 'Securing direct channel to Evidence Vault...');
@@ -127,7 +154,6 @@ export async function uploadEvidenceStreaming({
           (progressData) => {
             if (progressData.totalBytesExpectedToSend > 0) {
               const ratio = progressData.totalBytesSent / progressData.totalBytesExpectedToSend;
-              // Map byte progress from 10% to 85%
               const progressPct = 0.1 + Math.min(0.75, Math.max(0, ratio * 0.75));
               const mbSent = (progressData.totalBytesSent / (1024 * 1024)).toFixed(1);
               const mbTotal = (progressData.totalBytesExpectedToSend / (1024 * 1024)).toFixed(1);
@@ -142,8 +168,7 @@ export async function uploadEvidenceStreaming({
           uploadBody = res.body || '';
         }
       } catch (taskErr: any) {
-        console.warn('createUploadTask error, falling back to uploadAsync:', taskErr);
-        // Fallback to uploadAsync if uploadTask fails to instantiate
+        console.warn('createUploadTask notice, trying uploadAsync fallback:', taskErr);
         const res = await FileSystem.uploadAsync(endpointUrl, fileUri, {
           httpMethod: 'POST',
           uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -153,9 +178,7 @@ export async function uploadEvidenceStreaming({
         uploadBody = res.body || '';
       }
 
-      console.log('Native FileSystem upload response:', uploadStatus, uploadBody);
-
-      // Handle 409 Conflict ("already exists")
+      // Handle 409 Conflict ("already exists in vault")
       if (uploadStatus === 409) {
         onProgress?.(0.88, 'Object exists in Vault. Verifying integrity...');
         const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
@@ -188,17 +211,17 @@ export async function uploadEvidenceStreaming({
             success: false,
             publicUrl: '',
             statusCode: verifyRes.statusCode || 422,
-            error: verifyRes.error || 'Remote evidence verification failed after upload'
+            error: formatPlainLanguageUploadError(verifyRes.statusCode, verifyRes.error)
           };
         }
       }
 
-      // If status indicates failure, return exact HTTP status and error body
+      // Failure case: return clean plain-language error
       return {
         success: false,
         publicUrl: '',
         statusCode: uploadStatus,
-        error: `Storage upload failed (HTTP ${uploadStatus}): ${uploadBody || 'Unknown storage error'}`
+        error: formatPlainLanguageUploadError(uploadStatus, uploadBody)
       };
     } else {
       // Web fallback: Supabase JS upload without upsert
@@ -228,11 +251,12 @@ export async function uploadEvidenceStreaming({
         }
       }
 
+      const webStatus = (error as any)?.status || 400;
       return {
         success: false,
         publicUrl: '',
-        statusCode: (error as any)?.status || 400,
-        error: error?.message || 'Web upload failed'
+        statusCode: webStatus,
+        error: formatPlainLanguageUploadError(webStatus, error?.message)
       };
     }
   } catch (err: any) {
@@ -240,7 +264,7 @@ export async function uploadEvidenceStreaming({
       success: false,
       publicUrl: '',
       statusCode: 500,
-      error: err?.message || 'Streaming upload failed due to network or client error'
+      error: formatPlainLanguageUploadError(500, err?.message)
     };
   }
 }
@@ -251,6 +275,15 @@ export async function uploadEvidenceStreaming({
  */
 export async function cleanupCachedEvidence(fileUri: string | null): Promise<void> {
   if (!fileUri || Platform.OS === 'web') return;
+  try {
+    const file = new File(fileUri);
+    if (file.exists) {
+      file.delete();
+      return;
+    }
+  } catch {
+    // Fallback to legacy
+  }
   try {
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
     if (fileInfo.exists) {

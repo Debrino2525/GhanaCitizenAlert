@@ -23,7 +23,7 @@ interface ViewfinderOverlayProps {
   hasRecordedMedia: boolean;
   recordedUri: string | null;
   mediaType: 'VIDEO' | 'IMAGE';
-  coords: GpsCoordinates;
+  coords: GpsCoordinates | null;
   ghanaPostCode: string;
   gpsAccuracy: number | null;
   onFlipCamera: () => void;
@@ -48,6 +48,8 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
   onRetake,
   onRequestPermissions
 }) => {
+  const hasValidFix = coords && (coords.latitude !== 0 || coords.longitude !== 0);
+
   return (
     <View style={styles.cameraWrapper}>
       {/* Tactical Corner Brackets Overlay */}
@@ -76,6 +78,8 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
           style={StyleSheet.absoluteFill}
           facing={facing}
           mode="video"
+          videoQuality="480p"
+          videoBitrate={1_800_000}
         />
       ) : (
         <View style={styles.permissionBox}>
@@ -164,14 +168,16 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
           <Text style={styles.watermarkGold}>FORENSIC GPS WATERMARK (ACT 772)</Text>
         </View>
         <Text style={styles.watermarkWhite}>
-          UTC: {new Date().toISOString().substring(11, 19)} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
+          UTC: {new Date().toISOString().substring(11, 19)} | {hasValidFix ? `LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'Location unavailable. Refresh GPS or move outdoors.'}
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <MapPin color={tokens.colors.brand.gold} size={11} />
-          <Text style={styles.watermarkGold}>
-            {ghanaPostCode ? `DIGITAL POST: ${ghanaPostCode} ` : ''}ACCURACY: ±{gpsAccuracy || 3.2}m
-          </Text>
-        </View>
+        {hasValidFix && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <MapPin color={tokens.colors.brand.gold} size={11} />
+            <Text style={styles.watermarkGold}>
+              {ghanaPostCode ? `DIGITAL POST: ${ghanaPostCode} ` : ''}{gpsAccuracy !== null ? `ACCURACY: ±${gpsAccuracy}m` : 'ACCURACY: Live Fix'}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );

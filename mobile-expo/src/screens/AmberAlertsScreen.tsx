@@ -53,7 +53,7 @@ export interface MobileEmergencyAlert {
 }
 
 interface AmberAlertsScreenProps {
-  coords: GpsCoordinates;
+  coords: GpsCoordinates | null;
   ghanaPostCode: string;
   region: string;
   locationName: string;
@@ -134,6 +134,12 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
     if (!selectedAlert) return;
     if (!tipDescription.trim()) {
       Alert.alert('Missing Details', 'Please provide a brief description of the sighting.');
+      return;
+    }
+
+    if (!coords || (coords.latitude === 0 && coords.longitude === 0)) {
+      safeHaptics.warning();
+      Alert.alert('GPS Fix Needed', 'Location unavailable. Refresh GPS or move outdoors to attach live sighting coordinates.');
       return;
     }
 
@@ -367,7 +373,9 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               )}
 
               <Text style={styles.modalSub}>
-                Your live coordinates ({coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}) will be attached to direct police search patrols.
+                {coords && (coords.latitude !== 0 || coords.longitude !== 0)
+                  ? `Your live coordinates (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}) will be attached to direct police search patrols.`
+                  : 'Location unavailable. Refresh GPS or move outdoors to attach live coordinates.'}
               </Text>
 
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 4 }}>

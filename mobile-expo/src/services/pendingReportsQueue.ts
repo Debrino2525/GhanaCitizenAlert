@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { File } from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from '../lib/supabase';
-import { uploadEvidenceStreaming } from './evidenceUploader';
-import { IncidentCategory, MediaType } from '../types';
+import { uploadEvidenceStreaming, formatPlainLanguageUploadError } from './evidenceUploader';
+import { IncidentCategory, MediaType, EvidenceMediaItem } from '../types';
 
 const STORAGE_KEY = '@citizen_alert_pending_reports_v1';
 
@@ -19,7 +20,7 @@ export interface PendingReportItem {
   latitude: number;
   longitude: number;
   landmark: string;
-  gpsAccuracy: number;
+  gpsAccuracy: number | null;
   mediaType: MediaType;
   recordedDuration: number;
   permanentVideoUri: string;
@@ -33,6 +34,8 @@ export interface PendingReportItem {
   reporterEmail?: string;
   reporterTrustScore?: number;
   reporterLoginMethod?: string;
+  reportInserted?: boolean;
+  mediaUploaded?: boolean;
   status: 'QUEUED' | 'UPLOADING' | 'FAILED';
   lastError?: string;
   createdAt: string;
@@ -84,12 +87,20 @@ export async function removePendingReport(id: string, deleteLocalFile = true): P
 
     if (item && deleteLocalFile && item.permanentVideoUri) {
       try {
-        const fileInfo = await FileSystem.getInfoAsync(item.permanentVideoUri);
-        if (fileInfo.exists) {
-          await FileSystem.deleteAsync(item.permanentVideoUri, { idempotent: true });
+        const file = new File(item.permanentVideoUri);
+        if (file.exists) {
+          file.delete();
         }
-      } catch (fileErr) {
-        console.warn('Could not delete local permanent file:', fileErr);
+      } catch {
+        // Fallback to legacy
+        try {
+          const fileInfo = await FileSystemLegacy.getInfoAsync(item.permanentVideoUri);
+          if (fileInfo.exists) {
+            await FileSystemLegacy.deleteAsync(item.permanentVideoUri, { idempotent: true });
+          }
+        } catch (fileErr) {
+          console.warn('Could not delete local permanent file:', fileErr);
+        }
       }
     }
 
@@ -106,11 +117,12 @@ export async function removePendingReport(id: string, deleteLocalFile = true): P
 export async function updatePendingReportStatus(
   id: string,
   status: PendingReportItem['status'],
-  lastError?: string
+  lastError?: string,
+  updates?: Partial<PendingReportItem>
 ): Promise<void> {
   try {
     const current = await getPendingReports();
-    const updated = current.map((r) => (r.id === id ? { ...r, status, lastError } : r));
+    const updated = current.map((r) => (r.id === id ? { ...r, ...updates, status, lastError } : r));
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
     console.warn('Error updating pending report status:', err);
@@ -118,126 +130,174 @@ export async function updatePendingReportStatus(
 }
 
 /**
- * Process and transmit a pending report:
- * 1. Uploads media to Supabase storage with verification.
- * 2. Inserts the incident row into Supabase database.
- * 3. On verified success, removes from queue and deletes local permanent media.
+ * Process and transmit a pending report adhering to:
+ * REPORT FIRST, MEDIA SECOND protocol:
+ * 1. Insert the incident row (text, category, location, gps_accuracy_m) immediately into DB.
+ * 2. If DB insert succeeds, mark reportInserted = true.
+ * 3. Then upload media separately and link verified URL to the incident.
+ * 4. Never remove from queue until BOTH report and media are confirmed delivered.
  */
 export async function processPendingReport(
   report: PendingReportItem,
   onProgress?: (progress: number, text: string) => void
 ): Promise<{ success: boolean; error?: string }> {
   await updatePendingReportStatus(report.id, 'UPLOADING');
-  onProgress?.(0.1, 'Starting evidence upload to Vault...');
+  onProgress?.(0.1, 'Verifying connection to Police CAD Dispatch...');
 
   try {
-    let rawS3Url = '';
-    let uploadStatus = 'UPLOADED';
+    // STEP 1: Insert Incident Dossier into DB FIRST (if not already inserted)
+    if (!report.reportInserted) {
+      onProgress?.(0.3, 'Transmitting incident report to Police CID Dispatch...');
 
-    if (report.permanentVideoUri) {
+      const initialMediaList: EvidenceMediaItem[] = report.permanentVideoUri
+        ? [
+            {
+              type: report.mediaType,
+              video_storage_path: report.fileName,
+              durationSeconds: report.recordedDuration || (report.mediaType === 'VIDEO' ? 15 : 1),
+              rawS3Url: '',
+              thumbnailUrl: '',
+              localUri: report.permanentVideoUri,
+              sha256Checksum: report.sha256Checksum || null,
+              timestampUtc: report.createdAt,
+              fileSizeBytes: report.fileSizeBytes,
+              gpsWatermark: {
+                lat: report.latitude,
+                lng: report.longitude,
+                landmark: report.landmark || 'GPS Lock',
+                ghanaPostCode: report.ghanaPostCode || '',
+                accuracyMeters: report.gpsAccuracy || 0
+              },
+              isTamperProofVerified: false,
+              uploadStatus: 'QUEUED'
+            }
+          ]
+        : [];
+
+      const payload: any = {
+        tracking_code: report.trackingCode,
+        category: report.category,
+        title: report.title,
+        description: report.description,
+        location_name: report.isAnonymous
+          ? 'Withheld (anonymous)'
+          : (report.locationName || (report.landmark ? `${report.landmark}` : 'Unknown location')),
+        ghanapost_code: report.isAnonymous ? '' : (report.ghanaPostCode ? report.ghanaPostCode.toUpperCase() : ''),
+        region: report.region || 'Greater Accra',
+        latitude: report.latitude,
+        longitude: report.longitude,
+        gps_accuracy_m: typeof report.gpsAccuracy === 'number' ? report.gpsAccuracy : null,
+        media: initialMediaList,
+        is_anonymous: report.isAnonymous,
+        reporter_data: report.isAnonymous
+          ? { isAnonymous: true, trustScore: 85, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
+          : {
+              isAnonymous: false,
+              name: report.reporterName || 'Citizen Reporter',
+              email: report.reporterEmail || '',
+              phone: report.reporterPhone || null,
+              landmarkNote: report.landmark,
+              trustScore: report.reporterTrustScore || 95,
+              isGoogleVerified: report.reporterLoginMethod === 'GOOGLE',
+              loginMethod: report.reporterLoginMethod || 'GOOGLE'
+            },
+        assigned_agency:
+          report.category === 'DOMESTIC_ABUSE'
+            ? 'DOVVSU'
+            : report.category === 'GALAMSEY_ENVIRONMENTAL'
+            ? 'EPA'
+            : report.category === 'TRAFFIC_RECKLESS'
+            ? 'MTTD'
+            : 'GPS_CID',
+        status: 'RECEIVED_PENDING_TRIAGE',
+        severity:
+          report.category === 'CRIMINAL_OFFENSE'
+            ? 'RED'
+            : report.category === 'DOMESTIC_ABUSE' || report.category === 'GALAMSEY_ENVIRONMENTAL'
+            ? 'HIGH'
+            : 'NORMAL',
+        is_public_eligible: false,
+        is_public_published: false,
+        public_corroborations: 0
+      };
+
+      const { error: insertErr } = await supabase.from('incidents').insert(payload);
+
+      if (insertErr && insertErr.code !== '23505') {
+        const cleanErr = formatPlainLanguageUploadError(undefined, insertErr.message);
+        await updatePendingReportStatus(report.id, 'FAILED', cleanErr);
+        return { success: false, error: cleanErr };
+      }
+
+      // Incident successfully registered in DB!
+      report.reportInserted = true;
+      await savePendingReport(report);
+      onProgress?.(0.5, '✅ Report registered with CID. Uploading media...');
+    }
+
+    // STEP 2: Upload Evidence Media Separately (if attached and not yet uploaded)
+    if (report.permanentVideoUri && !report.mediaUploaded) {
+      onProgress?.(0.6, 'Uploading evidence to National Vault...');
+
       const uploadRes = await uploadEvidenceStreaming({
         fileUri: report.permanentVideoUri,
         fileName: report.fileName,
         mimeType: report.mimeType,
         expectedFileSize: report.fileSizeBytes,
-        onProgress
+        onProgress: (ratio, txt) => {
+          onProgress?.(0.6 + ratio * 0.35, txt);
+        }
       });
 
       if (!uploadRes.success || !uploadRes.publicUrl) {
-        const errMsg = uploadRes.error || `Upload failed with status ${uploadRes.statusCode || 'unknown'}`;
-        await updatePendingReportStatus(report.id, 'FAILED', errMsg);
-        return { success: false, error: errMsg };
+        const errorMsg = uploadRes.error || 'Report sent. Video waiting to upload.';
+        // Report is already delivered! Mark as waiting/failed media upload for retry
+        await updatePendingReportStatus(report.id, 'FAILED', errorMsg, { reportInserted: true, mediaUploaded: false });
+        return { success: false, error: errorMsg };
       }
 
-      rawS3Url = uploadRes.publicUrl;
-    }
-
-    onProgress?.(0.92, 'Transmitting dossier to Police CID Dispatch...');
-
-    const mediaList = report.permanentVideoUri
-      ? [
-          {
-            type: report.mediaType,
-            video_storage_path: report.fileName,
-            durationSeconds: report.recordedDuration || 15,
-            rawS3Url,
-            thumbnailUrl: rawS3Url,
-            localUri: report.permanentVideoUri,
-            sha256Checksum: report.sha256Checksum || null,
-            timestampUtc: report.createdAt,
-            fileSizeBytes: report.fileSizeBytes,
-            gpsWatermark: {
-              lat: report.latitude,
-              lng: report.longitude,
-              landmark: report.landmark,
-              ghanaPostCode: report.ghanaPostCode,
-              accuracyMeters: report.gpsAccuracy
-            },
-            isTamperProofVerified: Boolean(report.sha256Checksum && report.sha256Checksum.length === 64 && uploadStatus === 'UPLOADED'),
-            uploadStatus
-          }
-        ]
-      : [];
-
-    const payload = {
-      tracking_code: report.trackingCode,
-      category: report.category,
-      title: report.title,
-      description: report.description,
-      location_name: report.isAnonymous
-        ? 'Withheld (anonymous)'
-        : (report.locationName || (report.landmark ? `${report.landmark}` : 'Unknown location')),
-      ghanapost_code: report.isAnonymous ? '' : (report.ghanaPostCode ? report.ghanaPostCode.toUpperCase() : ''),
-      region: report.region || 'Unknown',
-      latitude: report.latitude,
-      longitude: report.longitude,
-      media: mediaList,
-      is_anonymous: report.isAnonymous,
-      reporter_data: report.isAnonymous
-        ? { isAnonymous: true, trustScore: 85, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
-        : {
-            isAnonymous: false,
-            name: report.reporterName || 'Citizen Reporter',
-            email: report.reporterEmail || '',
-            phone: report.reporterPhone || null,
-            landmarkNote: report.landmark,
-            trustScore: report.reporterTrustScore || 95,
-            isGoogleVerified: report.reporterLoginMethod === 'GOOGLE',
-            loginMethod: report.reporterLoginMethod || 'GOOGLE'
+      // Media upload succeeded: link verified URL back to the incident in Supabase
+      const verifiedMediaList: EvidenceMediaItem[] = [
+        {
+          type: report.mediaType,
+          video_storage_path: report.fileName,
+          durationSeconds: report.recordedDuration || (report.mediaType === 'VIDEO' ? 15 : 1),
+          rawS3Url: uploadRes.publicUrl,
+          thumbnailUrl: uploadRes.publicUrl,
+          localUri: report.permanentVideoUri,
+          sha256Checksum: report.sha256Checksum || null,
+          timestampUtc: report.createdAt,
+          fileSizeBytes: uploadRes.verifiedSize || report.fileSizeBytes,
+          gpsWatermark: {
+            lat: report.latitude,
+            lng: report.longitude,
+            landmark: report.landmark || 'GPS Lock',
+            ghanaPostCode: report.ghanaPostCode || '',
+            accuracyMeters: report.gpsAccuracy || 0
           },
-      assigned_agency:
-        report.category === 'DOMESTIC_ABUSE'
-          ? 'DOVVSU'
-          : report.category === 'GALAMSEY_ENVIRONMENTAL'
-          ? 'EPA'
-          : report.category === 'TRAFFIC_RECKLESS'
-          ? 'MTTD'
-          : 'GPS_CID',
-      status: 'RECEIVED_PENDING_TRIAGE',
-      severity:
-        report.category === 'CRIMINAL_OFFENSE'
-          ? 'RED'
-          : report.category === 'DOMESTIC_ABUSE' || report.category === 'GALAMSEY_ENVIRONMENTAL'
-          ? 'HIGH'
-          : 'NORMAL',
-      is_public_eligible: false,
-      is_public_published: false,
-      public_corroborations: 0
-    };
+          isTamperProofVerified: Boolean(report.sha256Checksum && report.sha256Checksum.length === 64),
+          uploadStatus: 'UPLOADED'
+        }
+      ];
 
-    const { error: insertErr } = await supabase.from('incidents').insert(payload);
+      await supabase
+        .from('incidents')
+        .update({ media: verifiedMediaList })
+        .eq('tracking_code', report.trackingCode);
 
-    if (insertErr) {
-      await updatePendingReportStatus(report.id, 'FAILED', insertErr.message);
-      return { success: false, error: insertErr.message };
+      report.mediaUploaded = true;
     }
 
-    // Success! Remove from queue and cleanup permanent local copy
-    await removePendingReport(report.id, true);
-    onProgress?.(1.0, '✅ Report Transmitted & Live');
-    return { success: true };
+    // STEP 3: Confirm BOTH report and media are complete before queue removal
+    if (report.reportInserted && (!report.permanentVideoUri || report.mediaUploaded)) {
+      await removePendingReport(report.id, true);
+      onProgress?.(1.0, '✅ Report and Evidence Transmitted');
+      return { success: true };
+    }
+
+    return { success: false, error: 'Report sent. Video waiting to upload.' };
   } catch (err: any) {
-    const errorMsg = err?.message || 'Processing error';
+    const errorMsg = formatPlainLanguageUploadError(undefined, err?.message);
     await updatePendingReportStatus(report.id, 'FAILED', errorMsg);
     return { success: false, error: errorMsg };
   }

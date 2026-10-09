@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { Camera, CameraType } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
+import { getRealFileSizeBytes, formatBytesToMB } from '../utils/fileSize';
 
 export interface UseCameraRecorderProps {
   onMediaAttached: (type: 'VIDEO' | 'IMAGE', uri: string, durationSec: number) => void;
@@ -118,18 +119,37 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
 
       try {
         if (cameraRef.current) {
+          // ALWAYS pass codec: 'avc1' on iOS; otherwise AVFoundation silently ignores the videoBitrate prop set on CameraView.
           cameraRef.current
             .recordAsync({
+              codec: 'avc1',
               maxDuration: 45,
-              quality: '480p',
-              codec: 'avc1'
+              maxFileSize: 40 * 1024 * 1024 // 40 MB hard stop in bytes
             })
-            .then((result: any) => {
+            .then(async (result: any) => {
               if (result?.uri) {
                 setRecordedUri(result.uri);
                 setHasRecordedMedia(true);
                 const finalDur = recordingSeconds || 15;
                 setRecordedDuration(finalDur);
+
+                // Read real file size and log
+                const realSizeBytes = await getRealFileSizeBytes(result.uri);
+                console.log(`[EVIDENCE_MEDIA] Camera recording complete: duration=${finalDur}s, size=${realSizeBytes} bytes (${formatBytesToMB(realSizeBytes)}), uri=${result.uri}`);
+
+                // Inform citizen if recording halted due to limits
+                if (realSizeBytes >= 39.5 * 1024 * 1024) {
+                  Alert.alert(
+                    'Size Limit Reached',
+                    'Recording stopped automatically because the 40 MB evidence size limit was reached.'
+                  );
+                } else if (finalDur >= 45) {
+                  Alert.alert(
+                    'Time Limit Reached',
+                    'Recording stopped automatically at the 45-second statutory time limit.'
+                  );
+                }
+
                 onMediaAttached('VIDEO', result.uri, finalDur);
                 safeHaptics.success();
               }
@@ -163,6 +183,9 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
         safeHaptics.medium();
         const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
         if (photo?.uri) {
+          const realSizeBytes = await getRealFileSizeBytes(photo.uri);
+          console.log(`[EVIDENCE_MEDIA] Photo captured: size=${realSizeBytes} bytes (${formatBytesToMB(realSizeBytes)}), uri=${photo.uri}`);
+
           setRecordedUri(photo.uri);
           setHasRecordedMedia(true);
           setMediaType('IMAGE');
@@ -197,11 +220,22 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
         const asset = result.assets[0];
         const isVid = asset.type === 'video';
         const dur = asset.duration ? Math.round(asset.duration / 1000) : 10;
+        const realSizeBytes = (await getRealFileSizeBytes(asset.uri)) || asset.fileSize || 0;
 
-        if (isVid && dur > 45) {
+        console.log(`[EVIDENCE_MEDIA] Gallery item picked: type=${asset.type}, duration=${dur}s, size=${realSizeBytes} bytes (${formatBytesToMB(realSizeBytes)}), uri=${asset.uri}`);
+
+        if (isVid && (dur > 45 || realSizeBytes > 40 * 1024 * 1024)) {
           Alert.alert(
             'Video Exceeds Limit',
-            'Evidence videos must be 45 seconds or less under Emergency CAD protocol. Please trim or record a shorter clip.'
+            'This video is longer than 45 seconds or larger than 40 MB. Trim it in your phone\'s Photos app and choose it again, record inside the app, or choose a photo.'
+          );
+          return;
+        }
+
+        if (!isVid && realSizeBytes > 40 * 1024 * 1024) {
+          Alert.alert(
+            'Photo Exceeds Limit',
+            'This image is larger than 40 MB. Please choose a smaller photo or take a photo inside the app.'
           );
           return;
         }

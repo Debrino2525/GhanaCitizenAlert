@@ -42,7 +42,7 @@ import { tokens } from '../theme/tokens';
 interface EvidenceCaptureScreenProps {
   t: TranslationMap;
   // GPS props
-  coords: GpsCoordinates;
+  coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
   isLocating: boolean;
   gpsStatus: GpsLockStatus;
@@ -276,6 +276,14 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
               <ImageIcon color={tokens.colors.text.primary} size={18} />
               <Text style={styles.sideActionText}>Gallery</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Capture Tip Banner */}
+          <View style={styles.captureTipBox}>
+            <Sparkles color={tokens.colors.brand.gold} size={14} />
+            <Text style={styles.captureTipText}>
+              Use Photo for faces and number plates. Photos are sharper than video.
+            </Text>
           </View>
 
           {/* Upload / Encrypt HUD */}
@@ -1018,5 +1026,22 @@ const styles = StyleSheet.create({
     color: tokens.colors.bg.base,
     fontSize: tokens.typography.fontSize.md,
     fontWeight: '900'
+  },
+  captureTipBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: 'rgba(252, 209, 22, 0.08)',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.brand.goldMuted
+  },
+  captureTipText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600',
+    flex: 1
   }
 });

@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import { GpsCoordinates, GpsLockStatus } from '../types';
 
 export interface UseGpsLocationResult {
-  coords: GpsCoordinates;
+  coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
   isLocating: boolean;
   gpsStatus: GpsLockStatus;
@@ -17,10 +17,7 @@ export interface UseGpsLocationResult {
 }
 
 export const useGpsLocation = (): UseGpsLocationResult => {
-  const [coords, setCoords] = useState<GpsCoordinates>({
-    latitude: 5.6037,
-    longitude: -0.1870
-  });
+  const [coords, setCoords] = useState<GpsCoordinates | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [gpsStatus, setGpsStatus] = useState<GpsLockStatus>('LOCATING');
@@ -49,10 +46,10 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
-      const acc = location.coords.accuracy || 3.5;
+      const acc = typeof location.coords.accuracy === 'number' ? location.coords.accuracy : null;
 
       setCoords({ latitude: lat, longitude: lng });
-      setGpsAccuracy(Math.round(acc * 10) / 10);
+      setGpsAccuracy(acc !== null ? Math.round(acc * 10) / 10 : null);
       setGpsStatus('LOCKED');
 
       try {
