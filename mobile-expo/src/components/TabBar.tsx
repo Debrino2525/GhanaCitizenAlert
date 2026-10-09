@@ -38,14 +38,14 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pen
         }}
         style={[styles.tabItem, activeTab === 'ALERTS' && styles.tabItemActiveAlerts]}
         accessibilityRole="tab"
-        accessibilityLabel="Amber Alerts Hub"
+        accessibilityLabel="Public Alerts & Safety Bulletins Hub"
       >
         <AlertTriangle
           color={activeTab === 'ALERTS' ? tokens.colors.text.white : tokens.colors.text.secondary}
           size={16}
         />
         <Text style={[styles.tabText, activeTab === 'ALERTS' && styles.tabTextActive]}>
-          Amber
+          Alerts
         </Text>
       </TouchableOpacity>
 
