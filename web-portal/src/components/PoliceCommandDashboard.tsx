@@ -149,6 +149,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   const [aiBrief, setAiBrief] = useState<PoliceCaseBrief | null>(null);
   const [aiTriage, setAiTriage] = useState<AiTriageResult | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
 
   const [caseNotes, setCaseNotes] = useState<Record<string, { author: string; text: string; time: string }[]>>({
     'inc-1': [
@@ -164,12 +165,88 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     }, {} as Record<string, number>);
   }, [incidents]);
 
-  const handleOpenAiDossier = () => {
+  const handleOpenAiDossier = async () => {
     if (!selectedIncident) return;
     setIsAiModalOpen(true);
-    setIsLoadingAi(false);
-    setAiBrief(null);
-    setAiTriage(null);
+    setIsLoadingAi(true);
+    try {
+      const [briefRes, triageRes] = await Promise.all([
+        generatePoliceCaseBrief(selectedIncident),
+        performAiTriageAnalysis(selectedIncident)
+      ]);
+      setAiBrief(briefRes);
+      setAiTriage(triageRes);
+    } catch (err) {
+      console.error('Error generating AI dossier:', err);
+    } finally {
+      setIsLoadingAi(false);
+    }
+  };
+
+  const handleDispatchUnit = () => {
+    if (!selectedIncident) return;
+    onUpdateStatus(selectedIncident.id, 'DISPATCHED');
+    const note = {
+      author: 'CAD Tactical Dispatch',
+      text: `⚡ Rapid Response Patrol Unit dispatched to scene at ${selectedIncident.locationName}. Sirens active.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setCaseNotes(prev => ({
+      ...prev,
+      [selectedIncident.id]: [...(prev[selectedIncident.id] || []), note]
+    }));
+    setActionToast({ message: '⚡ Tactical Patrol Unit Dispatched to Scene!', type: 'success' });
+    setTimeout(() => setActionToast(null), 3500);
+  };
+
+  const handleSetInvestigating = () => {
+    if (!selectedIncident) return;
+    onUpdateStatus(selectedIncident.id, 'UNDER_ACTIVE_INVESTIGATION');
+    const note = {
+      author: 'CID Duty Officer',
+      text: `🔍 Case marked Under Active Field Investigation. Forensic officer assigned to scene coordinate analysis.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setCaseNotes(prev => ({
+      ...prev,
+      [selectedIncident.id]: [...(prev[selectedIncident.id] || []), note]
+    }));
+    setActionToast({ message: '🔍 Case Set Under Active Field Investigation!', type: 'info' });
+    setTimeout(() => setActionToast(null), 3500);
+  };
+
+  const handleFileCourtPack = () => {
+    if (!selectedIncident) return;
+    onUpdateStatus(selectedIncident.id, 'COURT_EVIDENCE_PACKAGED');
+    const note = {
+      author: 'Evidence Custodian (Act 772)',
+      text: `⚖️ Court Evidence Dossier generated & sealed under Section 7 of the Electronic Transactions Act (Act 772).`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setCaseNotes(prev => ({
+      ...prev,
+      [selectedIncident.id]: [...(prev[selectedIncident.id] || []), note]
+    }));
+    setActionToast({ message: '⚖️ Court Evidence Pack Generated & Sealed under Act 772!', type: 'success' });
+    // Automatically open the Court Certificate Modal
+    onOpenCertificateModal(generateCourtCertificate(selectedIncident));
+    setTimeout(() => setActionToast(null), 3500);
+  };
+
+  const handleMarkResolved = () => {
+    if (!selectedIncident) return;
+    onUpdateStatus(selectedIncident.id, 'RESOLVED');
+    const note = {
+      author: 'Station Commander',
+      text: `✅ Incident resolved and cleared. Case closed in CAD Terminal.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setCaseNotes(prev => ({
+      ...prev,
+      [selectedIncident.id]: [...(prev[selectedIncident.id] || []), note]
+    }));
+    setActionToast({ message: '✅ Incident Successfully Marked Resolved!', type: 'success' });
+    setTimeout(() => setActionToast(null), 3500);
   };
 
   // Reset playback & resolve signed video URL when selected incident changes
@@ -940,57 +1017,81 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-xs text-white font-semibold focus:outline-none"
                   >
                     <option value="GPS_CID">Ghana Police CID</option>
-                    <option value="DOVVSU">DOVVSU Unit</option>
-                    <option value="EPA">EPA / Forestry</option>
-                    <option value="MTTD">MTTD Traffic</option>
-                    <option value="MMDA_SANITATION">MMDA Sanitation</option>
+                    <option value="DOVVSU">DOVVSU (Abuse / Family)</option>
+                    <option value="EPA">EPA (Galamsey / Spills)</option>
+                    <option value="MTTD">MTTD (Motor Traffic)</option>
+                    <option value="NADMO">NADMO (Disaster)</option>
+                    <option value="AMA">AMA (Accra Sanitation)</option>
+                    <option value="KMA">KMA (Kumasi Sanitation)</option>
+                    <option value="FORESTRY_COMM">Forestry Commission</option>
                   </select>
                 </div>
               </div>
 
+              {/* Action Toast Feedback Banner */}
+              {actionToast && (
+                <div className={`p-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in ${
+                  actionToast.type === 'success' ? 'bg-emerald-950/80 border border-emerald-500 text-emerald-300' :
+                  actionToast.type === 'warning' ? 'bg-amber-950/80 border border-amber-500 text-amber-300' :
+                  'bg-blue-950/80 border border-blue-500 text-blue-300'
+                }`}>
+                  <Sparkles className="w-4 h-4 shrink-0 animate-pulse" />
+                  <span>{actionToast.message}</span>
+                </div>
+              )}
+
               {/* Dispatch Action Panel */}
               <div className="space-y-2 pt-2 border-t border-slate-800">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">CAD Action Triage</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">CAD Action Triage</h4>
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800">
+                    STATUS: {selectedIncident.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
-                    onClick={() => onUpdateStatus(selectedIncident.id, 'DISPATCHED')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-md ${
+                    onClick={handleDispatchUnit}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold transition shadow-md flex items-center justify-center space-x-1.5 cursor-pointer ${
                       selectedIncident.status === 'DISPATCHED'
-                        ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                        ? 'bg-emerald-600 text-white ring-2 ring-emerald-400 shadow-emerald-500/20'
                         : 'bg-emerald-700 hover:bg-emerald-600 text-white'
                     }`}
                   >
-                    ⚡ Dispatch Unit
+                    <span>⚡</span>
+                    <span>Dispatch Unit</span>
                   </button>
                   <button
-                    onClick={() => onUpdateStatus(selectedIncident.id, 'UNDER_ACTIVE_INVESTIGATION')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
+                    onClick={handleSetInvestigating}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
                       selectedIncident.status === 'UNDER_ACTIVE_INVESTIGATION'
-                        ? 'bg-blue-600 text-white ring-2 ring-blue-400'
+                        ? 'bg-blue-600 text-white ring-2 ring-blue-400 shadow-blue-500/20'
                         : 'bg-blue-700 hover:bg-blue-600 text-white'
                     }`}
                   >
-                    🔍 Set Investigating
+                    <span>🔍</span>
+                    <span>Set Investigating</span>
                   </button>
                   <button
-                    onClick={() => onUpdateStatus(selectedIncident.id, 'COURT_EVIDENCE_PACKAGED')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
+                    onClick={handleFileCourtPack}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
                       selectedIncident.status === 'COURT_EVIDENCE_PACKAGED'
-                        ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                        ? 'bg-purple-600 text-white ring-2 ring-purple-400 shadow-purple-500/20'
                         : 'bg-purple-700 hover:bg-purple-600 text-white'
                     }`}
                   >
-                    ⚖️ File Court Pack
+                    <span>⚖️</span>
+                    <span>File Court Pack</span>
                   </button>
                   <button
-                    onClick={() => onUpdateStatus(selectedIncident.id, 'RESOLVED')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
+                    onClick={handleMarkResolved}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
                       selectedIncident.status === 'RESOLVED'
-                        ? 'bg-slate-700 text-white ring-2 ring-slate-400'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        ? 'bg-slate-700 text-white ring-2 ring-slate-400 shadow-slate-500/20'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
                     }`}
                   >
-                    ✅ Mark Resolved
+                    <span>✅</span>
+                    <span>Mark Resolved</span>
                   </button>
                 </div>
               </div>
