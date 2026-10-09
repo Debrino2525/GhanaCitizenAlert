@@ -264,14 +264,16 @@ export const useIncidentDraft = ({
       setUploadProgress(25);
       setUploadStatusText('Transmitting incident dossier to Police CAD Dispatch...');
 
+      const canonicalPublicUrl = fileName ? supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl : '';
+
       const initialMediaList: EvidenceMediaItem[] = (hasRecordedMedia && permanentUri)
         ? [
             {
               type: mediaType,
               video_storage_path: fileName,
               durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-              rawS3Url: '',
-              thumbnailUrl: '',
+              rawS3Url: canonicalPublicUrl,
+              thumbnailUrl: canonicalPublicUrl,
               localUri: permanentUri,
               sha256Checksum: computedHash || null,
               timestampUtc: new Date().toISOString(),
@@ -529,8 +531,8 @@ export const useIncidentDraft = ({
           type: mediaType,
           video_storage_path: fileName,
           durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
-          rawS3Url: uploadResult.publicUrl,
-          thumbnailUrl: uploadResult.publicUrl,
+          rawS3Url: uploadResult.publicUrl || canonicalPublicUrl,
+          thumbnailUrl: uploadResult.publicUrl || canonicalPublicUrl,
           localUri: permanentUri,
           sha256Checksum: computedHash || null,
           timestampUtc: new Date().toISOString(),
@@ -547,10 +549,14 @@ export const useIncidentDraft = ({
         }
       ];
 
-      await supabase
+      const { error: updateErr } = await supabase
         .from('incidents')
         .update({ media: verifiedMediaList })
         .eq('tracking_code', trackingCode);
+
+      if (updateErr) {
+        console.warn('[EVIDENCE_UPDATE_ERROR] Failed to update incident media list:', updateErr);
+      }
 
       // Remove from offline queue and clean up cache
       await removePendingReport(trackingCode, true);

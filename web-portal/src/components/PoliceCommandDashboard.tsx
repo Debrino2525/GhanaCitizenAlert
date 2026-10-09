@@ -268,6 +268,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     setCurrentTime(0);
 
     if (!activeMedia) {
+      console.log('[CAD_MEDIA] No active media for incident:', selectedIncident?.trackingCode);
       setResolvedVideoUrl('');
       setVideoLoadError(false);
       setIsResolvingUrl(false);
@@ -278,18 +279,19 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
     const uploadStatus = (activeMedia as any).uploadStatus;
 
-    // If upload is QUEUED/UPLOADING and no valid remote URL yet, it's still in-flight from citizen device
-    if ((uploadStatus === 'QUEUED' || uploadStatus === 'UPLOADING') && (!rawUrl || rawUrl.startsWith('file://'))) {
-      setResolvedVideoUrl('');
-      setVideoLoadError(false);
-      setIsResolvingUrl(false);
-      return;
-    }
+    console.log('[CAD_MEDIA] Resolving media for incident:', {
+      trackingCode: selectedIncident?.trackingCode,
+      activeMedia,
+      rawUrl,
+      storagePath,
+      uploadStatus
+    });
 
     setIsResolvingUrl(true);
     try {
-      // 1. Direct Data URI or HTTP Stream (instant zero-latency playback)
-      if (rawUrl && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+      // 1. Direct Data URI or valid HTTP(S) Stream (instant zero-latency playback)
+      if (rawUrl && !rawUrl.startsWith('file://') && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+        console.log('[CAD_MEDIA] Using raw direct URL:', rawUrl);
         setResolvedVideoUrl(rawUrl);
         setVideoLoadError(false);
         setIsPlaying(false);
@@ -303,28 +305,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         return;
       }
 
-      // 2. Supabase Storage Signed/Public URL resolution
+      // 2. Supabase Storage Public / Signed URL resolution
       if (storagePath) {
-        const { data: signedData, error: signedErr } = await supabase.storage
-          .from('evidence')
-          .createSignedUrl(storagePath, 3600);
-
-        if (!signedErr && signedData?.signedUrl) {
-          setResolvedVideoUrl(signedData.signedUrl);
-          setVideoLoadError(false);
-          setIsPlaying(false);
-          setIsResolvingUrl(false);
-          if (videoRef.current) {
-            videoRef.current.currentTime = 0;
-            try {
-              videoRef.current.load();
-            } catch (e) {}
-          }
-          return;
-        }
-
+        // Fast synchronous public URL from Supabase storage
         const { data: pubData } = supabase.storage.from('evidence').getPublicUrl(storagePath);
         if (pubData?.publicUrl) {
+          console.log('[CAD_MEDIA] Using public storage URL for path:', storagePath, pubData.publicUrl);
           setResolvedVideoUrl(pubData.publicUrl);
           setVideoLoadError(false);
           setIsPlaying(false);
@@ -337,9 +323,33 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
           }
           return;
         }
+
+        try {
+          const { data: signedData, error: signedErr } = await supabase.storage
+            .from('evidence')
+            .createSignedUrl(storagePath, 3600);
+
+          if (!signedErr && signedData?.signedUrl) {
+            console.log('[CAD_MEDIA] Using signed storage URL:', signedData.signedUrl);
+            setResolvedVideoUrl(signedData.signedUrl);
+            setVideoLoadError(false);
+            setIsPlaying(false);
+            setIsResolvingUrl(false);
+            if (videoRef.current) {
+              videoRef.current.currentTime = 0;
+              try {
+                videoRef.current.load();
+              } catch (e) {}
+            }
+            return;
+          }
+        } catch (signedErr) {
+          console.warn('[CAD_MEDIA] Signed URL resolution exception:', signedErr);
+        }
       }
 
       if (rawUrl && !rawUrl.startsWith('file://')) {
+        console.log('[CAD_MEDIA] Falling back to rawUrl:', rawUrl);
         setResolvedVideoUrl(rawUrl);
         setVideoLoadError(false);
         setIsPlaying(false);
@@ -350,10 +360,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
           } catch (e) {}
         }
       } else {
+        console.log('[CAD_MEDIA] No valid remote URL found (in-flight or local URI)');
         setResolvedVideoUrl('');
       }
     } catch (e) {
-      console.warn('Media URL resolution warning:', e);
+      console.warn('[CAD_MEDIA] Media URL resolution error:', e);
       const fallback = (activeMedia as any).rawS3Url || '';
       const cleanFallback = fallback.startsWith('file://') ? '' : fallback;
       setResolvedVideoUrl(cleanFallback);
@@ -823,16 +834,22 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                         <p className="text-white font-bold text-xs">Generating Secure Evidence Stream (Act 772)...</p>
                       </div>
-                    ) : (currentMedia as any)?.uploadStatus === 'QUEUED' || (currentMedia as any)?.uploadStatus === 'UPLOADING' || !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') ? (
+                    ) : !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') ? (
                       <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-3">
                         <div className="w-12 h-12 rounded-full bg-blue-950/80 border border-blue-500/50 flex items-center justify-center text-blue-400 animate-pulse shadow-lg shadow-blue-900/30">
                           <UploadCloud className="w-6 h-6" />
                         </div>
                         <div>
-                          <p className="text-white font-bold text-sm">Forensic Evidence In-Flight</p>
+                          <p className="text-white font-bold text-sm">
+                            {(currentMedia as any)?.uploadStatus === 'UPLOADED'
+                              ? 'Connecting to Forensic Media Stream...'
+                              : 'Forensic Evidence In-Flight'}
+                          </p>
                           <p className="text-slate-400 text-xs mt-1 max-w-sm">
                             {(currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED'
                               ? 'Upload failed during transmission. Evidence sealed on citizen device under Act 720 Whistleblower Vault awaiting sync.'
+                              : (currentMedia as any)?.uploadStatus === 'UPLOADED'
+                              ? 'Evidence confirmed uploaded in National Vault. Resolving direct stream...'
                               : 'Citizen device is streaming video evidence to National Vault. Playback will activate automatically once sealed.'}
                           </p>
                         </div>
@@ -861,7 +878,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         <div>
                           <p className="text-white font-bold text-sm">Media Playback Notice</p>
                           <p className="text-slate-400 text-xs mt-0.5 max-w-sm">
-                            Media stream could not be loaded directly by your browser codec.
+                            Browser media engine encountered a playback notice. You can retry or open the verified stream directly.
                           </p>
                         </div>
                         {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && (
@@ -889,7 +906,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                               target="_blank"
                               rel="noreferrer"
                               download
-                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1"
+                              className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center space-x-1.5 shadow"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                               <span>Open Direct Stream</span>
@@ -913,9 +930,19 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                             setDuration(e.currentTarget.duration || 15);
                             setVideoLoadError(false);
                           }}
-                          onCanPlay={() => setVideoLoadError(false)}
+                          onCanPlay={() => {
+                            console.log('[CAD_MEDIA] Video ready to play:', resolvedVideoUrl);
+                            setVideoLoadError(false);
+                          }}
                           onEnded={() => setIsPlaying(false)}
-                          onError={() => {
+                          onError={(e) => {
+                            const videoEl = e.currentTarget;
+                            const mediaError = videoEl.error;
+                            console.warn('[CAD_MEDIA_ERROR]', {
+                              code: mediaError?.code, // 1: ABORTED, 2: NETWORK, 3: DECODE, 4: SRC_NOT_SUPPORTED
+                              message: mediaError?.message,
+                              currentSrc: videoEl.currentSrc || resolvedVideoUrl
+                            });
                             if (resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://')) {
                               setVideoLoadError(true);
                             }

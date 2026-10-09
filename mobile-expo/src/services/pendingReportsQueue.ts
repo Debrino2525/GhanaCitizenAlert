@@ -149,14 +149,16 @@ export async function processPendingReport(
     if (!report.reportInserted) {
       onProgress?.(0.3, 'Transmitting incident report to Police CID Dispatch...');
 
+      const canonicalPublicUrl = report.fileName ? supabase.storage.from('evidence').getPublicUrl(report.fileName).data.publicUrl : '';
+
       const initialMediaList: EvidenceMediaItem[] = report.permanentVideoUri
         ? [
             {
               type: report.mediaType,
               video_storage_path: report.fileName,
               durationSeconds: report.recordedDuration || (report.mediaType === 'VIDEO' ? 15 : 1),
-              rawS3Url: '',
-              thumbnailUrl: '',
+              rawS3Url: canonicalPublicUrl,
+              thumbnailUrl: canonicalPublicUrl,
               localUri: report.permanentVideoUri,
               sha256Checksum: report.sha256Checksum || null,
               timestampUtc: report.createdAt,
@@ -256,14 +258,14 @@ export async function processPendingReport(
         return { success: false, error: errorMsg };
       }
 
-      // Media upload succeeded: link verified URL back to the incident in Supabase
+      const canonicalPublicUrl = report.fileName ? supabase.storage.from('evidence').getPublicUrl(report.fileName).data.publicUrl : '';
       const verifiedMediaList: EvidenceMediaItem[] = [
         {
           type: report.mediaType,
           video_storage_path: report.fileName,
           durationSeconds: report.recordedDuration || (report.mediaType === 'VIDEO' ? 15 : 1),
-          rawS3Url: uploadRes.publicUrl,
-          thumbnailUrl: uploadRes.publicUrl,
+          rawS3Url: uploadRes.publicUrl || canonicalPublicUrl,
+          thumbnailUrl: uploadRes.publicUrl || canonicalPublicUrl,
           localUri: report.permanentVideoUri,
           sha256Checksum: report.sha256Checksum || null,
           timestampUtc: report.createdAt,
@@ -280,10 +282,14 @@ export async function processPendingReport(
         }
       ];
 
-      await supabase
+      const { error: updateErr } = await supabase
         .from('incidents')
         .update({ media: verifiedMediaList })
         .eq('tracking_code', report.trackingCode);
+
+      if (updateErr) {
+        console.warn('[PENDING_QUEUE_UPDATE_ERROR] Failed to update incident media list:', updateErr);
+      }
 
       report.mediaUploaded = true;
     }
