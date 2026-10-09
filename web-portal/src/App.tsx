@@ -11,7 +11,6 @@ import { AuthModal } from './components/AuthModal';
 import { OfficerManagementModal } from './components/OfficerManagementModal';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
-import { INITIAL_INCIDENTS, INITIAL_ALERTS, INITIAL_SIGHTINGS } from './data/mockData';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser, SosPing } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
@@ -22,10 +21,10 @@ const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'COMMAND' | 'MODERATOR' | 'ALERTS' | 'FEED' | 'ANALYTICS'>('COMMAND');
-  const [incidents, setIncidents] = useState<IncidentReport[]>(INITIAL_INCIDENTS);
-  const [alerts, setAlerts] = useState<EmergencyAlert[]>(INITIAL_ALERTS);
-  const [sightings, setSightings] = useState<SightingTip[]>(INITIAL_SIGHTINGS);
-  const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(INITIAL_INCIDENTS[0]);
+  const [incidents, setIncidents] = useState<IncidentReport[]>([]);
+  const [alerts, setAlerts] = useState<EmergencyAlert[]>([]);
+  const [sightings, setSightings] = useState<SightingTip[]>([]);
+  const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(null);
   const [latestPings, setLatestPings] = useState<Record<string, SosPing>>({});
   const [activeCertificate, setActiveCertificate] = useState<CourtCertificate | null>(null);
 
