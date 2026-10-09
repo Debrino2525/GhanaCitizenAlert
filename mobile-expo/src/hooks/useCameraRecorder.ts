@@ -73,15 +73,15 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
     }
   }, []);
 
-  // 60-Second Hard Limit Timer
+  // 45-Second Hard Limit Timer
   useEffect(() => {
     let interval: any;
     if (isRecording) {
       interval = setInterval(() => {
         setRecordingSeconds((prev) => {
-          if (prev >= 59) {
+          if (prev >= 44) {
             stopRecordingInternal();
-            return 60;
+            return 45;
           }
           return prev + 1;
         });
@@ -114,14 +114,14 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
       setIsRecording(true);
       setMediaType('VIDEO');
       safeHaptics.heavy();
-      announceAccessibility('Video recording started. 60 seconds maximum duration.');
+      announceAccessibility('Video recording started. 45 seconds maximum duration.');
 
       try {
         if (cameraRef.current) {
           cameraRef.current
             .recordAsync({
-              maxDuration: 60,
-              quality: '720p',
+              maxDuration: 45,
+              quality: '480p',
               codec: 'avc1'
             })
             .then((result: any) => {
@@ -190,7 +190,7 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
         mediaTypes: ['videos', 'images'],
         allowsEditing: false,
         quality: 0.8,
-        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_640x480
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -198,10 +198,10 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
         const isVid = asset.type === 'video';
         const dur = asset.duration ? Math.round(asset.duration / 1000) : 10;
 
-        if (isVid && dur > 60) {
+        if (isVid && dur > 45) {
           Alert.alert(
             'Video Exceeds Limit',
-            'Evidence videos must be 60 seconds or less under Emergency CAD protocol. Please trim or record a shorter clip.'
+            'Evidence videos must be 45 seconds or less under Emergency CAD protocol. Please trim or record a shorter clip.'
           );
           return;
         }

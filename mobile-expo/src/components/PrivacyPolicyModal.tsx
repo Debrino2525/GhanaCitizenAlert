@@ -107,7 +107,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = memo(({
               <Text style={styles.cardTitle}>3. Camera, Audio & Evidence</Text>
             </View>
             <Text style={styles.bodyText}>
-              • <Text style={styles.boldText}>60-Second Limit:</Text> Video evidence recording is constrained to a 60-second statutory ceiling to protect citizen privacy.
+              • <Text style={styles.boldText}>45-Second Limit:</Text> Video evidence recording is constrained to a 45-second statutory ceiling to protect citizen privacy and minimize cellular transmission bandwidth.
             </Text>
             <Text style={styles.bodyText}>
               • <Text style={styles.boldText}>Client-Side Encryption:</Text> Media files are hashed on your device using raw-byte SHA-256 before upload.

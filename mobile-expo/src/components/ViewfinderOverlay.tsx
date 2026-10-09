@@ -100,7 +100,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
           <View style={[styles.recDot, isRecording && styles.recDotActive]} />
           <Text style={styles.recText}>
             {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:
-            {String(recordingSeconds % 60).padStart(2, '0')} / 01:00 MAX
+            {String(recordingSeconds % 60).padStart(2, '0')} / 00:45 MAX
           </Text>
         </View>
 
@@ -149,7 +149,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
             ]}
           >
             {isRecording
-              ? `RECORDING (${60 - recordingSeconds}s left)`
+              ? `RECORDING (${45 - recordingSeconds}s left)`
               : hasRecordedMedia
               ? 'EVIDENCE HASH-LOCKED'
               : 'HARDWARE SENSOR LIVE'}

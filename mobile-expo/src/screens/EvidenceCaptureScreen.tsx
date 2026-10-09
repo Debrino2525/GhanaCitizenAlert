@@ -247,7 +247,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
                 style={[styles.recordBtnPulse, isRecording && styles.recordBtnPulseActive]}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel={isRecording ? 'Stop Recording' : 'Start 60s Recording'}
+                accessibilityLabel={isRecording ? 'Stop Recording' : 'Start 45s Recording'}
               >
                 <View style={[styles.recordBtn, isRecording && styles.recordBtnActive]}>
                   {isRecording ? (
@@ -261,8 +261,8 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
                 {isRecording
                   ? 'STOP RECORDING'
                   : hasRecordedMedia
-                  ? 'RE-RECORD (60s)'
-                  : 'TAP TO RECORD (60s)'}
+                  ? 'RE-RECORD (45s)'
+                  : 'TAP TO RECORD (45s)'}
               </Text>
             </View>
 

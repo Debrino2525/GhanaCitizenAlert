@@ -67,7 +67,7 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
           )}
           <Text style={styles.uploadSizeText}>
             {mediaType === 'VIDEO'
-              ? `${recordedDuration}s • 720p HD`
+              ? `${recordedDuration}s • 480p Video`
               : 'Photo • JPEG'}
           </Text>
         </View>

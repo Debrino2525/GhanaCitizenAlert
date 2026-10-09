@@ -24,7 +24,7 @@ export interface TranslationMap {
 export const GHANAIAN_LANGUAGES: Record<LanguageCode, TranslationMap> = {
   en: {
     appTitle: 'CitizenAlert Ghana',
-    recordEvidence: 'Record 60s Evidence',
+    recordEvidence: 'Record 45s Evidence',
     stopRecording: 'Stop Recording',
     snapPhoto: '📸 Snap Photo',
     chooseGallery: '📁 Attach Gallery',
@@ -44,7 +44,7 @@ export const GHANAIAN_LANGUAGES: Record<LanguageCode, TranslationMap> = {
   },
   tw: {
     appTitle: 'CitizenAlert Ghana',
-    recordEvidence: 'Kyere Adanseɛ (Sekend 60)',
+    recordEvidence: 'Kyere Adanseɛ (Sekend 45)',
     stopRecording: 'Gyae Kyerew',
     snapPhoto: '📸 Twa Mfonini',
     chooseGallery: '📁 Fa Mfonini Firi Fon Mu',
@@ -64,7 +64,7 @@ export const GHANAIAN_LANGUAGES: Record<LanguageCode, TranslationMap> = {
   },
   ga: {
     appTitle: 'CitizenAlert Ghana',
-    recordEvidence: 'Tsɔɔ Nɔ Ni Eba (Sekɛnd 60)',
+    recordEvidence: 'Tsɔɔ Nɔ Ni Eba (Sekɛnd 45)',
     stopRecording: 'Tsi Sane Lɛ Naa',
     snapPhoto: '📸 Gbee Mfoniri',
     chooseGallery: '📁 Hala Mfoniri',
@@ -84,7 +84,7 @@ export const GHANAIAN_LANGUAGES: Record<LanguageCode, TranslationMap> = {
   },
   ee: {
     appTitle: 'CitizenAlert Ghana',
-    recordEvidence: 'Ɖe Kpeɖodzi (Sekend 60)',
+    recordEvidence: 'Ɖe Kpeɖodzi (Sekend 45)',
     stopRecording: 'Dzudzɔ Kpeɖodzi',
     snapPhoto: '📸 Ɖe Nutata',
     chooseGallery: '📁 Tia Nutatawo',
@@ -104,7 +104,7 @@ export const GHANAIAN_LANGUAGES: Record<LanguageCode, TranslationMap> = {
   },
   ha: {
     appTitle: 'CitizenAlert Ghana',
-    recordEvidence: 'Ɗauki Shaidar Bidiyo (Daƙiƙa 60)',
+    recordEvidence: 'Ɗauki Shaidar Bidiyo (Daƙiƙa 45)',
     stopRecording: 'Dakatar da Ɗauka',
     snapPhoto: '📸 Ɗauki Hoto',
     chooseGallery: '📁 Zaɓi Hoto/Bidiyo',

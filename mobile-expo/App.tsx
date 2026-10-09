@@ -306,102 +306,103 @@ function MainApp() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={tokens.colors.brand.gold}
-            />
-          }
-        >
-          {/* TAB 1: 60s Evidence Capture */}
-          {activeTab === 'CAPTURE' && (
-            <EvidenceCaptureScreen
-              t={t}
-              coords={gps.coords}
-              gpsAccuracy={gps.gpsAccuracy}
-              isLocating={gps.isLocating}
-              gpsStatus={gps.gpsStatus}
-              locationName={gps.locationName}
-              ghanaPostCode={gps.ghanaPostCode}
-              onRefreshGps={gps.fetchCurrentLocation}
-              onLocationNameChange={gps.setLocationName}
-              onGhanaPostCodeChange={gps.setGhanaPostCode}
-              cameraRef={camera.cameraRef}
-              hasCameraPermission={camera.hasCameraPermission}
-              facing={camera.facing}
-              isRecording={camera.isRecording}
-              recordingSeconds={camera.recordingSeconds}
-              recordedDuration={camera.recordedDuration}
-              hasRecordedMedia={camera.hasRecordedMedia}
-              recordedUri={camera.recordedUri}
-              mediaType={camera.mediaType}
-              onFlipCamera={camera.toggleCameraFacing}
-              onToggleRecording={camera.handleToggleRecording}
-              onSnapPhoto={camera.handleSnapPhoto}
-              onPickFromGallery={camera.handlePickFromGallery}
-              onRetake={() => {
-                camera.handleClearMedia();
-                draft.clearAttachedMedia();
-              }}
-              onRequestCameraPermissions={camera.requestPermissions}
-              category={draft.category}
-              title={draft.title}
-              description={draft.description}
-              landmark={draft.landmark}
-              isAnonymous={draft.isAnonymous}
-              reporterPhone={draft.reporterPhone}
-              isSubmitting={draft.isSubmitting}
-              uploadProgress={draft.uploadProgress}
-              uploadStatusText={draft.uploadStatusText}
-              isUploadingMedia={draft.isUploadingMedia}
-              onCategoryChange={draft.setCategory}
-              onTitleChange={draft.setTitle}
-              onDescriptionChange={draft.setDescription}
-              onLandmarkChange={draft.setLandmark}
-              onAnonymousChange={draft.setIsAnonymous}
-              onReporterPhoneChange={draft.setReporterPhone}
-              onSaveToGallery={draft.saveEvidenceToGallery}
-              onSubmitReport={draft.handleSubmitReport}
-            />
-          )}
-
-          {/* TAB 2: Amber Alerts */}
-          {activeTab === 'ALERTS' && (
-            <AmberAlertsScreen
-              coords={gps.coords}
-              ghanaPostCode={gps.ghanaPostCode}
-              region={gps.region}
-              locationName={gps.locationName}
-              landmark={draft.landmark}
-              isAnonymous={draft.isAnonymous}
-              reporterPhone={draft.reporterPhone}
-            />
-          )}
-
-          {/* TAB 3: SOS Panic */}
-          {activeTab === 'SOS' && (
-            <SosPanicScreen
-              coords={gps.coords}
-              gpsAccuracy={gps.gpsAccuracy}
-              locationName={gps.locationName}
-              landmark={draft.landmark}
-              ghanaPostCode={gps.ghanaPostCode}
-              region={gps.region}
-              isAnonymous={draft.isAnonymous}
-              reporterPhone={draft.reporterPhone}
-            />
-          )}
-
-          {/* TAB 4: Encrypted Offline Queue */}
-          {activeTab === 'QUEUE' && (
+        {activeTab === 'QUEUE' ? (
+          <View style={styles.queueContainer}>
             <PendingReportsScreen onQueueCountChange={setPendingCount} />
-          )}
-        </ScrollView>
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={tokens.colors.brand.gold}
+              />
+            }
+          >
+            {/* TAB 1: 60s Evidence Capture */}
+            {activeTab === 'CAPTURE' && (
+              <EvidenceCaptureScreen
+                t={t}
+                coords={gps.coords}
+                gpsAccuracy={gps.gpsAccuracy}
+                isLocating={gps.isLocating}
+                gpsStatus={gps.gpsStatus}
+                locationName={gps.locationName}
+                ghanaPostCode={gps.ghanaPostCode}
+                onRefreshGps={gps.fetchCurrentLocation}
+                onLocationNameChange={gps.setLocationName}
+                onGhanaPostCodeChange={gps.setGhanaPostCode}
+                cameraRef={camera.cameraRef}
+                hasCameraPermission={camera.hasCameraPermission}
+                facing={camera.facing}
+                isRecording={camera.isRecording}
+                recordingSeconds={camera.recordingSeconds}
+                recordedDuration={camera.recordedDuration}
+                hasRecordedMedia={camera.hasRecordedMedia}
+                recordedUri={camera.recordedUri}
+                mediaType={camera.mediaType}
+                onFlipCamera={camera.toggleCameraFacing}
+                onToggleRecording={camera.handleToggleRecording}
+                onSnapPhoto={camera.handleSnapPhoto}
+                onPickFromGallery={camera.handlePickFromGallery}
+                onRetake={() => {
+                  camera.handleClearMedia();
+                  draft.clearAttachedMedia();
+                }}
+                onRequestCameraPermissions={camera.requestPermissions}
+                category={draft.category}
+                title={draft.title}
+                description={draft.description}
+                landmark={draft.landmark}
+                isAnonymous={draft.isAnonymous}
+                reporterPhone={draft.reporterPhone}
+                isSubmitting={draft.isSubmitting}
+                uploadProgress={draft.uploadProgress}
+                uploadStatusText={draft.uploadStatusText}
+                isUploadingMedia={draft.isUploadingMedia}
+                onCategoryChange={draft.setCategory}
+                onTitleChange={draft.setTitle}
+                onDescriptionChange={draft.setDescription}
+                onLandmarkChange={draft.setLandmark}
+                onAnonymousChange={draft.setIsAnonymous}
+                onReporterPhoneChange={draft.setReporterPhone}
+                onSaveToGallery={draft.saveEvidenceToGallery}
+                onSubmitReport={draft.handleSubmitReport}
+              />
+            )}
+
+            {/* TAB 2: Amber Alerts */}
+            {activeTab === 'ALERTS' && (
+              <AmberAlertsScreen
+                coords={gps.coords}
+                ghanaPostCode={gps.ghanaPostCode}
+                region={gps.region}
+                locationName={gps.locationName}
+                landmark={draft.landmark}
+                isAnonymous={draft.isAnonymous}
+                reporterPhone={draft.reporterPhone}
+              />
+            )}
+
+            {/* TAB 3: SOS Panic */}
+            {activeTab === 'SOS' && (
+              <SosPanicScreen
+                coords={gps.coords}
+                gpsAccuracy={gps.gpsAccuracy}
+                locationName={gps.locationName}
+                landmark={draft.landmark}
+                ghanaPostCode={gps.ghanaPostCode}
+                region={gps.region}
+                isAnonymous={draft.isAnonymous}
+                reporterPhone={draft.reporterPhone}
+              />
+            )}
+          </ScrollView>
+        )}
       </KeyboardAvoidingView>
 
       {/* Citizen Profile Sheet */}
@@ -540,5 +541,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: tokens.spacing.md,
     paddingBottom: tokens.spacing.xxxl
+  },
+  queueContainer: {
+    flex: 1,
+    padding: tokens.spacing.md
   }
 });

@@ -155,9 +155,9 @@ export const useIncidentDraft = ({
       return;
     }
 
-    if (hasRecordedMedia && mediaType === 'VIDEO' && recordedDuration > 60) {
+    if (hasRecordedMedia && mediaType === 'VIDEO' && recordedDuration > 45) {
       safeHaptics.warning();
-      Alert.alert('Video Too Long', 'Evidence video duration exceeds the 60-second statutory maximum.');
+      Alert.alert('Video Too Long', 'Evidence video duration exceeds the 45-second statutory maximum.');
       return;
     }
 

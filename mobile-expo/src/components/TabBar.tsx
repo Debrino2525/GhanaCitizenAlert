@@ -20,7 +20,7 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pen
         }}
         style={[styles.tabItem, activeTab === 'CAPTURE' && styles.tabItemActiveCapture]}
         accessibilityRole="tab"
-        accessibilityLabel="60s Evidence Capture"
+        accessibilityLabel="45s Evidence Capture"
       >
         <Video
           color={activeTab === 'CAPTURE' ? tokens.colors.text.white : tokens.colors.text.secondary}
