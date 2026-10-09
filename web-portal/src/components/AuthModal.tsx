@@ -235,7 +235,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Security Legal Footer */}
         <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500 font-mono">
-          <span>SEC 7 ACT 772 LAW ENFORCEMENT GATEWAY</span>
+          <a href="/privacy" className="hover:text-amber-400 transition underline">
+            Privacy Policy (Act 843)
+          </a>
           <span className="text-emerald-400 font-bold">256-BIT ENCRYPTION</span>
         </div>
       </div>

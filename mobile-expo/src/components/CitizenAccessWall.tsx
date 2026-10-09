@@ -45,7 +45,7 @@ export interface CitizenUser {
   avatarUrl?: string;
   trustScore: number;
   isVerified: boolean;
-  loginMethod: 'GOOGLE' | 'EMAIL' | 'PHONE' | 'ANONYMOUS';
+  loginMethod: 'GOOGLE' | 'APPLE' | 'EMAIL' | 'PHONE' | 'ANONYMOUS';
   accessToken?: string;
 }
 
@@ -180,24 +180,25 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  const buildAndSetCitizenUser = (user: any, accessToken?: string) => {
+  const buildAndSetCitizenUser = (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' = 'GOOGLE') => {
     const userMeta = user.user_metadata || {};
+    const defaultName = provider === 'APPLE' ? 'Apple Citizen' : 'Google Citizen';
     const authenticatedCitizen: CitizenUser = {
       id: user.id,
-      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Google Citizen',
+      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
       email: user.email || '',
       phone: userMeta.phone || '',
       ghanaCard: userMeta.ghana_card || '',
       trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
       isVerified: Boolean(userMeta.is_verified || false),
-      loginMethod: 'GOOGLE',
+      loginMethod: provider,
       accessToken: accessToken
     };
     onAuthenticated(authenticatedCitizen);
   };
 
-  // 3. In-App Google Sign-In with Supabase OAuth & WebBrowser
-  const handleGoogleAuth = async () => {
+  // 3. In-App Single Sign-On (Google & Apple) with Supabase OAuth & WebBrowser
+  const handleOAuth = async (provider: 'google' | 'apple') => {
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -208,7 +209,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       });
 
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: provider,
         options: {
           redirectTo: redirectUrl,
           skipBrowserRedirect: true
@@ -216,7 +217,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       });
 
       if (error) throw error;
-      if (!data?.url) throw new Error('No authentication URL was returned by provider.');
+      if (!data?.url) throw new Error(`No authentication URL was returned by ${provider === 'apple' ? 'Apple' : 'Google'}.`);
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
@@ -229,7 +230,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           );
           if (sessionErr) throw sessionErr;
           if (sessionData?.user) {
-            buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token);
+            buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
             return;
           }
         }
@@ -251,19 +252,19 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           });
           if (setSessionErr) throw setSessionErr;
           if (sessionData?.user) {
-            buildAndSetCitizenUser(sessionData.user, accessToken);
+            buildAndSetCitizenUser(sessionData.user, accessToken, provider === 'apple' ? 'APPLE' : 'GOOGLE');
             return;
           }
         }
 
         const { data: activeSession } = await supabase.auth.getSession();
         if (activeSession?.session?.user) {
-          buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token);
+          buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
           return;
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Google Sign-In encountered an error. Please try again.');
+      setErrorMessage(err.message || `${provider === 'apple' ? 'Apple' : 'Google'} Sign-In encountered an error. Please try again.`);
     } finally {
       setIsLoading(false);
     }
@@ -602,29 +603,64 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
               </View>
             )}
 
-            {/* GOOGLE SINGLE SIGN-ON */}
+            {/* SSO SIGN-ON: APPLE & GOOGLE */}
             {authMode !== 'WHISTLEBLOWER' && (
               <>
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR SIGN IN WITH</Text>
+                  <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
                   <View style={styles.dividerLine} />
                 </View>
 
-                <TouchableOpacity
-                  onPress={handleGoogleAuth}
-                  disabled={isLoading}
-                  style={styles.googleBtn}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue with Google"
-                >
-                  <ShieldCheck color={tokens.colors.police.accent} size={18} />
-                  <Text style={styles.googleBtnText}>Continue with Google</Text>
-                </TouchableOpacity>
+                <View style={styles.ssoBtnGroup}>
+                  {/* Apple Sign-In (Required by Apple Review Guideline 4.8) */}
+                  <TouchableOpacity
+                    onPress={() => handleOAuth('apple')}
+                    disabled={isLoading}
+                    style={styles.appleBtn}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Apple"
+                  >
+                    <ShieldCheck color={tokens.colors.text.white} size={18} />
+                    <Text style={styles.appleBtnText}>Continue with Apple</Text>
+                  </TouchableOpacity>
+
+                  {/* Google Sign-In */}
+                  <TouchableOpacity
+                    onPress={() => handleOAuth('google')}
+                    disabled={isLoading}
+                    style={styles.googleBtn}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Google"
+                  >
+                    <ShieldCheck color={tokens.colors.police.accent} size={18} />
+                    <Text style={styles.googleBtnText}>Continue with Google</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </View>
+
+          {/* Privacy Policy & Statutory Compliance Link */}
+          <TouchableOpacity
+            onPress={() => {
+              Linking.openURL('https://ghanacitizenalert.globitechcybersolutions.com/privacy').catch(() => {
+                Alert.alert(
+                  'Privacy Policy',
+                  'Please visit https://ghanacitizenalert.globitechcybersolutions.com/privacy to read the Ghana Data Protection Act (Act 843) policy.'
+                );
+              });
+            }}
+            style={styles.privacyLinkWrapper}
+            accessibilityRole="link"
+            accessibilityLabel="Statutory Privacy Policy"
+          >
+            <Text style={styles.privacyLinkText}>
+              Statutory Privacy & Telemetry Policy (Act 843 & Act 720)
+            </Text>
+          </TouchableOpacity>
 
           {/* Footer Security Note */}
           <View style={styles.footer}>
@@ -827,6 +863,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1
   },
+  ssoBtnGroup: {
+    gap: tokens.spacing.sm,
+    marginTop: tokens.spacing.xs
+  },
+  appleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    gap: tokens.spacing.sm
+  },
+  appleBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '700'
+  },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -889,6 +945,18 @@ const styles = StyleSheet.create({
     color: tokens.colors.text.white,
     fontSize: tokens.typography.fontSize.md,
     fontWeight: '800'
+  },
+  privacyLinkWrapper: {
+    marginTop: tokens.spacing.lg,
+    alignItems: 'center',
+    paddingVertical: tokens.spacing.xs
+  },
+  privacyLinkText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+    textAlign: 'center'
   },
   footer: {
     marginTop: tokens.spacing.xl,

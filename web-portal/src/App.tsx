@@ -10,6 +10,7 @@ import { CourtCertificateModal } from './components/CourtCertificateModal';
 import { AuthModal } from './components/AuthModal';
 import { OfficerManagementModal } from './components/OfficerManagementModal';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { INITIAL_INCIDENTS, INITIAL_ALERTS, INITIAL_SIGHTINGS } from './data/mockData';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser } from './types';
 import { CourtCertificate } from './services/evidenceVault';
@@ -40,6 +41,12 @@ export const App: React.FC = () => {
       window.location.pathname === '/set-password' ||
       window.location.hash.includes('type=recovery') ||
       window.location.hash.includes('type=invite')
+    );
+  });
+  const [isPrivacyRoute, setIsPrivacyRoute] = useState<boolean>(() => {
+    return (
+      window.location.pathname === '/privacy' ||
+      window.location.pathname === '/privacy-policy'
     );
   });
 
@@ -144,6 +151,10 @@ export const App: React.FC = () => {
         window.location.pathname === '/set-password' ||
         window.location.hash.includes('type=recovery') ||
         window.location.hash.includes('type=invite')
+      );
+      setIsPrivacyRoute(
+        window.location.pathname === '/privacy' ||
+        window.location.pathname === '/privacy-policy'
       );
     };
     window.addEventListener('popstate', checkRoute);
@@ -466,7 +477,19 @@ export const App: React.FC = () => {
     setAlerts(prev => [newAlert, ...prev]);
   };
 
-  // 5. Loading Splash Screen while checking initial auth
+  // 5. If visitor is on /privacy or /privacy-policy, render PrivacyPolicyPage directly
+  if (isPrivacyRoute) {
+    return (
+      <PrivacyPolicyPage
+        onBack={() => {
+          window.history.pushState({}, '', '/');
+          setIsPrivacyRoute(false);
+        }}
+      />
+    );
+  }
+
+  // 6. Loading Splash Screen while checking initial auth
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 space-y-4 text-white">
@@ -663,7 +686,15 @@ export const App: React.FC = () => {
             <p>&copy; 2026 Republic of Ghana • Supabase Realtime Connected</p>
           </div>
           <div className="flex space-x-4">
-            <span>Ghana Data Protection Act (Act 843)</span>
+            <button
+              onClick={() => {
+                window.history.pushState({}, '', '/privacy');
+                setIsPrivacyRoute(true);
+              }}
+              className="hover:text-amber-400 transition underline font-bold"
+            >
+              Privacy Policy (Act 843)
+            </button>
             <span>Electronic Transactions Act (Act 772)</span>
           </div>
         </div>

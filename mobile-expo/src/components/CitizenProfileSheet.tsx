@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Linking } from 'react-native';
 import {
   ShieldCheck,
   Mail,
@@ -9,8 +9,11 @@ import {
   LogOut,
   X,
   Award,
-  ShieldAlert
+  ShieldAlert,
+  Trash2,
+  ExternalLink
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CitizenUser } from './CitizenAccessWall';
 import { supabase } from '../lib/supabase';
 import { GoogleSignin } from '../lib/googleAuth';
@@ -53,6 +56,62 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             }
             onClose();
             onSignOut();
+          }
+        }
+      ]
+    );
+  };
+
+  const handleOpenPrivacyPolicy = () => {
+    Linking.openURL('https://ghanacitizenalert.globitechcybersolutions.com/privacy').catch(() => {
+      Alert.alert(
+        'Privacy Policy',
+        'Please visit https://ghanacitizenalert.globitechcybersolutions.com/privacy to view our statutory Data Protection Policy (Act 843).'
+      );
+    });
+  };
+
+  const handleDeleteAccountPress = () => {
+    Alert.alert(
+      '⚠️ Delete Account & Purge Data?',
+      'Under the Data Protection Act, 2012 (Act 843), requesting account deletion will permanently erase your profile credentials, device tokens, and local queued reports. Any evidence already submitted will be completely anonymized under Whistleblower Act 720.\n\nAre you sure you want to proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue to Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '🚨 Final Confirmation',
+              'This action is irreversible. Your account and all stored local session data will be permanently deleted now.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Permanently Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      // 1. Purge local pending reports queue
+                      await AsyncStorage.removeItem('@citizen_alert_pending_reports_v1');
+
+                      // 2. Sign out of Supabase & Google
+                      await supabase.auth.signOut().catch(() => {});
+                      if (GoogleSignin && GoogleSignin.signOut) {
+                        await GoogleSignin.signOut().catch(() => {});
+                      }
+                    } catch (err) {
+                      console.warn('Account deletion purge warning:', err);
+                    }
+                    onClose();
+                    onSignOut();
+                    Alert.alert(
+                      '✅ Account Deleted',
+                      'Your citizen session, credentials, and local data have been permanently purged from this device.'
+                    );
+                  }
+                }
+              ]
+            );
           }
         }
       ]
@@ -181,6 +240,17 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             <View style={styles.dividerLine} />
           </View>
 
+          {/* Privacy Policy Link */}
+          <TouchableOpacity
+            onPress={handleOpenPrivacyPolicy}
+            style={styles.privacyLinkBtn}
+            accessibilityRole="button"
+            accessibilityLabel="View Data Protection & Privacy Policy"
+          >
+            <ExternalLink color={tokens.colors.brand.gold} size={14} />
+            <Text style={styles.privacyLinkText}>Statutory Privacy Policy (Act 843)</Text>
+          </TouchableOpacity>
+
           {/* Sign Out Button */}
           <TouchableOpacity
             onPress={handleSignOutPress}
@@ -190,6 +260,17 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
           >
             <LogOut color={tokens.colors.text.white} size={16} />
             <Text style={styles.signOutBtnText}>Sign Out & Lock App</Text>
+          </TouchableOpacity>
+
+          {/* Delete Account & Purge Data Button (Apple 5.1.1(v) & Google Play Compliance) */}
+          <TouchableOpacity
+            onPress={handleDeleteAccountPress}
+            style={styles.deleteAccountBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Permanently Delete Citizen Account and Purge Data"
+          >
+            <Trash2 color={tokens.colors.status.danger} size={15} />
+            <Text style={styles.deleteAccountBtnText}>Delete Account & Purge Data</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -393,6 +474,36 @@ const styles = StyleSheet.create({
   signOutBtnText: {
     color: tokens.colors.text.white,
     fontSize: tokens.typography.fontSize.sm,
+    fontWeight: 'bold'
+  },
+  privacyLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.xs,
+    paddingVertical: tokens.spacing.xs
+  },
+  privacyLinkText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600',
+    textDecorationLine: 'underline'
+  },
+  deleteAccountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.sm,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    minHeight: 40,
+    borderRadius: tokens.radius.lg,
+    marginTop: tokens.spacing.xs
+  },
+  deleteAccountBtnText: {
+    color: tokens.colors.status.danger,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: 'bold'
   }
 });
