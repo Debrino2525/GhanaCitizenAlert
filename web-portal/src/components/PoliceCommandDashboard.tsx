@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { IncidentReport, IncidentStatus, AgencyType, SosPing } from '../types';
 import {
   Shield,
@@ -24,7 +24,8 @@ import {
   ZoomIn,
   Download,
   X,
-  Activity
+  Activity,
+  UploadCloud
 } from 'lucide-react';
 import { generateCourtCertificate, CourtCertificate } from '../services/evidenceVault';
 import { supabase } from '../services/supabaseClient';
@@ -253,76 +254,79 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     setTimeout(() => setActionToast(null), 3500);
   };
 
-  // Reset playback & resolve signed video URL when selected incident changes
-  useEffect(() => {
+  // Reset playback & resolve signed video URL when selected incident or its media changes
+  const activeMedia = useMemo(() => {
+    return (selectedIncident?.media || []).find((m: any) => m.type === 'VIDEO') || selectedIncident?.media?.[0];
+  }, [selectedIncident?.media]);
+
+  const activeMediaStr = JSON.stringify(activeMedia || {});
+
+  const resolveMediaUrl = useCallback(async () => {
     setIsPlaying(false);
     setCurrentTime(0);
     setVideoLoadError(false);
 
-    const activeMedia = (selectedIncident?.media || []).find((m: any) => m.type === 'VIDEO') || selectedIncident?.media?.[0];
     if (!activeMedia) {
       setResolvedVideoUrl('');
+      setIsResolvingUrl(false);
       return;
     }
 
-    let isCancelled = false;
-    const resolveMediaUrl = async () => {
-      setIsResolvingUrl(true);
-      try {
-        const rawUrl = (activeMedia as any).rawS3Url || (activeMedia as any).url || (activeMedia as any).thumbnailUrl || '';
-        const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
+    const rawUrl = (activeMedia as any).rawS3Url || (activeMedia as any).url || (activeMedia as any).thumbnailUrl || '';
+    const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
+    const uploadStatus = (activeMedia as any).uploadStatus;
 
-        // 1. Direct Data URI or HTTP Stream (instant zero-latency playback)
-        if (rawUrl && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
-          if (!isCancelled) {
-            setResolvedVideoUrl(rawUrl);
-            setIsResolvingUrl(false);
-            return;
-          }
-        }
+    // If upload is QUEUED and no valid rawUrl yet, it's in-flight from citizen device
+    if ((uploadStatus === 'QUEUED' || uploadStatus === 'UPLOADING') && (!rawUrl || rawUrl.startsWith('file://'))) {
+      setResolvedVideoUrl('');
+      setIsResolvingUrl(false);
+      return;
+    }
 
-        // 2. Supabase Storage Signed/Public URL resolution
-        if (storagePath) {
-          const { data: signedData, error: signedErr } = await supabase.storage
-            .from('evidence')
-            .createSignedUrl(storagePath, 3600);
+    setIsResolvingUrl(true);
+    try {
+      // 1. Direct Data URI or HTTP Stream (instant zero-latency playback)
+      if (rawUrl && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+        setResolvedVideoUrl(rawUrl);
+        setIsResolvingUrl(false);
+        return;
+      }
 
-          if (!isCancelled && !signedErr && signedData?.signedUrl) {
-            setResolvedVideoUrl(signedData.signedUrl);
-            setIsResolvingUrl(false);
-            return;
-          }
+      // 2. Supabase Storage Signed/Public URL resolution
+      if (storagePath) {
+        const { data: signedData, error: signedErr } = await supabase.storage
+          .from('evidence')
+          .createSignedUrl(storagePath, 3600);
 
-          const { data: pubData } = supabase.storage.from('evidence').getPublicUrl(storagePath);
-          if (!isCancelled && pubData?.publicUrl) {
-            setResolvedVideoUrl(pubData.publicUrl);
-            setIsResolvingUrl(false);
-            return;
-          }
-        }
-
-        if (rawUrl && !rawUrl.startsWith('file://')) {
-          if (!isCancelled) {
-            setResolvedVideoUrl(rawUrl);
-          }
-        } else {
-          if (!isCancelled) {
-            setResolvedVideoUrl('');
-          }
-        }
-      } catch (e) {
-        console.warn('Media URL resolution warning:', e);
-        if (!isCancelled) {
-          const fallback = (activeMedia as any).rawS3Url || '';
-          setResolvedVideoUrl(fallback.startsWith('file://') ? '' : fallback);
-        }
-      } finally {
-        if (!isCancelled) {
+        if (!signedErr && signedData?.signedUrl) {
+          setResolvedVideoUrl(signedData.signedUrl);
           setIsResolvingUrl(false);
+          return;
+        }
+
+        const { data: pubData } = supabase.storage.from('evidence').getPublicUrl(storagePath);
+        if (pubData?.publicUrl) {
+          setResolvedVideoUrl(pubData.publicUrl);
+          setIsResolvingUrl(false);
+          return;
         }
       }
-    };
 
+      if (rawUrl && !rawUrl.startsWith('file://')) {
+        setResolvedVideoUrl(rawUrl);
+      } else {
+        setResolvedVideoUrl('');
+      }
+    } catch (e) {
+      console.warn('Media URL resolution warning:', e);
+      const fallback = (activeMedia as any).rawS3Url || '';
+      setResolvedVideoUrl(fallback.startsWith('file://') ? '' : fallback);
+    } finally {
+      setIsResolvingUrl(false);
+    }
+  }, [activeMediaStr]);
+
+  useEffect(() => {
     resolveMediaUrl();
 
     if (videoRef.current) {
@@ -331,11 +335,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         videoRef.current.load();
       } catch (e) {}
     }
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [selectedIncident?.id, selectedIncident?.trackingCode]);
+  }, [resolveMediaUrl, selectedIncident?.id, selectedIncident?.trackingCode]);
 
   const filteredIncidents = incidents.filter(inc => {
     if (filterAgency !== 'ALL' && inc.assignedAgency !== filterAgency) return false;
@@ -757,19 +757,36 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                         <p className="text-white font-bold text-xs">Generating Secure Evidence Stream (Act 772)...</p>
                       </div>
-                    ) : !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') || (currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED' || (currentMedia as any)?.uploadStatus === 'QUEUED' || videoLoadError ? (
+                    ) : (currentMedia as any)?.uploadStatus === 'QUEUED' || (currentMedia as any)?.uploadStatus === 'UPLOADING' || !resolvedVideoUrl || resolvedVideoUrl.startsWith('file://') ? (
+                      <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-blue-950/80 border border-blue-500/50 flex items-center justify-center text-blue-400 animate-pulse shadow-lg shadow-blue-900/30">
+                          <UploadCloud className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-white font-bold text-sm">Forensic Evidence In-Flight</p>
+                          <p className="text-slate-400 text-xs mt-1 max-w-sm">
+                            {(currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED'
+                              ? 'Upload failed during transmission. Evidence sealed on citizen device under Act 720 Whistleblower Vault awaiting sync.'
+                              : 'Citizen device is streaming video evidence to National Vault. Playback will activate automatically once sealed.'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => resolveMediaUrl()}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition"
+                        >
+                          <Activity className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Check Ingestion Status</span>
+                        </button>
+                      </div>
+                    ) : videoLoadError ? (
                       <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-2.5">
                         <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-amber-400">
                           <AlertTriangle className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="text-white font-bold text-sm">Evidence not uploaded / upload pending</p>
+                          <p className="text-white font-bold text-sm">Media Playback Notice</p>
                           <p className="text-slate-400 text-xs mt-0.5 max-w-sm">
-                            {(currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED'
-                              ? 'Upload failed during transmission. Evidence sealed on citizen device under Act 720 Whistleblower Vault awaiting sync.'
-                              : resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && videoLoadError
-                              ? 'Media stream could not be loaded or network error occurred.'
-                              : 'Evidence video is queued on citizen device or pending verification.'}
+                            Media stream could not be loaded directly by your browser codec.
                           </p>
                         </div>
                         {resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://') && (
@@ -777,11 +794,9 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                             <button
                               onClick={() => {
                                 setVideoLoadError(false);
-                                if (videoRef.current) {
-                                  videoRef.current.load();
-                                }
+                                resolveMediaUrl();
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold"
+                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow"
                             >
                               Retry Playback
                             </button>
@@ -789,10 +804,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                               href={resolvedVideoUrl}
                               target="_blank"
                               rel="noreferrer"
+                              download
                               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
-                              <span>Open Direct URL</span>
+                              <span>Open Direct Stream</span>
                             </a>
                           </div>
                         )}
@@ -807,16 +823,26 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           className="w-full h-full object-cover bg-black"
                           playsInline
                           preload="auto"
+                          crossOrigin="anonymous"
                           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 15)}
+                          onLoadedMetadata={(e) => {
+                            setDuration(e.currentTarget.duration || 15);
+                            setVideoLoadError(false);
+                          }}
+                          onCanPlay={() => setVideoLoadError(false)}
                           onEnded={() => setIsPlaying(false)}
                           onError={() => {
-                            setVideoLoadError(true);
+                            if (resolvedVideoUrl && !resolvedVideoUrl.startsWith('file://')) {
+                              setVideoLoadError(true);
+                            }
                             setIsPlaying(false);
                           }}
                           onPlay={() => setIsPlaying(true)}
                           onPause={() => setIsPlaying(false)}
-                        />
+                        >
+                          <source src={resolvedVideoUrl} type={resolvedVideoUrl.includes('.mov') ? 'video/quicktime' : 'video/mp4'} />
+                          <source src={resolvedVideoUrl} type="video/mp4" />
+                        </video>
 
                         {/* Centered Play Overlay */}
                         {!isPlaying && (
