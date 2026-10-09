@@ -221,9 +221,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         };
       case 'mapbox-dark':
         return {
-          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-          subdomains: ['a', 'b', 'c', 'd'],
-          attribution: '&copy; CartoDB &copy; OpenStreetMap &copy; Ghana National Security',
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          attribution: '&copy; Esri &copy; OpenStreetMap contributors &copy; Ghana Police CAD',
           maxZoom: 19
         };
       case 'osm':
