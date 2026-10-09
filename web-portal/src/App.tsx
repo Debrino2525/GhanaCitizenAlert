@@ -12,7 +12,7 @@ import { OfficerManagementModal } from './components/OfficerManagementModal';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { INITIAL_INCIDENTS, INITIAL_ALERTS, INITIAL_SIGHTINGS } from './data/mockData';
-import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser } from './types';
+import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser, SosPing } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
 import { Shield, Loader2 } from 'lucide-react';
@@ -26,6 +26,7 @@ export const App: React.FC = () => {
   const [alerts, setAlerts] = useState<EmergencyAlert[]>(INITIAL_ALERTS);
   const [sightings, setSightings] = useState<SightingTip[]>(INITIAL_SIGHTINGS);
   const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(INITIAL_INCIDENTS[0]);
+  const [latestPings, setLatestPings] = useState<Record<string, SosPing>>({});
   const [activeCertificate, setActiveCertificate] = useState<CourtCertificate | null>(null);
 
   // Authentication State
@@ -323,7 +324,29 @@ export const App: React.FC = () => {
       }
     };
 
+    const fetchPings = async () => {
+      try {
+        const { data } = await supabase
+          .from('sos_pings')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (data && data.length > 0) {
+          const map: Record<string, SosPing> = {};
+          data.forEach((p: any) => {
+            if (!map[p.incident_id]) {
+              map[p.incident_id] = p;
+            }
+          });
+          setLatestPings(map);
+        }
+      } catch (err) {
+        console.warn('Error fetching initial sos_pings:', err);
+      }
+    };
+
     fetchSupabaseData();
+    fetchPings();
 
     // Subscribe to Realtime Incidents channel
     const channel = supabase
@@ -375,8 +398,21 @@ export const App: React.FC = () => {
       })
       .subscribe();
 
+    // Subscribe to Realtime SOS pings stream for live moving beacon tracking
+    const sosChannel = supabase
+      .channel('realtime_sos_pings_global')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sos_pings' }, (payload) => {
+        const p: SosPing = payload.new as SosPing;
+        setLatestPings(prev => ({
+          ...prev,
+          [p.incident_id]: p
+        }));
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(sosChannel);
     };
   }, [currentOfficer]);
 
@@ -615,6 +651,7 @@ export const App: React.FC = () => {
                 alerts={alerts}
                 selectedIncident={selectedIncident}
                 onSelectIncident={(inc) => setSelectedIncident(inc)}
+                latestPings={latestPings}
               />
             </div>
             <PoliceCommandDashboard
@@ -644,6 +681,7 @@ export const App: React.FC = () => {
                 alerts={alerts}
                 selectedIncident={selectedIncident}
                 onSelectIncident={(inc) => setSelectedIncident(inc)}
+                latestPings={latestPings}
               />
             </div>
             <EmergencyAlertHub currentOfficer={currentOfficer} />

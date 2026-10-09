@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { IncidentReport, EmergencyAlert } from '../types';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { IncidentReport, EmergencyAlert, SosPing } from '../types';
 import L from 'leaflet';
 import {
   Navigation,
@@ -12,7 +12,9 @@ import {
   Maximize2,
   Minimize2,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Crosshair,
+  LocateFixed
 } from 'lucide-react';
 import {
   computeTacticalDispatchRoute,
@@ -26,6 +28,7 @@ interface IncidentMapProps {
   alerts: EmergencyAlert[];
   selectedIncident: IncidentReport | null;
   onSelectIncident: (inc: IncidentReport) => void;
+  latestPings?: Record<string, SosPing>;
 }
 
 export type BasemapStyle =
@@ -49,12 +52,14 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   incidents,
   alerts,
   selectedIncident,
-  onSelectIncident
+  onSelectIncident,
+  latestPings = {}
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
+  const userMarkerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
   const stationMarkerRef = useRef<L.Marker | null>(null);
   const tileErrorCountRef = useRef<number>(0);
@@ -62,6 +67,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const [currentStyle, setCurrentStyle] = useState<BasemapStyle>('google-hybrid');
   const [selectedStation, setSelectedStation] = useState<CommandStation | null>(null);
   const [activeRoute, setActiveRoute] = useState<TacticalRouteResult | null>(null);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [isLocatingUser, setIsLocatingUser] = useState<boolean>(false);
 
   // Responsive and collapsible overlay states
   const [isHudCollapsed, setIsHudCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
@@ -69,6 +76,74 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const [isLayerDropdownOpen, setIsLayerDropdownOpen] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showTileErrorNotice, setShowTileErrorNotice] = useState<boolean>(false);
+
+  // Quick action: Locate user's current GPS position
+  const handleLocateMe = useCallback(() => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setIsLocatingUser(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        setUserLocation([latitude, longitude]);
+        setIsLocatingUser(false);
+
+        const map = mapInstanceRef.current;
+        if (!map) return;
+
+        if (!userMarkerRef.current) {
+          userMarkerRef.current = L.layerGroup().addTo(map);
+        } else {
+          userMarkerRef.current.clearLayers();
+        }
+
+        // Draw accuracy circle
+        L.circle([latitude, longitude], {
+          color: '#3b82f6',
+          fillColor: '#60a5fa',
+          fillOpacity: 0.15,
+          radius: accuracy || 15,
+          weight: 1.5,
+          dashArray: '4, 6'
+        }).addTo(userMarkerRef.current);
+
+        // Draw user GPS pulse marker
+        const userIcon = L.divIcon({
+          className: 'custom-user-icon',
+          html: `
+            <div class="relative flex items-center justify-center">
+              <span class="absolute inline-flex rounded-full w-10 h-10 bg-blue-500/30 animate-ping"></span>
+              <div style="background-color: #2563eb; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 14px rgba(37, 99, 235, 0.8); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px;">
+                📍
+              </div>
+            </div>
+          `,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        L.marker([latitude, longitude], { icon: userIcon })
+          .addTo(userMarkerRef.current)
+          .bindPopup(`
+            <div style="font-family: sans-serif; font-size: 12px; color: #0f172a; padding: 4px;">
+              <span style="background: #2563eb; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">YOUR CURRENT GPS</span>
+              <p style="margin: 4px 0 0 0; font-family: monospace; font-weight: bold;">${latitude.toFixed(5)}° N, ${longitude.toFixed(5)}° W</p>
+              <p style="margin: 2px 0 0 0; color: #64748b; font-size: 10px;">Accuracy: ±${accuracy.toFixed(1)}m</p>
+            </div>
+          `)
+          .openPopup();
+
+        map.flyTo([latitude, longitude], 15, { duration: 1 });
+      },
+      (err) => {
+        setIsLocatingUser(false);
+        console.warn('Geolocation error:', err);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }, []);
 
   /**
    * Note: Direct mt1.google.com tile layer fetching is for prototyping.
@@ -284,38 +359,57 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         `);
     });
 
-    // B. Draw Incident Markers
+    // B. Draw Incident Markers & Active SOS Distress Beacons
     incidents.forEach(inc => {
+      const livePing = latestPings?.[inc.id];
+      const effectiveCoords: [number, number] = livePing ? [livePing.lat, livePing.lng] : inc.coordinates;
+      const isSos = Boolean(livePing) || inc.category === 'CRIMINAL_OFFENSE' && inc.title.includes('SOS');
+
       let pinColor = '#3b82f6';
       let iconEmoji = '🚨';
-      if (inc.category === 'CRIMINAL_OFFENSE') { pinColor = '#ef4444'; iconEmoji = '🚨'; }
-      if (inc.category === 'DOMESTIC_ABUSE') { pinColor = '#ec4899'; iconEmoji = '🛡️'; }
-      if (inc.category === 'GALAMSEY_ENVIRONMENTAL') { pinColor = '#10b981'; iconEmoji = '🌲'; }
-      if (inc.category === 'TRAFFIC_RECKLESS') { pinColor = '#f59e0b'; iconEmoji = '🚗'; }
-      if (inc.category === 'SANITATION_ZONING') { pinColor = '#8b5cf6'; iconEmoji = '🏙️'; }
+      if (isSos) { pinColor = '#dc2626'; iconEmoji = '📡'; }
+      else if (inc.category === 'CRIMINAL_OFFENSE') { pinColor = '#ef4444'; iconEmoji = '🚨'; }
+      else if (inc.category === 'DOMESTIC_ABUSE') { pinColor = '#ec4899'; iconEmoji = '🛡️'; }
+      else if (inc.category === 'GALAMSEY_ENVIRONMENTAL') { pinColor = '#10b981'; iconEmoji = '🌲'; }
+      else if (inc.category === 'TRAFFIC_RECKLESS') { pinColor = '#f59e0b'; iconEmoji = '🚗'; }
+      else if (inc.category === 'SANITATION_ZONING') { pinColor = '#8b5cf6'; iconEmoji = '🏙️'; }
 
       const isSelected = selectedIncident?.id === inc.id;
-      const isUrgent = inc.severity === 'RED' || inc.severity === 'HIGH' || inc.severity === 'CRITICAL';
+      const isUrgent = isSos || inc.severity === 'RED' || inc.severity === 'HIGH' || inc.severity === 'CRITICAL';
+
+      // Draw glowing accuracy circle if live GPS ping is active
+      if (livePing) {
+        L.circle(effectiveCoords, {
+          color: '#ef4444',
+          fillColor: '#ef4444',
+          fillOpacity: 0.18,
+          radius: livePing.accuracy || 15,
+          weight: 2,
+          dashArray: '4, 6'
+        }).addTo(markersGroup);
+      }
 
       const incidentIcon = L.divIcon({
         className: 'custom-incident-icon',
         html: `
           <div class="relative flex items-center justify-center">
-            ${isUrgent || isSelected ? `
+            ${isSos ? `
+              <span class="absolute inline-flex rounded-full w-14 h-14 bg-red-600/40 border-2 border-red-500 animate-ping"></span>
+            ` : (isUrgent || isSelected) ? `
               <span class="absolute inline-flex rounded-full ${isSelected ? 'w-12 h-12 bg-amber-400/40 border border-amber-400/80 animate-ping' : 'w-10 h-10 bg-red-500/30 animate-ping'}"></span>
             ` : ''}
             <div style="
               background-color: ${pinColor};
-              width: ${isSelected ? '38px' : '30px'};
-              height: ${isSelected ? '38px' : '30px'};
+              width: ${isSelected || isSos ? '40px' : '30px'};
+              height: ${isSelected || isSos ? '40px' : '30px'};
               border-radius: 50%;
-              border: 2.5px solid ${isSelected ? '#FCD116' : '#ffffff'};
-              box-shadow: 0 4px 18px ${isSelected ? 'rgba(252, 209, 22, 0.6)' : 'rgba(0,0,0,0.8)'};
+              border: 2.5px solid ${isSos ? '#fca5a5' : isSelected ? '#FCD116' : '#ffffff'};
+              box-shadow: 0 4px 18px ${isSos ? 'rgba(220, 38, 38, 0.9)' : isSelected ? 'rgba(252, 209, 22, 0.6)' : 'rgba(0,0,0,0.8)'};
               display: flex;
               align-items: center;
               justify-content: center;
               color: white;
-              font-size: ${isSelected ? '15px' : '12px'};
+              font-size: ${isSelected || isSos ? '16px' : '12px'};
               font-weight: bold;
               transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
               cursor: pointer;
@@ -324,18 +418,26 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             </div>
           </div>
         `,
-        iconSize: [isSelected ? 48 : 36, isSelected ? 48 : 36],
-        iconAnchor: [isSelected ? 24 : 18, isSelected ? 24 : 18]
+        iconSize: [isSelected || isSos ? 50 : 36, isSelected || isSos ? 50 : 36],
+        iconAnchor: [isSelected || isSos ? 25 : 18, isSelected || isSos ? 25 : 18]
       });
 
-      const marker = L.marker(inc.coordinates, { icon: incidentIcon }).addTo(markersGroup);
+      const marker = L.marker(effectiveCoords, { icon: incidentIcon }).addTo(markersGroup);
 
       marker.on('click', () => {
         onSelectIncident(inc);
       });
 
       marker.bindPopup(`
-        <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; color: #0f172a; min-width: 230px; padding: 6px;">
+        <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; color: #0f172a; min-width: 240px; padding: 6px;">
+          ${livePing ? `
+            <div style="background: #dc2626; color: white; padding: 2px 7px; border-radius: 4px; font-weight: 900; font-size: 10px; display: inline-block; margin-bottom: 5px; letter-spacing: 0.5px;">
+              🚨 LIVE SOS DISTRESS BEACON ACTIVE
+            </div>
+            <p style="margin: 0 0 4px 0; color: #dc2626; font-family: monospace; font-weight: bold; font-size: 11px;">
+              GPS: ${livePing.lat.toFixed(5)}° N, ${livePing.lng.toFixed(5)}° W (±${livePing.accuracy}m)
+            </p>
+          ` : ''}
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
             <span style="background: #0B1E38; color: #FCD116; padding: 2px 7px; border-radius: 6px; font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 10px;">${inc.trackingCode}</span>
             <span style="color: #475569; font-size: 11px; font-weight: 700;">${inc.assignedAgency}</span>
@@ -343,7 +445,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           <h4 style="margin: 7px 0 4px 0; font-weight: 800; font-size: 13px; line-height: 1.3;">${inc.title}</h4>
           <p style="margin: 0; color: #475569; font-size: 11px;">${inc.locationName}</p>
           <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 11px;">📍 ${inc.ghanaPostCode || 'Not provided'}</span>
+            <span style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 11px;">📍 ${inc.ghanaPostCode || `${effectiveCoords[0].toFixed(3)}, ${effectiveCoords[1].toFixed(3)}`}</span>
             <span style="color: #059669; font-weight: 700; font-size: 10px; background: #ecfdf5; padding: 1px 5px; border-radius: 4px;">Act 772 Sealed</span>
           </div>
         </div>
@@ -361,8 +463,11 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     }
 
     if (selectedIncident) {
+      const selPing = latestPings?.[selectedIncident.id];
+      const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+
       const route = computeTacticalDispatchRoute(
-        selectedIncident.coordinates,
+        selCoords,
         selectedIncident.locationName,
         selectedIncident.assignedAgency,
         selectedStation || undefined
@@ -418,13 +523,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       // Fit bounds smoothly with flyToBounds
       const bounds = L.latLngBounds([
         route.originStation.coordinates,
-        selectedIncident.coordinates
+        selCoords
       ]);
       map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 14, duration: 0.75 });
     } else {
       setActiveRoute(null);
     }
-  }, [incidents, alerts, selectedIncident, selectedStation]);
+  }, [incidents, alerts, selectedIncident, selectedStation, latestPings]);
 
   const currentLayerObj = layerOptions.find(l => l.id === currentStyle) || layerOptions[0];
 
@@ -560,8 +665,30 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         )}
       </div>
 
-      {/* TOP-RIGHT CORNER OVERLAY CONTAINER (Layer Selector & Fullscreen Controls) */}
+      {/* TOP-RIGHT CORNER OVERLAY CONTAINER (Layer Selector, Locate Me, & Fullscreen Controls) */}
       <div className="absolute top-3 right-3 z-map-ui pointer-events-none flex items-center gap-2">
+        {/* Locate My Position Button */}
+        <button
+          onClick={handleLocateMe}
+          disabled={isLocatingUser}
+          className={`pointer-events-auto bg-slate-900/90 backdrop-blur-md border border-slate-700/70 rounded-xl px-2.5 py-1.5 text-xs font-semibold flex items-center space-x-1.5 shadow-xl transition ${
+            userLocation
+              ? 'text-blue-400 border-blue-500/50 bg-blue-950/80 hover:bg-blue-900'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Locate My Current GPS Position"
+          aria-label="Locate My Current GPS Position"
+        >
+          {isLocatingUser ? (
+            <RefreshCw className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+          ) : (
+            <Crosshair className={`w-3.5 h-3.5 ${userLocation ? 'text-blue-400' : 'text-slate-400'}`} />
+          )}
+          <span className="hidden sm:inline font-bold">
+            {isLocatingUser ? 'Locating...' : userLocation ? 'My GPS Lock' : 'Locate Me'}
+          </span>
+        </button>
+
         {/* Layer Selector Dropdown */}
         <div className="relative pointer-events-auto">
           <button
