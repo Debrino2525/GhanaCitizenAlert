@@ -10,7 +10,9 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  StatusBar
+  StatusBar,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
@@ -311,7 +313,10 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View>
           {/* Header & National Security Badge */}
           <View style={styles.headerSection}>
             <View style={styles.shieldBadge}>
@@ -337,6 +342,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           <View style={styles.modeTabs}>
             <TouchableOpacity
               onPress={() => {
+                Keyboard.dismiss();
                 setErrorMessage(null);
                 setAuthMode('LOGIN');
               }}
@@ -352,6 +358,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
             <TouchableOpacity
               onPress={() => {
+                Keyboard.dismiss();
                 setErrorMessage(null);
                 setAuthMode('REGISTER');
               }}
@@ -367,6 +374,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
             <TouchableOpacity
               onPress={() => {
+                Keyboard.dismiss();
                 setErrorMessage(null);
                 setAuthMode('WHISTLEBLOWER');
               }}
@@ -411,6 +419,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       autoCapitalize="none"
                       value={email}
                       onChangeText={setEmail}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -426,6 +437,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       secureTextEntry
                       value={password}
                       onChangeText={setPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -465,6 +479,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       placeholderTextColor={tokens.colors.text.muted}
                       value={fullName}
                       onChangeText={setFullName}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -480,6 +497,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       keyboardType="phone-pad"
                       value={phone}
                       onChangeText={setPhone}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -497,6 +517,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       autoCapitalize="characters"
                       value={ghanaCard}
                       onChangeText={setGhanaCard}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -513,6 +536,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       autoCapitalize="none"
                       value={email}
                       onChangeText={setEmail}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -528,6 +554,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       secureTextEntry
                       value={password}
                       onChangeText={setPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -543,6 +572,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                       secureTextEntry
                       value={confirmPassword}
                       onChangeText={setConfirmPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
                     />
                   </View>
                 </View>
@@ -668,6 +700,8 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
               🇬🇭 Ghana CitizenAlert • Official Civic Defense Network • 24/7 Police CID & Emergency Dispatch
             </Text>
           </View>
+            </View>
+          </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

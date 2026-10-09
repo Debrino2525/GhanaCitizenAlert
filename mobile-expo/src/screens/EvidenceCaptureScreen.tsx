@@ -8,7 +8,8 @@ import {
   TextInput,
   Keyboard,
   ActivityIndicator,
-  Image
+  Image,
+  TouchableWithoutFeedback
 } from 'react-native';
 import {
   Camera,
@@ -304,221 +305,233 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
 
       {/* STEP 2: INCIDENT DETAILS & LOCATION */}
       {step === 2 && (
-        <View style={styles.stepContent}>
-          {/* Closest Landmark Section */}
-          <View style={styles.landmarkSection}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <MapPin color={tokens.colors.brand.gold} size={16} />
-                <Text style={styles.fieldLabelGold}>{t.landmarkLabel}</Text>
-              </View>
-              <TouchableOpacity onPress={Keyboard.dismiss}>
-                <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
-                  ✕ Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={[styles.input, styles.landmarkInput]}
-              placeholder={t.landmarkPlaceholder}
-              placeholderTextColor={tokens.colors.text.muted}
-              value={landmark}
-              onChangeText={onLandmarkChange}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
-              blurOnSubmit={true}
-            />
-
-            {/* Quick Landmark Suggestion Chips */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={styles.chipsScroll}
-            >
-              {LANDMARK_SUGGESTIONS.map((chip, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
-                    onLandmarkChange(landmark ? `${landmark}, ${cleanChip}` : cleanChip);
-                  }}
-                  style={styles.chip}
-                >
-                  <Text style={styles.chipText}>{chip}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Detected Area / Street Name */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.fieldLabel}>{t.locationLabel}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Boundary Road, East Legon, Accra"
-              placeholderTextColor={tokens.colors.text.muted}
-              value={locationName}
-              onChangeText={onLocationNameChange}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
-              blurOnSubmit={true}
-            />
-          </View>
-
-          {/* GhanaPost GPS (Auto-Calculated) */}
-          <View style={styles.inputGroup}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
-              <Text style={{ color: tokens.colors.text.muted, fontSize: tokens.typography.fontSize.xxs }}>
-                Auto-Generated from GPS
-              </Text>
-            </View>
-            <TextInput
-              style={[styles.input, { color: tokens.colors.brand.gold, fontFamily: tokens.typography.fontFamily.monoBold }]}
-              placeholder="e.g. GA-382-9104"
-              placeholderTextColor={tokens.colors.text.muted}
-              value={ghanaPostCode}
-              onChangeText={onGhanaPostCodeChange}
-              autoCapitalize="characters"
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
-              blurOnSubmit={true}
-            />
-          </View>
-
-          {/* Incident Category Selection */}
-          <Text style={styles.fieldLabel}>{t.categories}</Text>
-          <View style={styles.categoryGrid}>
-            {CATEGORIES.map((c) => {
-              const IconComp = c.icon;
-              const isSelected = category === c.id;
-              return (
-                <TouchableOpacity
-                  key={c.id}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    onCategoryChange(c.id);
-                  }}
-                  style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
-                  accessibilityRole="button"
-                  accessibilityLabel={c.label}
-                >
-                  <IconComp
-                    color={isSelected ? tokens.colors.text.white : tokens.colors.police.badge}
-                    size={16}
-                  />
-                  <Text style={[styles.categoryText, isSelected && styles.categoryTextActive]}>
-                    {c.label}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.stepContent}>
+            {/* Closest Landmark Section */}
+            <View style={styles.landmarkSection}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <MapPin color={tokens.colors.brand.gold} size={16} />
+                  <Text style={styles.fieldLabelGold}>{t.landmarkLabel}</Text>
+                </View>
+                <TouchableOpacity onPress={Keyboard.dismiss}>
+                  <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
+                    ✕ Done
                   </Text>
                 </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Incident Title */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.fieldLabel}>Incident Title *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Armed robbery attempt near junction"
-              placeholderTextColor={tokens.colors.text.muted}
-              value={title}
-              onChangeText={onTitleChange}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
-              blurOnSubmit={true}
-            />
-          </View>
-
-          {/* Description */}
-          <View style={styles.inputGroup}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.fieldLabel}>Situation Details & Suspects *</Text>
-              <TouchableOpacity onPress={Keyboard.dismiss}>
-                <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
-                  ✕ Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
-              placeholder="Describe suspects, weapons, vehicle license plates, direction of escape..."
-              placeholderTextColor={tokens.colors.text.muted}
-              value={description}
-              onChangeText={onDescriptionChange}
-              multiline
-              returnKeyType="default"
-            />
-          </View>
-
-          {/* Anonymous Toggle (Act 720) */}
-          <TouchableOpacity
-            onPress={() => {
-              Keyboard.dismiss();
-              onAnonymousChange(!isAnonymous);
-            }}
-            style={styles.anonToggleBox}
-            accessibilityRole="switch"
-            accessibilityLabel="Toggle Anonymous Whistleblower Report"
-          >
-            <View style={{ flex: 1, paddingRight: tokens.spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                {isAnonymous ? (
-                  <ShieldAlert color={tokens.colors.status.success} size={16} />
-                ) : (
-                  <ShieldCheck color={tokens.colors.text.secondary} size={16} />
-                )}
-                <Text style={styles.anonTitle}>
-                  {isAnonymous ? 'Anonymous Whistleblower Active' : 'Citizen Safety Report'}
-                </Text>
               </View>
-              <Text style={styles.anonSubtitle}>
-                {isAnonymous
-                  ? 'All identifiers stripped under Whistleblower Act (Act 720)'
-                  : 'Coordinates and landmark attached for emergency dispatch'}
-              </Text>
-            </View>
-            <View style={[styles.togglePill, isAnonymous && styles.togglePillActive]} />
-          </TouchableOpacity>
+              <TextInput
+                style={[styles.input, styles.landmarkInput]}
+                placeholder={t.landmarkPlaceholder}
+                placeholderTextColor={tokens.colors.text.muted}
+                value={landmark}
+                onChangeText={onLandmarkChange}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
+              />
 
-          {!isAnonymous && (
+              {/* Quick Landmark Suggestion Chips */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={styles.chipsScroll}
+              >
+                {LANDMARK_SUGGESTIONS.map((chip, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
+                      onLandmarkChange(landmark ? `${landmark}, ${cleanChip}` : cleanChip);
+                    }}
+                    style={styles.chip}
+                  >
+                    <Text style={styles.chipText}>{chip}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Detected Area / Street Name */}
             <View style={styles.inputGroup}>
-              <Text style={styles.fieldLabel}>Contact Phone Number (Optional)</Text>
+              <Text style={styles.fieldLabel}>{t.locationLabel}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. 0244 123 456"
+                placeholder="e.g. Boundary Road, East Legon, Accra"
                 placeholderTextColor={tokens.colors.text.muted}
-                value={reporterPhone}
-                onChangeText={onReporterPhoneChange}
-                keyboardType="phone-pad"
+                value={locationName}
+                onChangeText={onLocationNameChange}
                 returnKeyType="done"
                 onSubmitEditing={Keyboard.dismiss}
                 blurOnSubmit={true}
               />
             </View>
-          )}
 
-          {/* Step 2 Buttons */}
-          <View style={styles.stepBtnRow}>
+            {/* GhanaPost GPS (Auto-Calculated) */}
+            <View style={styles.inputGroup}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
+                <Text style={{ color: tokens.colors.text.muted, fontSize: tokens.typography.fontSize.xxs }}>
+                  Auto-Generated from GPS
+                </Text>
+              </View>
+              <TextInput
+                style={[styles.input, { color: tokens.colors.brand.gold, fontFamily: tokens.typography.fontFamily.monoBold }]}
+                placeholder="e.g. GA-382-9104"
+                placeholderTextColor={tokens.colors.text.muted}
+                value={ghanaPostCode}
+                onChangeText={onGhanaPostCodeChange}
+                autoCapitalize="characters"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
+              />
+            </View>
+
+            {/* Incident Category Selection */}
+            <Text style={styles.fieldLabel}>{t.categories}</Text>
+            <View style={styles.categoryGrid}>
+              {CATEGORIES.map((c) => {
+                const IconComp = c.icon;
+                const isSelected = category === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      onCategoryChange(c.id);
+                    }}
+                    style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={c.label}
+                  >
+                    <IconComp
+                      color={isSelected ? tokens.colors.text.white : tokens.colors.police.badge}
+                      size={16}
+                    />
+                    <Text style={[styles.categoryText, isSelected && styles.categoryTextActive]}>
+                      {c.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Incident Title */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Incident Title *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Armed robbery attempt near junction"
+                placeholderTextColor={tokens.colors.text.muted}
+                value={title}
+                onChangeText={onTitleChange}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                blurOnSubmit={true}
+              />
+            </View>
+
+            {/* Description */}
+            <View style={styles.inputGroup}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.fieldLabel}>Situation Details & Suspects *</Text>
+                <TouchableOpacity
+                  onPress={Keyboard.dismiss}
+                  style={{ paddingVertical: 2, paddingHorizontal: 6, backgroundColor: 'rgba(252, 209, 22, 0.1)', borderRadius: tokens.radius.sm }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Done typing details"
+                >
+                  <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
+                    ✓ Hide Keyboard
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+                placeholder="Describe suspects, weapons, vehicle license plates, direction of escape..."
+                placeholderTextColor={tokens.colors.text.muted}
+                value={description}
+                onChangeText={onDescriptionChange}
+                multiline
+              />
+            </View>
+
+            {/* Anonymous Toggle (Act 720) */}
             <TouchableOpacity
-              onPress={() => setStep(1)}
-              style={styles.stepBackBtn}
+              onPress={() => {
+                Keyboard.dismiss();
+                onAnonymousChange(!isAnonymous);
+              }}
+              style={styles.anonToggleBox}
+              accessibilityRole="switch"
+              accessibilityLabel="Toggle Anonymous Whistleblower Report"
             >
-              <ChevronLeft color={tokens.colors.text.primary} size={18} />
-              <Text style={styles.stepBackBtnText}>Back</Text>
+              <View style={{ flex: 1, paddingRight: tokens.spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  {isAnonymous ? (
+                    <ShieldAlert color={tokens.colors.status.success} size={16} />
+                  ) : (
+                    <ShieldCheck color={tokens.colors.text.secondary} size={16} />
+                  )}
+                  <Text style={styles.anonTitle}>
+                    {isAnonymous ? 'Anonymous Whistleblower Active' : 'Citizen Safety Report'}
+                  </Text>
+                </View>
+                <Text style={styles.anonSubtitle}>
+                  {isAnonymous
+                    ? 'All identifiers stripped under Whistleblower Act (Act 720)'
+                    : 'Coordinates and landmark attached for emergency dispatch'}
+                </Text>
+              </View>
+              <View style={[styles.togglePill, isAnonymous && styles.togglePillActive]} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => setStep(3)}
-              style={[styles.stepNextBtn, { flex: 2 }]}
-            >
-              <Text style={styles.stepNextBtnText}>Review & Transmit</Text>
-              <ChevronRight color={tokens.colors.bg.base} size={18} />
-            </TouchableOpacity>
+            {!isAnonymous && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Contact Phone Number (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 0244 123 456"
+                  placeholderTextColor={tokens.colors.text.muted}
+                  value={reporterPhone}
+                  onChangeText={onReporterPhoneChange}
+                  keyboardType="phone-pad"
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  blurOnSubmit={true}
+                />
+              </View>
+            )}
+
+            {/* Step 2 Buttons */}
+            <View style={styles.stepBtnRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setStep(1);
+                }}
+                style={styles.stepBackBtn}
+              >
+                <ChevronLeft color={tokens.colors.text.primary} size={18} />
+                <Text style={styles.stepBackBtnText}>Back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setStep(3);
+                }}
+                style={[styles.stepNextBtn, { flex: 2 }]}
+              >
+                <Text style={styles.stepNextBtnText}>Review & Transmit</Text>
+                <ChevronRight color={tokens.colors.bg.base} size={18} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       )}
 
       {/* STEP 3: REVIEW & TRANSMIT */}

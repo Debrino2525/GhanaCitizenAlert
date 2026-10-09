@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
-  RefreshControl
+  RefreshControl,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
 import {
   AlertTriangle,
@@ -331,61 +333,83 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
         visible={isTipModalOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setIsTipModalOpen(false)}
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setIsTipModalOpen(false);
+        }}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
-                <Eye color={tokens.colors.status.warning} size={20} />
-                <Text style={styles.modalTitle}>Submit Sighting Tip</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                  <Eye color={tokens.colors.status.warning} size={20} />
+                  <Text style={styles.modalTitle}>Submit Sighting Tip</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setIsTipModalOpen(false);
+                  }}
+                  style={styles.modalCloseBtn}
+                >
+                  <X color={tokens.colors.text.secondary} size={18} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={() => setIsTipModalOpen(false)}
-                style={styles.modalCloseBtn}
-              >
-                <X color={tokens.colors.text.secondary} size={18} />
-              </TouchableOpacity>
-            </View>
 
-            {selectedAlert && (
-              <View style={styles.modalTargetBox}>
-                <Text style={styles.modalTargetLabel}>Subject / Alert:</Text>
-                <Text style={styles.modalTargetName}>
-                  {selectedAlert.subject_name || selectedAlert.title}
-                </Text>
-              </View>
-            )}
-
-            <Text style={styles.modalSub}>
-              Your live coordinates ({coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}) will be attached to direct police search patrols.
-            </Text>
-
-            <TextInput
-              style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
-              placeholder="Describe where you saw the subject/suspect, direction of movement, vehicle plate number, or appearance details..."
-              placeholderTextColor={tokens.colors.text.muted}
-              value={tipDescription}
-              onChangeText={setTipDescription}
-              multiline
-            />
-
-            <TouchableOpacity
-              onPress={handleSendAmberTip}
-              disabled={isSubmittingTip}
-              style={styles.sightingSubmitBtn}
-            >
-              {isSubmittingTip ? (
-                <ActivityIndicator color={tokens.colors.text.white} size="small" />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm }}>
-                  <Send color={tokens.colors.text.white} size={16} />
-                  <Text style={styles.sightingSubmitBtnText}>Transmit Sighting to CID</Text>
+              {selectedAlert && (
+                <View style={styles.modalTargetBox}>
+                  <Text style={styles.modalTargetLabel}>Subject / Alert:</Text>
+                  <Text style={styles.modalTargetName}>
+                    {selectedAlert.subject_name || selectedAlert.title}
+                  </Text>
                 </View>
               )}
-            </TouchableOpacity>
+
+              <Text style={styles.modalSub}>
+                Your live coordinates ({coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}) will be attached to direct police search patrols.
+              </Text>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 4 }}>
+                <TouchableOpacity
+                  onPress={Keyboard.dismiss}
+                  style={{ paddingVertical: 2, paddingHorizontal: 6, backgroundColor: 'rgba(252, 209, 22, 0.1)', borderRadius: tokens.radius.sm }}
+                >
+                  <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: 'bold' }}>
+                    ✓ Hide Keyboard
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+                placeholder="Describe where you saw the subject/suspect, direction of movement, vehicle plate number, or appearance details..."
+                placeholderTextColor={tokens.colors.text.muted}
+                value={tipDescription}
+                onChangeText={setTipDescription}
+                multiline
+              />
+
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  handleSendAmberTip();
+                }}
+                disabled={isSubmittingTip}
+                style={styles.sightingSubmitBtn}
+              >
+                {isSubmittingTip ? (
+                  <ActivityIndicator color={tokens.colors.text.white} size="small" />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm }}>
+                    <Send color={tokens.colors.text.white} size={16} />
+                    <Text style={styles.sightingSubmitBtnText}>Transmit Sighting to CID</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
