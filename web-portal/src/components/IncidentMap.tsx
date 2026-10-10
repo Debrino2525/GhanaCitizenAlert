@@ -49,7 +49,7 @@ interface TileConfig {
   maxNativeZoom?: number;
 }
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN;
 
 export const IncidentMap: React.FC<IncidentMapProps> = ({
   incidents,
@@ -372,7 +372,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     newLayer.addTo(map);
 
     if (markersRef.current) {
-      markersRef.current.bringToFront?.();
+      (markersRef.current as any).bringToFront?.();
     }
 
     tileLayerRef.current = newLayer;
