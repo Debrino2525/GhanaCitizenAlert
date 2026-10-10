@@ -5,6 +5,8 @@ import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
 import { getGhanaRegionCode } from '../utils/ghanaPostGps';
 import { safeHaptics } from '../utils/haptics';
 
+export type GpsTriggerType = 'USER_TAP' | 'MOUNT' | 'WATCHER' | 'TIMER';
+
 export interface UseGpsLocationResult {
   coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
@@ -15,7 +17,7 @@ export interface UseGpsLocationResult {
   gpsFixTimestamp: number | null;
   region: string;
   locationName: string;
-  fetchCurrentLocation: () => Promise<void>;
+  fetchCurrentLocation: (trigger?: GpsTriggerType) => Promise<void>;
   setLocationName: (name: string) => void;
   setManualLocation: (name: string, regionName?: string, manualCoords?: GpsCoordinates | null) => void;
 }
@@ -92,17 +94,21 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       const ageMs = Math.max(0, now - fixTimestamp);
       const ageSeconds = Math.floor(ageMs / 1000);
 
-      // Freshness judged relative to request: fix timestamp at or near request time (>= requestStartTime - 10s), or <=15s total age
-      const isFresh = fixTimestamp >= (requestStartTime - 10000) || ageSeconds <= FRESH_FIX_MAX_AGE_SECONDS;
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
       const rawAcc = typeof location.coords.accuracy === 'number' ? location.coords.accuracy : null;
       const accuracy = rawAcc !== null ? Math.round(rawAcc * 10) / 10 : null;
 
+      // Freshness rule: LIVE if fix.timestamp >= requestStartTime - 3000ms OR (age <= 30s AND accuracy <= 25m)
+      const isFresh = fixTimestamp >= (requestStartTime - 3000) || (ageSeconds <= 30 && typeof rawAcc === 'number' && rawAcc <= 25);
+
       const targetStatus: GpsLockStatus = isFresh ? 'LIVE' : 'STALE';
       const targetSource: LocationSource = isFresh ? 'LIVE' : 'LAST_KNOWN';
 
       if (__DEV__) {
+        console.log(
+          `[GPS RAW TELEMETRY] Lat: ${lat}, Lng: ${lng}, Acc: ${rawAcc}m, fix.timestamp: ${fixTimestamp}, Date.now(): ${now}, computed age: ${ageSeconds}s (${ageMs}ms), isFresh: ${isFresh}`
+        );
         console.log(
           `[GPS State] [Req #${reqId}] ${apiMethod} -> ${targetStatus} | Age: ${ageSeconds}s | ` +
             `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)} | Acc: ±${accuracy ?? 'N/A'}m | Fresh: ${isFresh}`
@@ -145,180 +151,182 @@ export const useGpsLocation = (): UseGpsLocationResult => {
     []
   );
 
-  const fetchCurrentLocation = useCallback(async () => {
-    // Single-writer mutex: if already acquiring, reject concurrent redundant requests
-    if (inFlightRef.current) {
-      if (__DEV__) {
-        console.log('[GPS Engine] Acquisition already in flight. Request ignored.');
-      }
-      return;
-    }
-
-    inFlightRef.current = true;
-    const currentReqId = ++requestIdRef.current;
-    const requestStartTime = Date.now();
-    if (__DEV__) {
-      devInFlightAcquisitionsCount++;
-    }
-    setIsLocating(true);
-    setGpsStatus('LOCATING');
-    cleanupWatcher();
-
-    // Minimum visual delay of 800ms so the ACQUIRING animation is clearly visible
-    const minVisualDelay = new Promise<void>((resolve) => setTimeout(resolve, 800));
-
-    if (__DEV__) {
-      console.log(`[GPS State] [Req #${currentReqId}] Started acquisition pipeline at ${new Date(requestStartTime).toISOString()}... Active in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`);
-    }
-
-    let acquiredFresh = false;
-
-    try {
-      // 1. Permission Check
-      let { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        const req = await Location.requestForegroundPermissionsAsync();
-        status = req.status;
-      }
-
-      if (status !== 'granted') {
-        if (!isMountedRef.current || currentReqId !== requestIdRef.current) return;
-        setGpsStatus('PERMISSION_DENIED');
-        setLocationSource('UNAVAILABLE');
-        setCoords(null);
-        coordsRef.current = null;
-        setGpsAccuracy(null);
-        setGpsFixAgeSeconds(null);
-        setGpsFixTimestamp(null);
-        setLocationName('Location permission denied');
-        setRegion('UNKNOWN');
+  const fetchCurrentLocation = useCallback(
+    async (trigger: GpsTriggerType = 'USER_TAP') => {
+      // Single-writer mutex: if already acquiring, reject concurrent redundant requests
+      if (inFlightRef.current) {
         if (__DEV__) {
-          console.log(`[GPS State] [Req #${currentReqId}] Location permission denied by user.`);
+          console.log(`[GPS Engine] Acquisition already in flight (trigger=${trigger}). Request ignored.`);
         }
-        await minVisualDelay;
         return;
       }
 
-      // 2. Direct Hardware Position Query with 6.5s timeout (skip cached getLastKnown to request new fix)
+      inFlightRef.current = true;
+      const currentReqId = ++requestIdRef.current;
+      const requestStartTime = Date.now();
+      if (__DEV__) {
+        devInFlightAcquisitionsCount++;
+        console.log(
+          `[GPS Request START] id=#${currentReqId}, trigger=${trigger}, time=${new Date(requestStartTime).toISOString()}, in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`
+        );
+      }
+      setIsLocating(true);
+      setGpsStatus('LOCATING');
+      cleanupWatcher();
+
+      // Minimum visual delay of 800ms so the ACQUIRING animation is clearly visible
+      const minVisualDelay = new Promise<void>((resolve) => setTimeout(resolve, 800));
+
+      let acquiredFresh = false;
+
       try {
-        const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-        const posTimeout = new Promise<null>((resolve) => {
-          directFixTimeoutRef.current = setTimeout(() => {
+        // 1. Permission Check
+        let { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          const req = await Location.requestForegroundPermissionsAsync();
+          status = req.status;
+        }
+
+        if (status !== 'granted') {
+          if (!isMountedRef.current || currentReqId !== requestIdRef.current) return;
+          setGpsStatus('PERMISSION_DENIED');
+          setLocationSource('UNAVAILABLE');
+          setCoords(null);
+          coordsRef.current = null;
+          setGpsAccuracy(null);
+          setGpsFixAgeSeconds(null);
+          setGpsFixTimestamp(null);
+          setLocationName('Location permission denied');
+          setRegion('UNKNOWN');
+          if (__DEV__) {
+            console.log(`[GPS State] [Req #${currentReqId}] Location permission denied by user.`);
+          }
+          await minVisualDelay;
+          return;
+        }
+
+        // 2. Direct Hardware Position Query with 6.5s timeout (skip cached getLastKnown to request new fix)
+        try {
+          const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          const posTimeout = new Promise<null>((resolve) => {
+            directFixTimeoutRef.current = setTimeout(() => {
+              directFixTimeoutRef.current = null;
+              resolve(null);
+            }, 6500);
+          });
+          const directFix = await Promise.race([posPromise, posTimeout]);
+          if (directFixTimeoutRef.current) {
+            clearTimeout(directFixTimeoutRef.current);
             directFixTimeoutRef.current = null;
-            resolve(null);
-          }, 6500);
+          }
+
+          if (directFix && directFix.coords) {
+            acquiredFresh = await applyLocationFix(directFix, 'getCurrentPositionAsync(High)', currentReqId, requestStartTime);
+          }
+        } catch (e) {
+          // Direct fix query failed or timed out
+        }
+
+        // 3. If fresh fix achieved, wait for minimum visual feedback and complete
+        if (acquiredFresh) {
+          await minVisualDelay;
+          return;
+        }
+
+        // 4. If direct fix was stale or timed out, retry once via bounded watcher (up to 4.5s)
+        if (__DEV__) {
+          console.log(`[GPS State] [Req #${currentReqId}] Direct fix stale/timed out. Retrying via watchPositionAsync...`);
+        }
+
+        await new Promise<void>((resolve) => {
+          let isResolved = false;
+
+          const completeWatcher = () => {
+            if (!isResolved) {
+              isResolved = true;
+              if (watcherTimeoutRef.current) {
+                clearTimeout(watcherTimeoutRef.current);
+                watcherTimeoutRef.current = null;
+              }
+              cleanupWatcher();
+              resolve();
+            }
+          };
+
+          // Bounded watcher window (4.5s)
+          watcherTimeoutRef.current = setTimeout(() => {
+            watcherTimeoutRef.current = null;
+            if (__DEV__ && isMountedRef.current) {
+              console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired.`);
+            }
+            completeWatcher();
+          }, 4500);
+
+          Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.High,
+              timeInterval: 1000,
+              distanceInterval: 1,
+            },
+            async (freshLocation) => {
+              const freshApplied = await applyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)', currentReqId, requestStartTime);
+              if (freshApplied) {
+                completeWatcher();
+              }
+            }
+          )
+            .then((sub) => {
+              if (isResolved || !isMountedRef.current || currentReqId !== requestIdRef.current) {
+                try {
+                  sub.remove();
+                } catch {}
+              } else {
+                watcherRef.current = sub;
+                if (__DEV__) {
+                  devActiveWatchersCount++;
+                }
+              }
+            })
+            .catch(() => {
+              completeWatcher();
+            });
         });
-        const directFix = await Promise.race([posPromise, posTimeout]);
+
+        await minVisualDelay;
+      } catch (err) {
+        if (__DEV__) {
+          console.warn(`[GPS State] [Req #${currentReqId}] Error:`, err);
+        }
+      } finally {
+        cleanupWatcher();
         if (directFixTimeoutRef.current) {
           clearTimeout(directFixTimeoutRef.current);
           directFixTimeoutRef.current = null;
         }
 
-        if (directFix && directFix.coords) {
-          acquiredFresh = await applyLocationFix(directFix, 'getCurrentPositionAsync(High)', currentReqId, requestStartTime);
-        }
-      } catch (e) {
-        // Direct fix query failed or timed out
-      }
-
-      // 3. If fresh fix achieved, wait for minimum visual feedback and complete
-      if (acquiredFresh) {
-        await minVisualDelay;
-        return;
-      }
-
-      // 4. If direct fix was stale or timed out, retry once via bounded watcher (up to 4.5s)
-      if (__DEV__) {
-        console.log(`[GPS State] [Req #${currentReqId}] Direct fix stale/timed out. Retrying via watchPositionAsync...`);
-      }
-
-      await new Promise<void>((resolve) => {
-        let isResolved = false;
-
-        const completeWatcher = () => {
-          if (!isResolved) {
-            isResolved = true;
-            if (watcherTimeoutRef.current) {
-              clearTimeout(watcherTimeoutRef.current);
-              watcherTimeoutRef.current = null;
-            }
-            cleanupWatcher();
-            resolve();
+        if (isMountedRef.current && currentReqId === requestIdRef.current) {
+          if (__DEV__) {
+            devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
           }
-        };
+          inFlightRef.current = false;
+          setIsLocating(false);
 
-        // Bounded watcher window (4.5s)
-        watcherTimeoutRef.current = setTimeout(() => {
-          watcherTimeoutRef.current = null;
-          if (__DEV__ && isMountedRef.current) {
-            console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired.`);
+          // Guarantee a terminal state if no coords were ever resolved
+          if (!coordsRef.current) {
+            setGpsStatus((prev) => (prev === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'UNAVAILABLE'));
+            setLocationSource('UNAVAILABLE');
           }
-          completeWatcher();
-        }, 4500);
 
-        Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 1000,
-            distanceInterval: 1,
-          },
-          async (freshLocation) => {
-            const freshApplied = await applyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)', currentReqId, requestStartTime);
-            if (freshApplied) {
-              completeWatcher();
-            }
+          if (__DEV__) {
+            console.log(
+              `[GPS Request END] id=#${currentReqId}, trigger=${trigger}, in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`
+            );
           }
-        )
-          .then((sub) => {
-            if (isResolved || !isMountedRef.current || currentReqId !== requestIdRef.current) {
-              try {
-                sub.remove();
-              } catch {}
-            } else {
-              watcherRef.current = sub;
-              if (__DEV__) {
-                devActiveWatchersCount++;
-              }
-            }
-          })
-          .catch(() => {
-            completeWatcher();
-          });
-      });
-
-      await minVisualDelay;
-    } catch (err) {
-      if (__DEV__) {
-        console.warn(`[GPS State] [Req #${currentReqId}] Error:`, err);
-      }
-    } finally {
-      cleanupWatcher();
-      if (directFixTimeoutRef.current) {
-        clearTimeout(directFixTimeoutRef.current);
-        directFixTimeoutRef.current = null;
-      }
-
-      if (isMountedRef.current && currentReqId === requestIdRef.current) {
-        if (__DEV__) {
-          devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
-        }
-        inFlightRef.current = false;
-        setIsLocating(false);
-
-        // Guarantee a terminal state if no coords were ever resolved
-        if (!coordsRef.current) {
-          setGpsStatus((prev) => (prev === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'UNAVAILABLE'));
-          setLocationSource('UNAVAILABLE');
-        }
-
-        if (__DEV__) {
-          console.log(
-            `[GPS State] [Req #${currentReqId}] Acquisition finished (terminal state reached). In-flight=${devInFlightAcquisitionsCount}, Watchers=${devActiveWatchersCount}`
-          );
         }
       }
-    }
-  }, [cleanupWatcher, applyLocationFix]);
+    },
+    [cleanupWatcher, applyLocationFix]
+  );
 
   const setManualLocation = useCallback(
     (name: string, regionName: string = 'UNKNOWN', manualCoords: GpsCoordinates | null = null) => {
@@ -341,7 +349,7 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   // Run initial acquisition ONCE on mount
   useEffect(() => {
     isMountedRef.current = true;
-    fetchCurrentLocation();
+    fetchCurrentLocation('MOUNT');
 
     return () => {
       isMountedRef.current = false;

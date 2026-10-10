@@ -137,7 +137,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
             )}
             {isStale && (
               <Text style={styles.staleNoticeText}>
-                Hardware GPS fix is older than 15s. Tap Refresh to acquire live fix.
+                Hardware GPS fix is stale. Tap Refresh to acquire live fix.
               </Text>
             )}
             {isPermissionDenied && (
