@@ -36,7 +36,7 @@ export const getGpsDevMetrics = () => ({
 
 /**
  * Derives the effective location source at USE time based on the fix's age and accuracy.
- * Rule: LIVE if fixTimestamp exists AND (age <= 30s AND accuracy <= 25m).
+ * Rule: LIVE if age <= 10s (any accuracy), or if age <= 30s and accuracy <= 25m; otherwise LAST_KNOWN.
  */
 export const effectiveLocationSource = (
   fixTimestamp: number | null | undefined,
@@ -45,9 +45,9 @@ export const effectiveLocationSource = (
   sourceOverride?: LocationSource
 ): LocationSource => {
   if (sourceOverride === 'MANUAL') return 'MANUAL';
-  if (!fixTimestamp) return sourceOverride === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'UNAVAILABLE';
+  if (!fixTimestamp) return 'UNAVAILABLE';
   const ageSeconds = Math.max(0, Math.floor((now - fixTimestamp) / 1000));
-  const isFresh = ageSeconds <= 30 && typeof accuracy === 'number' && accuracy <= 25;
+  const isFresh = ageSeconds <= 10 || (ageSeconds <= 30 && typeof accuracy === 'number' && accuracy <= 25);
   return isFresh ? 'LIVE' : 'LAST_KNOWN';
 };
 
@@ -118,11 +118,10 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       const rawAcc = typeof location.coords.accuracy === 'number' ? location.coords.accuracy : null;
       const accuracy = rawAcc !== null ? Math.round(rawAcc * 10) / 10 : null;
 
-      // Freshness rule: LIVE if fix.timestamp >= requestStartTime - 3000ms OR (age <= 30s AND accuracy <= 25m)
-      const isFresh = fixTimestamp >= (requestStartTime - 3000) || (ageSeconds <= 30 && typeof rawAcc === 'number' && rawAcc <= 25);
-
+      // Unified freshness rule: derived at use time via effectiveLocationSource
+      const targetSource: LocationSource = effectiveLocationSource(fixTimestamp, accuracy, now);
+      const isFresh = targetSource === 'LIVE';
       const targetStatus: GpsLockStatus = isFresh ? 'LIVE' : 'STALE';
-      const targetSource: LocationSource = isFresh ? 'LIVE' : 'LAST_KNOWN';
 
       if (__DEV__) {
         console.log(

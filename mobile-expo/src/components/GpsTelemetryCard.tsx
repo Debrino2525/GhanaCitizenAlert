@@ -218,7 +218,15 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
                 { color: isLive ? tokens.colors.status.success : tokens.colors.text.secondary },
               ]}
             >
-              {isLocating ? 'Locking…' : gpsAccuracy !== null ? `±${gpsAccuracy}m` : isLive ? 'Live Fix' : 'Estimated'}
+              {isLocating
+                ? 'Locking…'
+                : gpsAccuracy !== null
+                ? gpsAccuracy > 25
+                  ? `±${gpsAccuracy}m (low)`
+                  : `±${gpsAccuracy}m`
+                : isLive
+                ? 'Live Fix'
+                : 'Estimated'}
             </Text>
           </View>
         </View>
