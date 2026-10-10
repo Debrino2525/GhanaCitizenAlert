@@ -272,6 +272,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             gpsStatus={gpsStatus}
             locationSource={locationSource}
             gpsFixAgeSeconds={gpsFixAgeSeconds}
+            gpsFixTimestamp={gpsFixTimestamp}
             t={t}
             onRefreshGps={onRefreshGps}
           />

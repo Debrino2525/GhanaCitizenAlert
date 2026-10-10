@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Crosshair, RefreshCw, Radio, Clock, MapPin, AlertTriangle, Settings } from 'lucide-react-native';
 import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
@@ -13,6 +13,7 @@ interface GpsTelemetryCardProps {
   gpsStatus: GpsLockStatus;
   locationSource: LocationSource;
   gpsFixAgeSeconds: number | null;
+  gpsFixTimestamp?: number | null;
   t: TranslationMap;
   onRefreshGps: () => void;
   onManualLocationPress?: () => void;
@@ -25,6 +26,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   gpsStatus,
   locationSource,
   gpsFixAgeSeconds,
+  gpsFixTimestamp,
   t,
   onRefreshGps,
   onManualLocationPress,
@@ -34,6 +36,25 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   const isStale = !isLocating && locationSource === 'LAST_KNOWN' && coords !== null;
   const isManual = !isLocating && locationSource === 'MANUAL';
   const isUnavailable = !isLocating && (locationSource === 'UNAVAILABLE' || coords === null);
+
+  // Dynamic ticking age calculation based on the fix's own timestamp
+  const [liveAgeSeconds, setLiveAgeSeconds] = useState<number | null>(gpsFixAgeSeconds);
+
+  useEffect(() => {
+    if (!gpsFixTimestamp) {
+      setLiveAgeSeconds(gpsFixAgeSeconds);
+      return;
+    }
+
+    const updateAge = () => {
+      const age = Math.max(0, Math.floor((Date.now() - gpsFixTimestamp) / 1000));
+      setLiveAgeSeconds(age);
+    };
+
+    updateAge();
+    const interval = setInterval(updateAge, 1000);
+    return () => clearInterval(interval);
+  }, [gpsFixTimestamp, gpsFixAgeSeconds]);
 
   const handleRefreshPress = useCallback(() => {
     safeHaptics.medium();
@@ -45,6 +66,14 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
     if (seconds < 120) return `${seconds}s old`;
     const mins = Math.floor(seconds / 60);
     return `${mins} min old`;
+  };
+
+  const formatLiveSubtitle = (): string => {
+    if (liveAgeSeconds === null || liveAgeSeconds === undefined) return 'Fix acquired';
+    if (liveAgeSeconds < 5) return 'Updated just now';
+    if (liveAgeSeconds < 120) return `Updated ${liveAgeSeconds}s ago`;
+    const mins = Math.floor(liveAgeSeconds / 60);
+    return `Updated ${mins} min ago`;
   };
 
   return (
@@ -89,7 +118,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
                 : isLive
                 ? 'GPS ACQUIRED (LIVE)'
                 : isStale
-                ? `Last known location, ${formatAgeText(gpsFixAgeSeconds)}. Not live.`
+                ? `Last known location, ${formatAgeText(liveAgeSeconds)}. Not live.`
                 : isManual
                 ? 'Manual Location (Reported)'
                 : isPermissionDenied
@@ -98,7 +127,12 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
             </Text>
             {isLocating && coords && (
               <Text style={styles.staleNoticeText}>
-                Acquiring fresh satellite pulse… (Previous fix: {formatAgeText(gpsFixAgeSeconds)})
+                Acquiring fresh satellite pulse… (Previous fix: {formatAgeText(liveAgeSeconds)})
+              </Text>
+            )}
+            {isLive && (
+              <Text style={[styles.staleNoticeText, { color: tokens.colors.status.success, fontFamily: tokens.typography.fontFamily.sansMedium }]}>
+                ● {formatLiveSubtitle()}
               </Text>
             )}
             {isStale && (

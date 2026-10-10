@@ -79,14 +79,21 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   }, []);
 
   const applyLocationFix = useCallback(
-    async (location: Location.LocationObject, apiMethod: string, reqId: number): Promise<boolean> => {
+    async (
+      location: Location.LocationObject,
+      apiMethod: string,
+      reqId: number,
+      requestStartTime: number
+    ): Promise<boolean> => {
       if (!isMountedRef.current || reqId !== requestIdRef.current) return false;
 
       const now = Date.now();
       const fixTimestamp = location.timestamp;
       const ageMs = Math.max(0, now - fixTimestamp);
       const ageSeconds = Math.floor(ageMs / 1000);
-      const isFresh = ageSeconds <= FRESH_FIX_MAX_AGE_SECONDS;
+
+      // Freshness judged relative to request: fix timestamp at or near request time (>= requestStartTime - 10s), or <=15s total age
+      const isFresh = fixTimestamp >= (requestStartTime - 10000) || ageSeconds <= FRESH_FIX_MAX_AGE_SECONDS;
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
       const rawAcc = typeof location.coords.accuracy === 'number' ? location.coords.accuracy : null;
@@ -149,6 +156,7 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
     inFlightRef.current = true;
     const currentReqId = ++requestIdRef.current;
+    const requestStartTime = Date.now();
     if (__DEV__) {
       devInFlightAcquisitionsCount++;
     }
@@ -156,8 +164,11 @@ export const useGpsLocation = (): UseGpsLocationResult => {
     setGpsStatus('LOCATING');
     cleanupWatcher();
 
+    // Minimum visual delay of 800ms so the ACQUIRING animation is clearly visible
+    const minVisualDelay = new Promise<void>((resolve) => setTimeout(resolve, 800));
+
     if (__DEV__) {
-      console.log(`[GPS State] [Req #${currentReqId}] Started acquisition pipeline... Active in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`);
+      console.log(`[GPS State] [Req #${currentReqId}] Started acquisition pipeline at ${new Date(requestStartTime).toISOString()}... Active in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`);
     }
 
     let acquiredFresh = false;
@@ -184,17 +195,18 @@ export const useGpsLocation = (): UseGpsLocationResult => {
         if (__DEV__) {
           console.log(`[GPS State] [Req #${currentReqId}] Location permission denied by user.`);
         }
+        await minVisualDelay;
         return;
       }
 
-      // 2. Query getCurrentPositionAsync with 4.5s Promise.race timeout
+      // 2. Direct Hardware Position Query with 6.5s timeout (skip cached getLastKnown to request new fix)
       try {
         const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         const posTimeout = new Promise<null>((resolve) => {
           directFixTimeoutRef.current = setTimeout(() => {
             directFixTimeoutRef.current = null;
             resolve(null);
-          }, 4500);
+          }, 6500);
         });
         const directFix = await Promise.race([posPromise, posTimeout]);
         if (directFixTimeoutRef.current) {
@@ -203,28 +215,21 @@ export const useGpsLocation = (): UseGpsLocationResult => {
         }
 
         if (directFix && directFix.coords) {
-          acquiredFresh = await applyLocationFix(directFix, 'getCurrentPositionAsync(High)', currentReqId);
+          acquiredFresh = await applyLocationFix(directFix, 'getCurrentPositionAsync(High)', currentReqId, requestStartTime);
         }
       } catch (e) {
         // Direct fix query failed or timed out
       }
 
-      // 3. If fresh fix achieved, we are in a terminal LIVE state!
+      // 3. If fresh fix achieved, wait for minimum visual feedback and complete
       if (acquiredFresh) {
+        await minVisualDelay;
         return;
       }
 
-      // 4. Fallback Tier: Check last known position as intermediate fallback while watcher listens
-      try {
-        const lastKnown = await Location.getLastKnownPositionAsync();
-        if (lastKnown && lastKnown.coords && isMountedRef.current && currentReqId === requestIdRef.current) {
-          await applyLocationFix(lastKnown, 'getLastKnownPositionAsync(CacheFallback)', currentReqId);
-        }
-      } catch {}
-
-      // 5. If still not fresh, start watchPositionAsync with hard bounded timeout
+      // 4. If direct fix was stale or timed out, retry once via bounded watcher (up to 4.5s)
       if (__DEV__) {
-        console.log(`[GPS State] [Req #${currentReqId}] Awaiting live satellite pulse via watchPositionAsync...`);
+        console.log(`[GPS State] [Req #${currentReqId}] Direct fix stale/timed out. Retrying via watchPositionAsync...`);
       }
 
       await new Promise<void>((resolve) => {
@@ -242,14 +247,14 @@ export const useGpsLocation = (): UseGpsLocationResult => {
           }
         };
 
-        // Hard timeout on watcher (e.g. 5.5s remaining to hit 10s total bounded window)
+        // Bounded watcher window (4.5s)
         watcherTimeoutRef.current = setTimeout(() => {
           watcherTimeoutRef.current = null;
           if (__DEV__ && isMountedRef.current) {
             console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired.`);
           }
           completeWatcher();
-        }, 5500);
+        }, 4500);
 
         Location.watchPositionAsync(
           {
@@ -258,7 +263,7 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             distanceInterval: 1,
           },
           async (freshLocation) => {
-            const freshApplied = await applyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)', currentReqId);
+            const freshApplied = await applyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)', currentReqId, requestStartTime);
             if (freshApplied) {
               completeWatcher();
             }
@@ -280,6 +285,8 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             completeWatcher();
           });
       });
+
+      await minVisualDelay;
     } catch (err) {
       if (__DEV__) {
         console.warn(`[GPS State] [Req #${currentReqId}] Error:`, err);
