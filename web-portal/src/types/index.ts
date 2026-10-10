@@ -27,19 +27,28 @@ export type IncidentStatus =
 
 export type SeverityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'AMBER' | 'RED';
 
+export type LocationSource = 'LIVE' | 'LAST_KNOWN' | 'MANUAL' | 'UNAVAILABLE';
+
 export interface EvidenceMedia {
-  id: string;
+  id?: string;
   type: 'VIDEO' | 'PHOTO';
   durationSeconds?: number;
   url: string;
+  rawS3Url?: string;
+  video_storage_path?: string;
+  uploadStatus?: 'QUEUED' | 'UPLOADING' | 'UPLOADED' | 'UPLOAD_FAILED';
   thumbnailUrl: string;
-  sha256Hash: string;
+  sha256Hash?: string;
+  sha256Checksum?: string | null;
   timestampUtc: string;
-  gpsWatermark: {
-    lat: number;
-    lng: number;
-    ghanaPostCode: string;
-    accuracyMeters: number;
+  gpsWatermark?: {
+    lat: number | null;
+    lng: number | null;
+    landmark?: string;
+    ghanaPostCode?: string | null;
+    accuracyMeters?: number | null;
+    locationSource?: LocationSource | null;
+    fixAgeSeconds?: number | null;
   };
   blurredPublicUrl?: string;
   isTamperProofVerified: boolean;
@@ -53,9 +62,14 @@ export interface IncidentReport {
   category: IncidentCategory;
   description: string;
   locationName: string;
-  ghanaPostCode: string;
+  ghanaPostCode?: string | null;
   region: string;
-  coordinates: [number, number];
+  coordinates: [number, number] | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationSource?: LocationSource | null;
+  gpsFixAgeSeconds?: number | null;
+  gpsAccuracyM?: number | null;
   media: EvidenceMedia[];
   reporter: {
     isAnonymous: boolean;
@@ -84,8 +98,8 @@ export interface EmergencyAlert {
   subjectAge?: number;
   subjectPhotoUrl: string;
   lastSeenLocation: string;
-  ghanaPostCode: string;
-  centerCoordinates: [number, number];
+  ghanaPostCode?: string | null;
+  centerCoordinates: [number, number] | null;
   radiusKm: number;
   details: string;
   suspectDetails?: string;
@@ -105,8 +119,8 @@ export interface SightingTip {
   alertId: string;
   timestamp: string;
   locationName: string;
-  ghanaPostCode: string;
-  coordinates: [number, number];
+  ghanaPostCode?: string | null;
+  coordinates: [number, number] | null;
   comment: string;
   photoUrl?: string;
   reporterPhone?: string;
@@ -114,21 +128,40 @@ export interface SightingTip {
 }
 
 export type OfficerRole = 
+  | 'ADMIN'
   | 'NATIONAL_COMMAND_SUPERVISOR'
   | 'POLICE_CID_OFFICER'
   | 'DOVVSU_INVESTIGATOR'
   | 'EPA_INSPECTOR'
   | 'MTTD_OFFICER'
-  | 'PUBLIC_MODERATOR';
+  | 'PUBLIC_MODERATOR'
+  | 'CAD_DISPATCHER'
+  | string;
 
 export interface OfficerUser {
   id: string;
   name: string;
   badgeNumber: string;
+  service_id?: string;
   agency: AgencyType;
   role: OfficerRole;
   rank: string;
   email: string;
   avatarUrl?: string;
-  clearanceLevel: 'TOP_SECRET' | 'RESTRICTED' | 'OPERATIONAL' | 'PUBLIC_MOD';
+  clearanceLevel: 'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET' | string;
+  station_id?: string;
+  is_active?: boolean;
+  must_change_password?: boolean;
+  created_at?: string;
 }
+
+export interface SosPing {
+  id: string;
+  incident_id: string;
+  reporter_id?: string | null;
+  lat: number;
+  lng: number;
+  accuracy: number;
+  created_at: string;
+}
+

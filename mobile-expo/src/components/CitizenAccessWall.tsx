@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,13 +10,32 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  StatusBar
+  StatusBar,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
+import {
+  Shield,
+  ShieldCheck,
+  Lock,
+  Mail,
+  KeyRound,
+  User,
+  Phone,
+  CreditCard,
+  Scale,
+  CheckCircle2,
+  AlertCircle,
+  LogIn,
+  UserPlus
+} from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
+import { tokens } from '../theme/tokens';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,7 +48,7 @@ export interface CitizenUser {
   avatarUrl?: string;
   trustScore: number;
   isVerified: boolean;
-  loginMethod: 'GOOGLE' | 'EMAIL' | 'PHONE' | 'ANONYMOUS';
+  loginMethod: 'GOOGLE' | 'APPLE' | 'EMAIL' | 'PHONE' | 'ANONYMOUS';
   accessToken?: string;
 }
 
@@ -41,6 +60,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER' | 'WHISTLEBLOWER'>('LOGIN');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
 
   // Form states
   const [email, setEmail] = useState('');
@@ -50,7 +70,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [phone, setPhone] = useState('');
   const [ghanaCard, setGhanaCard] = useState('');
 
-  // 1. Real Supabase Citizen Sign In (Email / Password)
+  // 1. Supabase Citizen Sign In (Email / Password)
   const handleSignIn = async () => {
     setErrorMessage(null);
     if (!email.trim() || !password.trim()) {
@@ -95,7 +115,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  // 2. Real Supabase Citizen Registration
+  // 2. Supabase Citizen Registration
   const handleRegister = async () => {
     setErrorMessage(null);
     if (!fullName.trim() || !phone.trim() || !email.trim() || !password) {
@@ -123,7 +143,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
             full_name: fullName.trim(),
             phone: phone.trim(),
             ghana_card: ghanaCard.trim().toUpperCase(),
-            trust_score: 70, // Baseline neutral trust score for new citizen accounts
+            trust_score: 70,
             is_verified: false,
             role: 'citizen'
           }
@@ -164,25 +184,25 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  // Helper to construct CitizenUser from Supabase User object
-  const buildAndSetCitizenUser = (user: any, accessToken?: string) => {
+  const buildAndSetCitizenUser = (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' = 'GOOGLE') => {
     const userMeta = user.user_metadata || {};
+    const defaultName = provider === 'APPLE' ? 'Apple Citizen' : 'Google Citizen';
     const authenticatedCitizen: CitizenUser = {
       id: user.id,
-      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Google Citizen',
+      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
       email: user.email || '',
       phone: userMeta.phone || '',
       ghanaCard: userMeta.ghana_card || '',
       trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
       isVerified: Boolean(userMeta.is_verified || false),
-      loginMethod: 'GOOGLE',
+      loginMethod: provider,
       accessToken: accessToken
     };
     onAuthenticated(authenticatedCitizen);
   };
 
-  // 3. Expo Go Compatible In-App Google Sign-In with Supabase OAuth & WebBrowser
-  const handleGoogleAuth = async () => {
+  // 3. In-App Single Sign-On (Google & Apple) with Supabase OAuth & WebBrowser
+  const handleOAuth = async (provider: 'google' | 'apple') => {
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -193,7 +213,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       });
 
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: provider,
         options: {
           redirectTo: redirectUrl,
           skipBrowserRedirect: true
@@ -201,26 +221,24 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       });
 
       if (error) throw error;
-      if (!data?.url) throw new Error('No authentication URL was returned by provider.');
+      if (!data?.url) throw new Error(`No authentication URL was returned by ${provider === 'apple' ? 'Apple' : 'Google'}.`);
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
       if (result.type === 'success' && result.url) {
         const parsedUrl = Linking.parse(result.url);
 
-        // 1. Check for PKCE Authorization Code in query params
         if (parsedUrl.queryParams?.code) {
           const { data: sessionData, error: sessionErr } = await supabase.auth.exchangeCodeForSession(
             parsedUrl.queryParams.code as string
           );
           if (sessionErr) throw sessionErr;
           if (sessionData?.user) {
-            buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token);
+            buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
             return;
           }
         }
 
-        // 2. Check for implicit access tokens in hash fragment or query params
         let accessToken = (parsedUrl.queryParams?.access_token as string) || '';
         let refreshToken = (parsedUrl.queryParams?.refresh_token as string) || '';
 
@@ -238,23 +256,19 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           });
           if (setSessionErr) throw setSessionErr;
           if (sessionData?.user) {
-            buildAndSetCitizenUser(sessionData.user, accessToken);
+            buildAndSetCitizenUser(sessionData.user, accessToken, provider === 'apple' ? 'APPLE' : 'GOOGLE');
             return;
           }
         }
 
-        // 3. Fallback: Check active Supabase session
         const { data: activeSession } = await supabase.auth.getSession();
         if (activeSession?.session?.user) {
-          buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token);
+          buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
           return;
         }
-      } else if (result.type === 'cancel' || result.type === 'dismiss') {
-        console.log('Google Sign-In dismissed');
       }
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      setErrorMessage(err.message || 'Google Sign-In encountered an error. Please try again.');
+      setErrorMessage(err.message || `${provider === 'apple' ? 'Apple' : 'Google'} Sign-In encountered an error. Please try again.`);
     } finally {
       setIsLoading(false);
     }
@@ -285,13 +299,13 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#070B13" />
+      <StatusBar barStyle="light-content" backgroundColor={tokens.colors.bg.base} />
 
       {/* Ghana Flag Header Accent */}
       <View style={styles.flagHeader}>
-        <View style={{ flex: 1, backgroundColor: '#CE1126' }} />
-        <View style={{ flex: 1, backgroundColor: '#FCD116' }} />
-        <View style={{ flex: 1, backgroundColor: '#006B3F' }} />
+        <View style={{ flex: 1, backgroundColor: tokens.colors.brand.red }} />
+        <View style={{ flex: 1, backgroundColor: tokens.colors.brand.gold }} />
+        <View style={{ flex: 1, backgroundColor: tokens.colors.brand.green }} />
       </View>
 
       <KeyboardAvoidingView
@@ -301,14 +315,17 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View>
           {/* Header & National Security Badge */}
           <View style={styles.headerSection}>
             <View style={styles.shieldBadge}>
-              <Text style={{ fontSize: 32 }}>🇬🇭</Text>
+              <ShieldCheck color={tokens.colors.brand.gold} size={32} />
             </View>
             <Text style={styles.appTitle}>
-              CITIZEN<Text style={{ color: '#FCD116' }}>ALERT</Text>
+              CITIZEN<Text style={{ color: tokens.colors.brand.gold }}>ALERT</Text>
             </Text>
             <Text style={styles.appSubtitle}>
               National Civic Safety & Evidence Ingestion Gateway
@@ -316,8 +333,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
             {/* Act 720 Badge */}
             <View style={styles.act720Badge}>
+              <Scale color={tokens.colors.police.badge} size={14} />
               <Text style={styles.act720Text}>
-                ⚖️ Republic of Ghana Whistleblower Act 720 & Data Protection Act 843
+                Republic of Ghana Whistleblower Act 720 & Data Protection Act 843
               </Text>
             </View>
           </View>
@@ -326,45 +344,58 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           <View style={styles.modeTabs}>
             <TouchableOpacity
               onPress={() => {
+                Keyboard.dismiss();
                 setErrorMessage(null);
                 setAuthMode('LOGIN');
               }}
               style={[styles.modeTab, authMode === 'LOGIN' && styles.modeTabActive]}
+              accessibilityRole="tab"
+              accessibilityLabel="Sign in mode"
             >
+              <LogIn color={authMode === 'LOGIN' ? tokens.colors.text.white : tokens.colors.text.secondary} size={16} />
               <Text style={[styles.modeTabText, authMode === 'LOGIN' && styles.modeTabTextActive]}>
-                🔑 Sign In
+                Sign In
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => {
+                Keyboard.dismiss();
                 setErrorMessage(null);
                 setAuthMode('REGISTER');
               }}
               style={[styles.modeTab, authMode === 'REGISTER' && styles.modeTabActive]}
+              accessibilityRole="tab"
+              accessibilityLabel="Register citizen profile mode"
             >
+              <UserPlus color={authMode === 'REGISTER' ? tokens.colors.text.white : tokens.colors.text.secondary} size={16} />
               <Text style={[styles.modeTabText, authMode === 'REGISTER' && styles.modeTabTextActive]}>
-                📝 Register
+                Register
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => {
+                Keyboard.dismiss();
                 setErrorMessage(null);
                 setAuthMode('WHISTLEBLOWER');
               }}
               style={[styles.modeTab, authMode === 'WHISTLEBLOWER' && styles.modeTabActiveShield]}
+              accessibilityRole="tab"
+              accessibilityLabel="Whistleblower Act 720 mode"
             >
+              <Shield color={authMode === 'WHISTLEBLOWER' ? tokens.colors.brand.gold : tokens.colors.text.secondary} size={16} />
               <Text style={[styles.modeTabText, authMode === 'WHISTLEBLOWER' && styles.modeTabTextActiveShield]}>
-                🛡️ Act 720
+                Act 720
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Error Banner */}
+          {/* Inline Error Banner */}
           {errorMessage && (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {errorMessage}</Text>
+              <AlertCircle color={tokens.colors.status.danger} size={18} />
+              <Text style={styles.errorText}>{errorMessage}</Text>
             </View>
           )}
 
@@ -380,27 +411,39 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Email Address</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. kwame.mensah@gmail.com"
-                    placeholderTextColor="#64748b"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={email}
-                    onChangeText={setEmail}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Mail color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. kwame.mensah@gmail.com"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={email}
+                      onChangeText={setEmail}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Password</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter account password"
-                    placeholderTextColor="#64748b"
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <KeyRound color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="Enter account password"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      secureTextEntry
+                      value={password}
+                      onChangeText={setPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -408,9 +451,11 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                   disabled={isLoading}
                   style={styles.primaryBtn}
                   activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign In to Citizen Vault"
                 >
                   {isLoading ? (
-                    <ActivityIndicator color="#070B13" size="small" />
+                    <ActivityIndicator color={tokens.colors.bg.base} size="small" />
                   ) : (
                     <Text style={styles.primaryBtnText}>Sign In to Citizen Vault</Text>
                   )}
@@ -428,76 +473,112 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Full Legal Name *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. Kwame Asante Mensah"
-                    placeholderTextColor="#64748b"
-                    value={fullName}
-                    onChangeText={setFullName}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <User color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. Kwame Asante Mensah"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      value={fullName}
+                      onChangeText={setFullName}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Ghana Phone Number *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. 0244 123 456"
-                    placeholderTextColor="#64748b"
-                    keyboardType="phone-pad"
-                    value={phone}
-                    onChangeText={setPhone}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Phone color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. 0244 123 456"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      keyboardType="phone-pad"
+                      value={phone}
+                      onChangeText={setPhone}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>
-                    Ghana Card PIN <Text style={{ color: '#FCD116' }}>(Optional - Boosts Trust to 98%)</Text>
+                    Ghana Card PIN <Text style={{ color: tokens.colors.brand.gold }}>(Optional - Boosts Trust to 98%)</Text>
                   </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. GHA-123456789-0"
-                    placeholderTextColor="#64748b"
-                    autoCapitalize="characters"
-                    value={ghanaCard}
-                    onChangeText={setGhanaCard}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <CreditCard color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. GHA-123456789-0"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      autoCapitalize="characters"
+                      value={ghanaCard}
+                      onChangeText={setGhanaCard}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Email Address *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. kwame@gmail.com"
-                    placeholderTextColor="#64748b"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={email}
-                    onChangeText={setEmail}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Mail color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. kwame@gmail.com"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={email}
+                      onChangeText={setEmail}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Create Password *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Min 6 characters"
-                    placeholderTextColor="#64748b"
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Lock color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="Min 6 characters"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      secureTextEntry
+                      value={password}
+                      onChangeText={setPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Confirm Password *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Re-type password"
-                    placeholderTextColor="#64748b"
-                    secureTextEntry
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Lock color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="Re-type password"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      secureTextEntry
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -505,9 +586,11 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                   disabled={isLoading}
                   style={styles.primaryBtn}
                   activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create Verified Citizen Account"
                 >
                   {isLoading ? (
-                    <ActivityIndicator color="#070B13" size="small" />
+                    <ActivityIndicator color={tokens.colors.bg.base} size="small" />
                   ) : (
                     <Text style={styles.primaryBtnText}>Create Verified Citizen Account</Text>
                   )}
@@ -519,7 +602,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
             {authMode === 'WHISTLEBLOWER' && (
               <View style={styles.formSection}>
                 <View style={styles.whistleblowerHero}>
-                  <Text style={{ fontSize: 36 }}>🛡️</Text>
+                  <Shield color={tokens.colors.brand.gold} size={40} />
                   <Text style={styles.whistleblowerHeading}>Whistleblower Protection Act 720</Text>
                   <Text style={styles.whistleblowerBody}>
                     Under the laws of Ghana (Act 720, 2006), citizens who report illegal mining (galamsey), corruption, or dangerous offenses are legally protected against victimization and disclosure of identity.
@@ -527,42 +610,84 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                 </View>
 
                 <View style={styles.whistleblowerFeatureList}>
-                  <Text style={styles.whistleblowerFeatureItem}>✓ 100% No Account Required</Text>
-                  <Text style={styles.whistleblowerFeatureItem}>✓ IP Address and Device Identifiers Stripped</Text>
-                  <Text style={styles.whistleblowerFeatureItem}>✓ Direct Transmissions to Specialized Investigative Units</Text>
+                  <View style={styles.whistleblowerFeatureItem}>
+                    <CheckCircle2 color={tokens.colors.brand.greenLight} size={16} />
+                    <Text style={styles.whistleblowerFeatureText}>100% No Account or Registration Required</Text>
+                  </View>
+                  <View style={styles.whistleblowerFeatureItem}>
+                    <CheckCircle2 color={tokens.colors.brand.greenLight} size={16} />
+                    <Text style={styles.whistleblowerFeatureText}>IP Address and Device Identifiers Stripped</Text>
+                  </View>
+                  <View style={styles.whistleblowerFeatureItem}>
+                    <CheckCircle2 color={tokens.colors.brand.greenLight} size={16} />
+                    <Text style={styles.whistleblowerFeatureText}>Direct Transmissions to Specialized Investigative Units</Text>
+                  </View>
                 </View>
 
                 <TouchableOpacity
                   onPress={handleWhistleblowerAccess}
                   style={styles.whistleblowerBtn}
                   activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Enter as Anonymous Whistleblower under Act 720"
                 >
-                  <Text style={styles.whistleblowerBtnText}>🛡️ Enter as Anonymous Whistleblower</Text>
+                  <ShieldCheck color={tokens.colors.brand.gold} size={18} />
+                  <Text style={styles.whistleblowerBtnText}>Enter as Anonymous Whistleblower</Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* GOOGLE SINGLE SIGN-ON (Available on Login & Register) */}
+            {/* SSO SIGN-ON: APPLE & GOOGLE */}
             {authMode !== 'WHISTLEBLOWER' && (
               <>
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR SIGN IN WITH</Text>
+                  <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
                   <View style={styles.dividerLine} />
                 </View>
 
-                <TouchableOpacity
-                  onPress={handleGoogleAuth}
-                  disabled={isLoading}
-                  style={styles.googleBtn}
-                  activeOpacity={0.85}
-                >
-                  <Text style={{ fontSize: 18 }}>🔐</Text>
-                  <Text style={styles.googleBtnText}>Continue with Google</Text>
-                </TouchableOpacity>
+                <View style={styles.ssoBtnGroup}>
+                  {/* Apple Sign-In (Required by Apple Review Guideline 4.8) */}
+                  <TouchableOpacity
+                    onPress={() => handleOAuth('apple')}
+                    disabled={isLoading}
+                    style={styles.appleBtn}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Apple"
+                  >
+                    <ShieldCheck color={tokens.colors.text.white} size={18} />
+                    <Text style={styles.appleBtnText}>Continue with Apple</Text>
+                  </TouchableOpacity>
+
+                  {/* Google Sign-In */}
+                  <TouchableOpacity
+                    onPress={() => handleOAuth('google')}
+                    disabled={isLoading}
+                    style={styles.googleBtn}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Google"
+                  >
+                    <ShieldCheck color={tokens.colors.police.accent} size={18} />
+                    <Text style={styles.googleBtnText}>Continue with Google</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </View>
+
+          {/* Privacy Policy & Statutory Compliance Link */}
+          <TouchableOpacity
+            onPress={() => setIsPrivacyModalOpen(true)}
+            style={styles.privacyLinkWrapper}
+            accessibilityRole="button"
+            accessibilityLabel="Statutory Privacy Policy"
+          >
+            <Text style={styles.privacyLinkText}>
+              Statutory Privacy & Telemetry Policy (Act 843 & Act 720)
+            </Text>
+          </TouchableOpacity>
 
           {/* Footer Security Note */}
           <View style={styles.footer}>
@@ -570,8 +695,16 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
               🇬🇭 Ghana CitizenAlert • Official Civic Defense Network • 24/7 Police CID & Emergency Dispatch
             </Text>
           </View>
+            </View>
+          </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* In-App Statutory Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -579,240 +712,295 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070B13'
+    backgroundColor: tokens.colors.bg.base
   },
   flagHeader: {
-    height: 6,
+    height: 4,
     flexDirection: 'row'
   },
   scrollContainer: {
-    padding: 20,
-    paddingBottom: 40
+    padding: tokens.spacing.lg,
+    paddingBottom: tokens.spacing.xxxl
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: 20
+    marginBottom: tokens.spacing.lg
   },
   shieldBadge: {
     width: 64,
     height: 64,
-    borderRadius: 32,
-    backgroundColor: '#0F172A',
+    borderRadius: tokens.radius.full,
+    backgroundColor: tokens.colors.bg.surface,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: tokens.colors.border.police,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: '#3B82F6',
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 6
+    marginBottom: tokens.spacing.sm,
+    ...tokens.elevation.medium
   },
   appTitle: {
-    fontSize: 24,
+    fontSize: tokens.typography.fontSize.xxl,
     fontWeight: '900',
-    color: '#ffffff',
+    color: tokens.colors.text.white,
     letterSpacing: 1
   },
   appSubtitle: {
-    fontSize: 12,
-    color: '#94a3b8',
+    fontSize: tokens.typography.fontSize.sm,
+    color: tokens.colors.text.secondary,
     textAlign: 'center',
-    marginTop: 4
+    marginTop: tokens.spacing.xxs
   },
   act720Badge: {
-    marginTop: 10,
+    marginTop: tokens.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
     backgroundColor: 'rgba(59, 130, 246, 0.1)',
     borderWidth: 1,
-    borderColor: '#1E3A8A',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10
+    borderColor: tokens.colors.police.dark,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.xs,
+    borderRadius: tokens.radius.md
   },
   act720Text: {
-    color: '#93C5FD',
-    fontSize: 10,
+    color: tokens.colors.police.badge,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: '700',
     textAlign: 'center'
   },
   modeTabs: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    padding: 4,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.xxs,
     borderWidth: 1,
-    borderColor: '#1E293B',
-    marginBottom: 16
+    borderColor: tokens.colors.border.subtle,
+    marginBottom: tokens.spacing.md
   },
   modeTab: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center'
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.spacing.xs,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.md
   },
   modeTabActive: {
-    backgroundColor: '#2563EB'
+    backgroundColor: tokens.colors.police.primary
   },
   modeTabActiveShield: {
-    backgroundColor: '#006B3F'
+    backgroundColor: tokens.colors.brand.green
   },
   modeTabText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: 'bold'
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: '700'
   },
   modeTabTextActive: {
-    color: '#ffffff'
+    color: tokens.colors.text.white
   },
   modeTabTextActiveShield: {
-    color: '#FCD116'
+    color: tokens.colors.brand.gold
   },
   errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderWidth: 1,
-    borderColor: '#EF4444',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16
+    borderColor: tokens.colors.status.danger,
+    padding: tokens.spacing.md,
+    borderRadius: tokens.radius.md,
+    marginBottom: tokens.spacing.md
   },
   errorText: {
     color: '#FCA5A5',
-    fontSize: 12,
-    fontWeight: '600'
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: '600',
+    flex: 1
   },
   card: {
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.xl,
     borderWidth: 1,
-    borderColor: '#1E293B',
-    padding: 20
+    borderColor: tokens.colors.border.subtle,
+    padding: tokens.spacing.lg
   },
   formSection: {
-    gap: 12
+    gap: tokens.spacing.md
   },
   formTitle: {
-    color: '#ffffff',
-    fontSize: 17,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.lg,
     fontWeight: '800'
   },
   formSubtitle: {
-    color: '#94a3b8',
-    fontSize: 11,
-    lineHeight: 16,
-    marginBottom: 6
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs,
+    lineHeight: tokens.typography.lineHeight.xs,
+    marginBottom: tokens.spacing.xxs
   },
   inputGroup: {
-    gap: 4
+    gap: tokens.spacing.xs
   },
   inputLabel: {
-    color: '#cbd5e1',
-    fontSize: 12,
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.sm,
     fontWeight: '700'
   },
-  input: {
-    backgroundColor: '#070B13',
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surface.input,
     borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: '#ffffff',
-    fontSize: 13
+    borderColor: tokens.colors.border.medium,
+    borderRadius: tokens.radius.md,
+    paddingHorizontal: tokens.spacing.md
+  },
+  inputIcon: {
+    marginRight: tokens.spacing.sm
+  },
+  inputWithIcon: {
+    flex: 1,
+    minHeight: tokens.touchTarget.minHeight,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md
   },
   primaryBtn: {
-    backgroundColor: '#FCD116',
-    paddingVertical: 14,
-    borderRadius: 14,
+    backgroundColor: tokens.colors.brand.gold,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
     alignItems: 'center',
-    marginTop: 8
+    justifyContent: 'center',
+    marginTop: tokens.spacing.xs
   },
   primaryBtnText: {
-    color: '#070B13',
-    fontSize: 14,
+    color: tokens.colors.bg.base,
+    fontSize: tokens.typography.fontSize.md,
     fontWeight: '900',
     letterSpacing: 0.5
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginVertical: 16
+    gap: tokens.spacing.md,
+    marginVertical: tokens.spacing.lg
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#334155'
+    backgroundColor: tokens.colors.border.medium
   },
   dividerText: {
-    color: '#64748b',
-    fontSize: 10,
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold',
     letterSpacing: 1
+  },
+  ssoBtnGroup: {
+    gap: tokens.spacing.sm,
+    marginTop: tokens.spacing.xs
+  },
+  appleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    gap: tokens.spacing.sm
+  },
+  appleBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '700'
   },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    paddingVertical: 12,
-    borderRadius: 14,
-    gap: 10
+    backgroundColor: tokens.colors.text.white,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    gap: tokens.spacing.sm
   },
   googleBtnText: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: 'bold'
+    color: tokens.colors.bg.surface,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '700'
   },
   whistleblowerHero: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 107, 63, 0.1)',
+    backgroundColor: 'rgba(0, 107, 63, 0.12)',
     borderWidth: 1,
-    borderColor: '#006B3F',
-    borderRadius: 16,
-    padding: 16,
-    gap: 8
+    borderColor: tokens.colors.brand.green,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.lg,
+    gap: tokens.spacing.sm
   },
   whistleblowerHeading: {
-    color: '#FCD116',
-    fontSize: 15,
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.lg,
     fontWeight: '800'
   },
   whistleblowerBody: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    lineHeight: 18,
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.xs,
+    lineHeight: tokens.typography.lineHeight.sm,
     textAlign: 'center'
   },
   whistleblowerFeatureList: {
-    gap: 6,
-    paddingVertical: 8
+    gap: tokens.spacing.sm,
+    paddingVertical: tokens.spacing.xs
   },
   whistleblowerFeatureItem: {
-    color: '#6EE7B7',
-    fontSize: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm
+  },
+  whistleblowerFeatureText: {
+    color: tokens.colors.brand.greenLight,
+    fontSize: tokens.typography.fontSize.xs,
     fontWeight: '600'
   },
   whistleblowerBtn: {
-    backgroundColor: '#006B3F',
-    paddingVertical: 14,
-    borderRadius: 14,
+    flexDirection: 'row',
+    backgroundColor: tokens.colors.brand.green,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
     alignItems: 'center',
-    marginTop: 4
+    justifyContent: 'center',
+    gap: tokens.spacing.sm,
+    marginTop: tokens.spacing.xs
   },
   whistleblowerBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md,
     fontWeight: '800'
   },
-  footer: {
-    marginTop: 24,
+  privacyLinkWrapper: {
+    marginTop: tokens.spacing.lg,
     alignItems: 'center',
-    paddingHorizontal: 16
+    paddingVertical: tokens.spacing.xs
+  },
+  privacyLinkText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+    textAlign: 'center'
+  },
+  footer: {
+    marginTop: tokens.spacing.xl,
+    alignItems: 'center'
   },
   footerText: {
-    color: '#475569',
-    fontSize: 10,
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
     textAlign: 'center',
-    lineHeight: 15
+    lineHeight: tokens.typography.lineHeight.xxs
   }
 });

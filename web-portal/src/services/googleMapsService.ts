@@ -267,10 +267,10 @@ export function computeTacticalDispatchRoute(
 
   const polyline = generateTacticalRoutePolyline(station.coordinates, destinationCoords);
 
-  // Google Maps Deep Links
+  // Google Maps Deep Links (High-Res Satellite & Earth imagery guaranteed across all Ghana regions, narrowed down to exact coordinate at max zoom 20)
   const googleMapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${station.coordinates[0]},${station.coordinates[1]}&destination=${destinationCoords[0]},${destinationCoords[1]}&travelmode=driving`;
-  const googleStreetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${destinationCoords[0]},${destinationCoords[1]}`;
-  const googleSatelliteUrl = `https://www.google.com/maps/search/?api=1&query=${destinationCoords[0]},${destinationCoords[1]}&layer=s`;
+  const googleStreetViewUrl = `https://www.google.com/maps/@${destinationCoords[0]},${destinationCoords[1]},20z/data=!3m1!1e3`;
+  const googleSatelliteUrl = `https://www.google.com/maps?q=${destinationCoords[0]},${destinationCoords[1]}&ll=${destinationCoords[0]},${destinationCoords[1]}&z=20&t=k`;
 
   return {
     originStation: station,

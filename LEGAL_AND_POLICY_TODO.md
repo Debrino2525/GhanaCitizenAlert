@@ -13,6 +13,7 @@ This document tracks all external policy determinations, statutory reviews, memo
 | `LEG-002` | **Data Protection Impact Assessment (DPIA)** | Formal filing and audit with the **Data Protection Commission (DPC)** under the **Ghana Data Protection Act, 2012 (Act 843)** for processing high-risk sensitive media (facial images, criminal infractions, location traces). | Data Protection Commission (Ghana) | `DRAFTED_IN_REPO` |
 | `LEG-003` | **Whistleblower & Anonymous Protections** | Verification of encryption key segregation and court-order subpoena thresholds for anonymous whistleblower data under the **Whistleblower Act, 2006 (Act 720)**. | Office of the Special Prosecutor / Judicial Service | `PENDING_REVIEW` |
 | `LEG-004` | **Takedown & Right to be Forgotten** | Formalization of the citizen appeal and takedown SLA for individuals claiming misidentification or defamation in moderated public bulletins. | Ministry of Communications & Digitalisation | `PENDING_POLICY` |
+| `LEG-005` | **National Police Cryptographic Vault Hardware Key Integration** | Integration of dedicated Hardware Security Module (HSM) / National Cryptographic Vault for true server-side signing and evidence sealing under **Act 772**. (Currently client-computed SHA-256 digests and GPS timestamps are recorded; server-side cryptographic hardware vault sealing is pending official deployment). | GPS Cybercrime Directorate / NITA | `PENDING_DEPLOYMENT` |
 
 ---
 

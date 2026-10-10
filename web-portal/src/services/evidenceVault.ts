@@ -5,17 +5,21 @@ export interface CourtCertificate {
   trackingCode: string;
   generatedAt: string;
   incidentTimestamp: string;
-  ghanaPostCode: string;
-  coordinates: [number, number];
+  locationName: string;
+  locationSource?: string | null;
+  coordinates: [number, number] | null;
   mediaItems: {
     mediaId: string;
     type: string;
     duration: string;
     sha256Hash: string;
     watermarkVerified: boolean;
+    isVerifiedHex: boolean;
   }[];
   statutoryNotice: string;
 }
+
+const HEX_64_REGEX = /^[a-f0-9]{64}$/i;
 
 export function generateCourtCertificate(incident: IncidentReport): CourtCertificate {
   return {
@@ -23,26 +27,21 @@ export function generateCourtCertificate(incident: IncidentReport): CourtCertifi
     trackingCode: incident.trackingCode,
     generatedAt: new Date().toISOString(),
     incidentTimestamp: incident.createdAt,
-    ghanaPostCode: incident.ghanaPostCode,
+    locationName: incident.locationName,
+    locationSource: incident.locationSource || null,
     coordinates: incident.coordinates,
-    mediaItems: incident.media.map(m => ({
-      mediaId: m.id,
-      type: m.type,
-      duration: m.durationSeconds ? `${m.durationSeconds}s` : 'N/A',
-      sha256Hash: m.sha256Hash,
-      watermarkVerified: m.isTamperProofVerified
-    })),
-    statutoryNotice: 'CERTIFIED IN ACCORDANCE WITH THE ELECTRONIC TRANSACTIONS ACT, 2008 (ACT 772) & GHANA EVIDENCE DECREE, 1975 (NRCD 323). Digital signatures, GPS coordinates, and frame hashes are tamper-locked in the National Police Cryptographic Vault.'
+    mediaItems: incident.media.map(m => {
+      const rawHash = m.sha256Hash || (m as any).sha256Checksum || '';
+      const isVerifiedHex = HEX_64_REGEX.test(rawHash);
+      return {
+        mediaId: m.id,
+        type: m.type,
+        duration: m.durationSeconds ? `${m.durationSeconds}s` : 'N/A',
+        sha256Hash: isVerifiedHex ? rawHash : (rawHash ? `${rawHash} (unverified)` : 'unverified'),
+        watermarkVerified: Boolean(m.isTamperProofVerified && isVerifiedHex),
+        isVerifiedHex
+      };
+    }),
+    statutoryNotice: 'CERTIFIED IN ACCORDANCE WITH THE ELECTRONIC TRANSACTIONS ACT, 2008 (ACT 772) & GHANA EVIDENCE DECREE, 1975 (NRCD 323). Media SHA-256 digests and GPS timestamps recorded upon transmission from the reporting device.'
   };
-}
-
-export function computeSha256Simulation(input: string): string {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  const hexPart = Math.abs(hash).toString(16).padStart(8, '0');
-  return `e3b0c442${hexPart}9afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.substring(0, 64);
 }
