@@ -32,6 +32,7 @@ export type GpsLockStatus =
   | 'STALE'
   | 'MANUAL'
   | 'UNAVAILABLE'
+  | 'PERMISSION_DENIED'
   | 'ERROR'
   | 'LOCKED'; // Kept for backward compatibility
 

@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Crosshair, RefreshCw, Radio, Clock, MapPin, AlertTriangle } from 'lucide-react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import { Crosshair, RefreshCw, Radio, Clock, MapPin, AlertTriangle, Settings } from 'lucide-react-native';
 import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
 import { TranslationMap } from '../constants/i18n';
 import { tokens } from '../theme/tokens';
@@ -28,6 +28,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   onRefreshGps,
   onManualLocationPress,
 }) => {
+  const isPermissionDenied = gpsStatus === 'PERMISSION_DENIED';
   const isLive = !isLocating && locationSource === 'LIVE' && coords !== null;
   const isStale = !isLocating && locationSource === 'LAST_KNOWN' && coords !== null;
   const isManual = !isLocating && locationSource === 'MANUAL';
@@ -85,6 +86,8 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
                 ? `Last known location, ${formatAgeText(gpsFixAgeSeconds)}. Not live.`
                 : isManual
                 ? 'Manual Location (Reported)'
+                : isPermissionDenied
+                ? 'LOCATION PERMISSION DENIED'
                 : 'LOCATION UNAVAILABLE'}
             </Text>
             {isLocating && coords && (
@@ -97,29 +100,53 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
                 Hardware GPS fix is older than 15s. Tap Refresh to acquire live fix.
               </Text>
             )}
+            {isPermissionDenied && (
+              <Text style={[styles.staleNoticeText, { color: tokens.colors.status.danger }]}>
+                Location permission is disabled. Tap Open Settings to grant access.
+              </Text>
+            )}
+            {isUnavailable && !isPermissionDenied && !isLocating && !isStale && (
+              <Text style={styles.staleNoticeText}>
+                No satellite fix acquired. Move outdoors and tap Refresh.
+              </Text>
+            )}
           </View>
         </View>
 
         <View style={styles.headerBtnGroup}>
-          <TouchableOpacity
-            onPress={onRefreshGps}
-            disabled={isLocating}
-            style={[styles.recalibrateBtn, isLocating && { opacity: 0.6 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Acquire Fresh GPS Fix"
-          >
-            {isLocating ? (
+          {isPermissionDenied ? (
+            <TouchableOpacity
+              onPress={() => Linking.openSettings()}
+              style={[styles.recalibrateBtn, { backgroundColor: tokens.colors.status.danger }]}
+              accessibilityRole="button"
+              accessibilityLabel="Open Device Settings"
+            >
               <View style={styles.btnInnerRow}>
-                <ActivityIndicator size="small" color={tokens.colors.bg.base} />
-                <Text style={styles.recalibrateBtnText}>Searching…</Text>
+                <Settings color={tokens.colors.text.white} size={12} />
+                <Text style={[styles.recalibrateBtnText, { color: tokens.colors.text.white }]}>Open Settings</Text>
               </View>
-            ) : (
-              <View style={styles.btnInnerRow}>
-                <RefreshCw color={tokens.colors.bg.base} size={12} />
-                <Text style={styles.recalibrateBtnText}>Refresh GPS</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={onRefreshGps}
+              disabled={isLocating}
+              style={[styles.recalibrateBtn, isLocating && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Acquire Fresh GPS Fix"
+            >
+              {isLocating ? (
+                <View style={styles.btnInnerRow}>
+                  <ActivityIndicator size="small" color={tokens.colors.bg.base} />
+                  <Text style={styles.recalibrateBtnText}>Searching…</Text>
+                </View>
+              ) : (
+                <View style={styles.btnInnerRow}>
+                  <RefreshCw color={tokens.colors.bg.base} size={12} />
+                  <Text style={styles.recalibrateBtnText}>Refresh GPS</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

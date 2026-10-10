@@ -54,12 +54,18 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   const requestIdRef = useRef<number>(0);
   const watcherRef = useRef<Location.LocationSubscription | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const directFixTimeoutRef = useRef<any>(null);
+  const watcherTimeoutRef = useRef<any>(null);
 
   // Keep latest coords in ref for non-reactive access inside async callbacks (prevents stale closure)
   const coordsRef = useRef<GpsCoordinates | null>(null);
   coordsRef.current = coords;
 
   const cleanupWatcher = useCallback(() => {
+    if (watcherTimeoutRef.current) {
+      clearTimeout(watcherTimeoutRef.current);
+      watcherTimeoutRef.current = null;
+    }
     if (watcherRef.current) {
       try {
         watcherRef.current.remove();
@@ -161,26 +167,35 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
       if (status !== 'granted') {
         if (!isMountedRef.current || currentReqId !== requestIdRef.current) return;
-        setGpsStatus('ERROR');
+        setGpsStatus('PERMISSION_DENIED');
         setLocationSource('UNAVAILABLE');
         setCoords(null);
+        coordsRef.current = null;
         setGpsAccuracy(null);
         setGpsFixAgeSeconds(null);
         setGpsFixTimestamp(null);
-        setLocationName('Location pending');
+        setLocationName('Location permission denied');
         setRegion('UNKNOWN');
-        Alert.alert(
-          'Location Permission Needed',
-          'CitizenAlert requires GPS permissions to tag evidence with tamper-proof coordinates and enable emergency dispatch.'
-        );
+        if (__DEV__) {
+          console.log(`[GPS State] [Req #${currentReqId}] Location permission denied by user.`);
+        }
         return;
       }
 
       // 2. Query getCurrentPositionAsync with 4.5s Promise.race timeout
       try {
         const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-        const posTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4500));
+        const posTimeout = new Promise<null>((resolve) => {
+          directFixTimeoutRef.current = setTimeout(() => {
+            directFixTimeoutRef.current = null;
+            resolve(null);
+          }, 4500);
+        });
         const directFix = await Promise.race([posPromise, posTimeout]);
+        if (directFixTimeoutRef.current) {
+          clearTimeout(directFixTimeoutRef.current);
+          directFixTimeoutRef.current = null;
+        }
 
         if (directFix && directFix.coords) {
           acquiredFresh = await applyLocationFix(directFix, 'getCurrentPositionAsync(High)', currentReqId);
@@ -213,14 +228,19 @@ export const useGpsLocation = (): UseGpsLocationResult => {
         const completeWatcher = () => {
           if (!isResolved) {
             isResolved = true;
+            if (watcherTimeoutRef.current) {
+              clearTimeout(watcherTimeoutRef.current);
+              watcherTimeoutRef.current = null;
+            }
             cleanupWatcher();
             resolve();
           }
         };
 
         // Hard timeout on watcher (e.g. 5.5s remaining to hit 10s total bounded window)
-        const timeoutHandle = setTimeout(() => {
-          if (__DEV__) {
+        watcherTimeoutRef.current = setTimeout(() => {
+          watcherTimeoutRef.current = null;
+          if (__DEV__ && isMountedRef.current) {
             console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired.`);
           }
           completeWatcher();
@@ -235,13 +255,12 @@ export const useGpsLocation = (): UseGpsLocationResult => {
           async (freshLocation) => {
             const freshApplied = await applyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)', currentReqId);
             if (freshApplied) {
-              clearTimeout(timeoutHandle);
               completeWatcher();
             }
           }
         )
           .then((sub) => {
-            if (isResolved) {
+            if (isResolved || !isMountedRef.current || currentReqId !== requestIdRef.current) {
               try {
                 sub.remove();
               } catch {}
@@ -253,7 +272,6 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             }
           })
           .catch(() => {
-            clearTimeout(timeoutHandle);
             completeWatcher();
           });
       });
@@ -263,17 +281,21 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       }
     } finally {
       cleanupWatcher();
-      if (__DEV__) {
-        devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
+      if (directFixTimeoutRef.current) {
+        clearTimeout(directFixTimeoutRef.current);
+        directFixTimeoutRef.current = null;
       }
 
       if (isMountedRef.current && currentReqId === requestIdRef.current) {
+        if (__DEV__) {
+          devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
+        }
         inFlightRef.current = false;
         setIsLocating(false);
 
         // Guarantee a terminal state if no coords were ever resolved
         if (!coordsRef.current) {
-          setGpsStatus('UNAVAILABLE');
+          setGpsStatus((prev) => (prev === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'UNAVAILABLE'));
           setLocationSource('UNAVAILABLE');
         }
 
@@ -282,8 +304,6 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             `[GPS State] [Req #${currentReqId}] Acquisition finished (terminal state reached). In-flight=${devInFlightAcquisitionsCount}, Watchers=${devActiveWatchersCount}`
           );
         }
-      } else {
-        inFlightRef.current = false;
       }
     }
   }, [cleanupWatcher, applyLocationFix]);
@@ -314,12 +334,31 @@ export const useGpsLocation = (): UseGpsLocationResult => {
     return () => {
       isMountedRef.current = false;
       requestIdRef.current++;
-      inFlightRef.current = false;
+      if (directFixTimeoutRef.current) {
+        clearTimeout(directFixTimeoutRef.current);
+        directFixTimeoutRef.current = null;
+      }
+      if (watcherTimeoutRef.current) {
+        clearTimeout(watcherTimeoutRef.current);
+        watcherTimeoutRef.current = null;
+      }
       cleanupWatcher();
+      if (inFlightRef.current) {
+        inFlightRef.current = false;
+        if (__DEV__) {
+          devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
+        }
+      }
+
       if (__DEV__) {
-        devInFlightAcquisitionsCount = 0;
-        devActiveWatchersCount = 0;
-        console.log('[GPS State] Unmounted hook. Reset dev metrics to 0/0');
+        // Strict assertion: never forcibly reset to mask leaks; warn loudly if non-zero
+        if (devInFlightAcquisitionsCount !== 0 || devActiveWatchersCount !== 0) {
+          console.warn(
+            `[GPS State CRITICAL LEAK] Hook unmounted with non-zero counters! in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`
+          );
+        } else {
+          console.log('[GPS State] Unmounted hook cleanly. Verified dev counters: 0/0');
+        }
       }
     };
   }, []); // Strictly empty dependency array: triggers ONLY once on mount

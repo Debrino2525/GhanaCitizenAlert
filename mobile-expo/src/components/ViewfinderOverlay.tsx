@@ -10,7 +10,7 @@ import {
   Lock,
   Sparkles
 } from 'lucide-react-native';
-import { GpsCoordinates, LocationSource } from '../types';
+import { GpsCoordinates, LocationSource, GpsLockStatus } from '../types';
 import { tokens } from '../theme/tokens';
 
 interface ViewfinderOverlayProps {
@@ -25,6 +25,7 @@ interface ViewfinderOverlayProps {
   mediaType: 'VIDEO' | 'IMAGE';
   coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
+  gpsStatus?: GpsLockStatus;
   locationSource?: LocationSource;
   isLocating?: boolean;
   gpsFixAgeSeconds?: number | null;
@@ -47,6 +48,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
   mediaType,
   coords,
   gpsAccuracy,
+  gpsStatus = 'UNAVAILABLE',
   locationSource = 'UNAVAILABLE',
   isLocating = false,
   gpsFixAgeSeconds = null,
@@ -211,6 +213,15 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
                 {(locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && gpsAccuracy !== null ? ` | ACCURACY: ±${gpsAccuracy}m` : ''}
               </Text>
             </View>
+          </>
+        ) : gpsStatus === 'PERMISSION_DENIED' ? (
+          <>
+            <Text style={styles.watermarkWhite}>
+              CAPTURED {captureUtcString} | LOCATION PERMISSION DENIED
+            </Text>
+            <Text style={[styles.watermarkWhite, { color: tokens.colors.status.danger, fontSize: 10 }]}>
+              LOCATION ACCESS DISABLED • TAP OPEN SETTINGS
+            </Text>
           </>
         ) : (
           <>

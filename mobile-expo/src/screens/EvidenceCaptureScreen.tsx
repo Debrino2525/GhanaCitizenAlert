@@ -289,6 +289,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             mediaType={mediaType}
             coords={activeViewfinderCoords}
             gpsAccuracy={activeViewfinderAccuracy}
+            gpsStatus={gpsStatus}
             locationSource={activeViewfinderSource}
             isLocating={activeViewfinderIsLocating}
             gpsFixAgeSeconds={activeViewfinderAge}
