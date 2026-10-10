@@ -291,8 +291,9 @@ export const App: React.FC = () => {
               thumbnailUrl: m.thumbnailUrl || m.rawS3Url || m.url || ''
             }));
 
-            const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
-            const lng = typeof r.longitude === 'number' && !isNaN(r.longitude) ? r.longitude : -0.1870;
+            const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
+            const lat = hasValidCoords ? r.latitude : null;
+            const lng = hasValidCoords ? r.longitude : null;
 
             return {
               id: r.id,
@@ -303,7 +304,12 @@ export const App: React.FC = () => {
               locationName: r.location_name || 'Location Not Specified',
               ghanaPostCode: r.ghanapost_code || '',
               region: r.region || 'National',
-              coordinates: [lat, lng],
+              coordinates: hasValidCoords ? [lat, lng] : null,
+              latitude: lat,
+              longitude: lng,
+              locationSource: r.location_source || null,
+              gpsFixAgeSeconds: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
+              gpsAccuracyM: typeof r.gps_accuracy_m === 'number' ? r.gps_accuracy_m : null,
               media: parsedMedia,
               reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: r.reporter_trust_score || 85 },
               assignedAgency: r.assigned_agency || 'GPS_CID',
@@ -374,8 +380,9 @@ export const App: React.FC = () => {
           thumbnailUrl: m.thumbnailUrl || m.rawS3Url || m.url || ''
         }));
 
-        const lat = typeof r.latitude === 'number' && !isNaN(r.latitude) ? r.latitude : 5.6037;
-        const lng = typeof r.longitude === 'number' && !isNaN(r.longitude) ? r.longitude : -0.1870;
+        const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
+        const lat = hasValidCoords ? r.latitude : null;
+        const lng = hasValidCoords ? r.longitude : null;
 
         const incomingInc: IncidentReport = {
           id: r.id,
@@ -386,7 +393,12 @@ export const App: React.FC = () => {
           locationName: r.location_name || 'Location Not Specified',
           ghanaPostCode: r.ghanapost_code || '',
           region: r.region || 'National',
-          coordinates: [lat, lng],
+          coordinates: hasValidCoords ? [lat, lng] : null,
+          latitude: lat,
+          longitude: lng,
+          locationSource: r.location_source || null,
+          gpsFixAgeSeconds: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
+          gpsAccuracyM: typeof r.gps_accuracy_m === 'number' ? r.gps_accuracy_m : null,
           media: parsedMedia,
           reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: r.reporter_trust_score || 85 },
           assignedAgency: r.assigned_agency || 'GPS_CID',
@@ -528,9 +540,9 @@ export const App: React.FC = () => {
       await supabase.from('alert_sightings').insert({
         alert_id: sighting.alertId,
         location_name: sighting.locationName,
-        ghanapost_code: sighting.ghanaPostCode,
-        latitude: sighting.coordinates[0],
-        longitude: sighting.coordinates[1],
+        ghanapost_code: null,
+        latitude: sighting.coordinates ? sighting.coordinates[0] : null,
+        longitude: sighting.coordinates ? sighting.coordinates[1] : null,
         comment: sighting.comment,
         reporter_phone: sighting.reporterPhone,
         is_verified: sighting.isVerified

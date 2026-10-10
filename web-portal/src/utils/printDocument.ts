@@ -234,8 +234,8 @@ export function buildPoliceBriefHtml(brief: any): string {
         <span>${brief.incidentTrackingCode || 'N/A'}</span>
       </div>
       <div class="meta-item">
-        <label>GhanaPost GPS Code</label>
-        <span>${brief.geospatialAssessment?.ghanaPostCode || 'Not provided'}</span>
+        <label>Incident Sector</label>
+        <span>${brief.geospatialAssessment?.locationName || 'Location pending'}</span>
       </div>
       <div class="meta-item">
         <label>Generated Timestamp</label>
@@ -317,8 +317,8 @@ export function buildCourtCertificateHtml(certificate: any): string {
         <span>${certificate.trackingCode || 'N/A'}</span>
       </div>
       <div class="meta-item">
-        <label>GhanaPost Digital GPS</label>
-        <span>${certificate.ghanaPostCode || 'Not provided'}</span>
+        <label>Incident Location</label>
+        <span>${certificate.locationName || 'Location pending'}${certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}°, ${certificate.coordinates[1].toFixed(4)}°)` : ''}</span>
       </div>
       <div class="meta-item">
         <label>Date Sealed (UTC)</label>

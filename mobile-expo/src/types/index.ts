@@ -24,14 +24,24 @@ export interface GpsCoordinates {
   longitude: number;
 }
 
-export type GpsLockStatus = 'LOCATING' | 'LOCKED' | 'ERROR';
+export type LocationSource = 'LIVE' | 'LAST_KNOWN' | 'MANUAL' | 'UNAVAILABLE';
+
+export type GpsLockStatus =
+  | 'LOCATING'
+  | 'LIVE'
+  | 'STALE'
+  | 'MANUAL'
+  | 'UNAVAILABLE'
+  | 'ERROR'
+  | 'LOCKED'; // Kept for backward compatibility
 
 export interface GpsWatermark {
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   landmark: string;
-  ghanaPostCode: string;
-  accuracyMeters: number;
+  accuracyMeters: number | null;
+  locationSource: LocationSource;
+  fixAgeSeconds: number | null;
 }
 
 export type MediaUploadStatus =
@@ -64,8 +74,9 @@ export interface IncidentDraft {
   description: string;
   landmark: string;
   locationName: string;
-  ghanaPostCode: string;
   region: string;
+  locationSource: LocationSource;
+  gpsFixAgeSeconds: number | null;
   isAnonymous: boolean;
   reporterPhone: string;
   hasRecordedMedia: boolean;

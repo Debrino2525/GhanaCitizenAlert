@@ -24,7 +24,7 @@ import Svg, { Circle } from 'react-native-svg';
 import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
-import { GpsCoordinates } from '../types';
+import { GpsCoordinates, LocationSource } from '../types';
 import { tokens } from '../theme/tokens';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 
@@ -33,9 +33,10 @@ export const SOS_HOLD_MS = 1500; // Hold duration in milliseconds
 interface SosPanicScreenProps {
   coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
+  locationSource?: LocationSource;
+  gpsFixAgeSeconds?: number | null;
   locationName: string;
   landmark: string;
-  ghanaPostCode: string;
   region: string;
   isAnonymous: boolean;
   reporterPhone: string;
@@ -56,42 +57,61 @@ function generateSosTrackingCode(): string {
   return `SOS-${suffix}`;
 }
 
+export interface SosResolvedLocation {
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+  locationSource: LocationSource;
+  fixAgeSeconds: number | null;
+}
+
 /**
- * Multi-tiered resilient location resolution for Emergency SOS.
- * Never fails or blocks distress signal transmission.
- * 1. Fast fresh GPS fix (3.5s timeout with Balanced accuracy for instant indoor/outdoor lock)
- * 2. Instant Last Known Position from device cache
- * 3. Passed-in GPS Coordinates from app header
- * 4. National Fallback Coordinates (Accra GPS CID Center)
+ * Multi-tiered truthful location resolution for Emergency SOS.
+ * Never invents coordinates or defaults to unverified locations.
  */
 async function getBestAvailableLocation(
   fallbackCoords: GpsCoordinates | null,
-  fallbackAccuracy: number | null
-): Promise<{ latitude: number; longitude: number; accuracy: number | null }> {
+  fallbackAccuracy: number | null,
+  fallbackSource: LocationSource = 'UNAVAILABLE',
+  fallbackAge: number | null = null
+): Promise<SosResolvedLocation> {
+  const now = Date.now();
+
   // Tier 1: Fast fresh position check (3.5s timeout)
   try {
     const locPromise = Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced
+      accuracy: Location.Accuracy.High
     });
     const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
     const loc = await Promise.race([locPromise, timeoutPromise]);
     if (loc?.coords && loc.coords.latitude !== 0 && loc.coords.longitude !== 0) {
+      const ageSeconds = Math.max(0, Math.floor((now - loc.timestamp) / 1000));
+      const isFresh = ageSeconds <= 15;
+      const acc = typeof loc.coords.accuracy === 'number' ? Math.round(loc.coords.accuracy * 10) / 10 : null;
+
       return {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
-        accuracy: typeof loc.coords.accuracy === 'number' ? Math.round(loc.coords.accuracy * 10) / 10 : null
+        accuracy: acc,
+        locationSource: isFresh ? 'LIVE' : 'LAST_KNOWN',
+        fixAgeSeconds: ageSeconds
       };
     }
   } catch (e) {}
 
-  // Tier 2: Instant Last Known Location (0ms latency from OS sensor cache)
+  // Tier 2: Last Known Location from device sensor cache
   try {
     const lastKnown = await Location.getLastKnownPositionAsync();
     if (lastKnown?.coords && lastKnown.coords.latitude !== 0 && lastKnown.coords.longitude !== 0) {
+      const ageSeconds = Math.max(0, Math.floor((now - lastKnown.timestamp) / 1000));
+      const acc = typeof lastKnown.coords.accuracy === 'number' ? Math.round(lastKnown.coords.accuracy * 10) / 10 : null;
+
       return {
         latitude: lastKnown.coords.latitude,
         longitude: lastKnown.coords.longitude,
-        accuracy: typeof lastKnown.coords.accuracy === 'number' ? Math.round(lastKnown.coords.accuracy * 10) / 10 : null
+        accuracy: acc,
+        locationSource: 'LAST_KNOWN',
+        fixAgeSeconds: ageSeconds
       };
     }
   } catch (e) {}
@@ -101,24 +121,29 @@ async function getBestAvailableLocation(
     return {
       latitude: fallbackCoords.latitude,
       longitude: fallbackCoords.longitude,
-      accuracy: fallbackAccuracy
+      accuracy: fallbackAccuracy,
+      locationSource: fallbackSource === 'LIVE' ? 'LIVE' : 'LAST_KNOWN',
+      fixAgeSeconds: fallbackAge ?? 30
     };
   }
 
-  // Tier 4: Ghana National Emergency Dispatch Center fallback coordinates
+  // Tier 4: No GPS available - Send UNAVAILABLE with NULL coordinates (Never invent a point)
   return {
-    latitude: 5.6037,
-    longitude: -0.1870,
-    accuracy: 250
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    locationSource: 'UNAVAILABLE',
+    fixAgeSeconds: null
   };
 }
 
 export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   coords,
   gpsAccuracy,
+  locationSource = 'UNAVAILABLE',
+  gpsFixAgeSeconds = null,
   locationName,
   landmark,
-  ghanaPostCode,
   region,
   isAnonymous,
   reporterPhone
@@ -126,7 +151,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   const [sosActive, setSosActive] = useState(false);
   const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
   const [activeTrackingCode, setActiveTrackingCode] = useState<string | null>(null);
-  const [activeCoords, setActiveCoords] = useState<{ latitude: number; longitude: number; accuracy: number | null } | null>(null);
+  const [activeCoords, setActiveCoords] = useState<SosResolvedLocation | null>(null);
   const [isActivating, setIsActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
 
@@ -141,6 +166,9 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const activeIncidentIdRef = useRef<string | null>(null);
   activeIncidentIdRef.current = activeIncidentId;
+  const activeTrackingCodeRef = useRef<string | null>(null);
+  activeTrackingCodeRef.current = activeTrackingCode;
+  const sosWatcherRef = useRef<Location.LocationSubscription | null>(null);
 
   // Pulse animation for active beacon
   useEffect(() => {
@@ -174,26 +202,36 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     let pingInterval: any;
     if (sosActive && activeIncidentId) {
       pingInterval = setInterval(async () => {
-        const freshFix = await getBestAvailableLocation(activeCoords, null);
+        const fallbackGps: GpsCoordinates | null = (activeCoords && activeCoords.latitude !== null && activeCoords.longitude !== null)
+          ? { latitude: activeCoords.latitude, longitude: activeCoords.longitude }
+          : null;
+        const freshFix = await getBestAvailableLocation(
+          fallbackGps,
+          activeCoords?.accuracy ?? null,
+          activeCoords?.locationSource ?? 'UNAVAILABLE',
+          activeCoords?.fixAgeSeconds ?? null
+        );
 
         try {
           const authUser = (await supabase.auth.getUser().catch(() => ({ data: { user: null } }))).data?.user;
           const reporterId = !isAnonymous && authUser?.id ? authUser.id : null;
 
-          const { error } = await supabase.from('sos_pings').insert({
-            incident_id: activeIncidentIdRef.current,
-            reporter_id: reporterId,
-            lat: freshFix.latitude,
-            lng: freshFix.longitude,
-            accuracy: freshFix.accuracy
-          });
+          if (freshFix.latitude !== null && freshFix.longitude !== null) {
+            const { error } = await supabase.from('sos_pings').insert({
+              incident_id: activeIncidentIdRef.current,
+              reporter_id: reporterId,
+              lat: freshFix.latitude,
+              lng: freshFix.longitude,
+              accuracy: freshFix.accuracy
+            });
 
-          if (!error) {
-            setSuccessfulPings((prev) => prev + 1);
-            setActiveCoords(freshFix);
-            safeHaptics.light();
-          } else {
-            setFailedPings((prev) => prev + 1);
+            if (!error) {
+              setSuccessfulPings((prev) => prev + 1);
+              setActiveCoords(freshFix);
+              safeHaptics.light();
+            } else {
+              setFailedPings((prev) => prev + 1);
+            }
           }
         } catch (err) {
           setFailedPings((prev) => prev + 1);
@@ -210,7 +248,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     announceAccessibility('Transmitting emergency distress beacon to Police Command...');
 
     // 1. Acquire best available location without delay or timeout
-    const bestGps = await getBestAvailableLocation(coords, gpsAccuracy);
+    const bestGps = await getBestAvailableLocation(coords, gpsAccuracy, locationSource, gpsFixAgeSeconds);
 
     // 2. Prepare payload with crypto UUID and retry on unique violation (code 23505)
     const incidentId = Crypto.randomUUID();
@@ -225,6 +263,14 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     let lastError = '';
     let trackingCodeUsed = '';
 
+    const effectiveLocationName = isAnonymous
+      ? 'Withheld (anonymous)'
+      : (landmark ? `${landmark} (${locationName})` : (locationName || (bestGps.locationSource === 'UNAVAILABLE' ? 'Location pending' : 'SOS Distress Beacon')));
+
+    const descCoords = bestGps.latitude !== null && bestGps.longitude !== null
+      ? `Coordinates: ${bestGps.latitude.toFixed(5)}, ${bestGps.longitude.toFixed(5)} (±${bestGps.accuracy ?? 25}m, ${bestGps.locationSource}).`
+      : 'Coordinates: Location unavailable (pending satellite lock).';
+
     while (attempts < 3 && !insertSuccess) {
       attempts++;
       trackingCodeUsed = generateSosTrackingCode();
@@ -233,15 +279,17 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         tracking_code: trackingCodeUsed,
         category: 'CRIMINAL_OFFENSE',
         title: '🚨 EMERGENCY SOS BEACON (ACTIVE)',
-        description: `CITIZEN EMERGENCY DISTRESS BEACON ACTIVATED. Coordinates: ${bestGps.latitude.toFixed(5)}, ${bestGps.longitude.toFixed(5)} (±${bestGps.accuracy || 25}m). Location sent to Police Command.`,
-        location_name: isAnonymous
-          ? 'Withheld (anonymous)'
-          : (landmark ? `${landmark} (${locationName})` : (locationName || 'GPS Location Lock')),
-        ghanapost_code: isAnonymous ? '' : (ghanaPostCode ? ghanaPostCode.toUpperCase() : ''),
-        region: region || 'Greater Accra',
+        description: `CITIZEN EMERGENCY DISTRESS BEACON ACTIVATED. ${descCoords} Sent to Police Command.`,
+        location_name: effectiveLocationName,
+        ghanapost_code: null,
+        region: region || 'UNKNOWN',
         latitude: bestGps.latitude,
         longitude: bestGps.longitude,
-        gps_accuracy_m: bestGps.accuracy ?? null,
+        location_source: bestGps.locationSource,
+        gps_fix_age_s: bestGps.fixAgeSeconds,
+        gps_accuracy_m: (bestGps.locationSource === 'LIVE' || bestGps.locationSource === 'LAST_KNOWN') && typeof bestGps.accuracy === 'number'
+          ? bestGps.accuracy
+          : null,
         media: [],
         is_anonymous: isAnonymous,
         reporter_data: {
@@ -288,11 +336,68 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       setSosActive(true);
       safeHaptics.success();
       announceAccessibility('Emergency SOS distress beacon transmitted. Location sent to Police Command.');
+
+      // Start background watcher if initial fix was not live
+      if (bestGps.locationSource !== 'LIVE') {
+        try {
+          if (sosWatcherRef.current) {
+            sosWatcherRef.current.remove();
+          }
+          sosWatcherRef.current = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.High,
+              timeInterval: 2000,
+              distanceInterval: 2,
+            },
+            async (freshLoc) => {
+              const nowMs = Date.now();
+              const fixAge = Math.max(0, Math.floor((nowMs - freshLoc.timestamp) / 1000));
+              if (fixAge <= 15) {
+                const freshAcc = typeof freshLoc.coords.accuracy === 'number'
+                  ? Math.round(freshLoc.coords.accuracy * 10) / 10
+                  : null;
+                const freshResolved: SosResolvedLocation = {
+                  latitude: freshLoc.coords.latitude,
+                  longitude: freshLoc.coords.longitude,
+                  accuracy: freshAcc,
+                  locationSource: 'LIVE',
+                  fixAgeSeconds: fixAge,
+                };
+                setActiveCoords(freshResolved);
+
+                // Update the live incident location in Supabase via server RPC
+                try {
+                  const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_incident_location', {
+                    p_tracking_code: trackingCodeUsed,
+                    p_lat: freshLoc.coords.latitude,
+                    p_lng: freshLoc.coords.longitude,
+                    p_accuracy: freshAcc,
+                    p_source: 'LIVE',
+                    p_age_s: fixAge,
+                  });
+
+                  if (rpcErr || rpcResult === false) {
+                    console.warn('[SOS Location Update Rejected/Error]', rpcErr?.message || `update_incident_location returned false for ${trackingCodeUsed}`);
+                  } else {
+                    if (__DEV__) {
+                      console.log(`[SOS Location Watcher] Successfully updated ${trackingCodeUsed} to (${freshLoc.coords.latitude}, ${freshLoc.coords.longitude})`);
+                    }
+                  }
+                } catch (e: any) {
+                  console.warn('[SOS Location Update Exception]', e?.message);
+                }
+              }
+            }
+          );
+        } catch (watchErr) {
+          console.warn('[SOS Background Watcher Error]', watchErr);
+        }
+      }
     } else {
       safeHaptics.warning();
       setActivationError(`Failed to transmit distress beacon to Police Command: ${lastError || 'Network/Server Error'}. Please use the direct emergency call buttons below.`);
     }
-  }, [coords, gpsAccuracy, landmark, locationName, ghanaPostCode, region, isAnonymous, reporterPhone]);
+  }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, landmark, locationName, region, isAnonymous, reporterPhone]);
 
   const handlePressIn = () => {
     if (sosActive || isActivating) return;
@@ -326,6 +431,12 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   };
 
   const handleCancelSos = () => {
+    if (sosWatcherRef.current) {
+      try {
+        sosWatcherRef.current.remove();
+      } catch {}
+      sosWatcherRef.current = null;
+    }
     setSosActive(false);
     setActiveIncidentId(null);
     setActiveTrackingCode(null);
@@ -468,7 +579,9 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
             Tracking Code: {activeTrackingCode || 'SOS-ACTIVE'}
           </Text>
           <Text style={styles.sosActiveSub}>
-            GPS: {activeCoords.latitude.toFixed(5)}, {activeCoords.longitude.toFixed(5)} {activeCoords.accuracy !== null ? `(±${activeCoords.accuracy.toFixed(1)}m)` : ''}
+            GPS: {activeCoords.latitude !== null && activeCoords.longitude !== null
+              ? `${activeCoords.latitude.toFixed(5)}, ${activeCoords.longitude.toFixed(5)} (${activeCoords.locationSource}) ${activeCoords.accuracy !== null ? `(±${activeCoords.accuracy.toFixed(1)}m)` : ''}`
+              : 'Location pending satellite lock (Tracking in background...)'}
           </Text>
           <Text style={styles.sosActiveSub}>
             Live Pings Sent: {successfulPings} {failedPings > 0 ? `(${failedPings} failed)` : ''}

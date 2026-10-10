@@ -24,8 +24,8 @@ interface ViewfinderOverlayProps {
   recordedUri: string | null;
   mediaType: 'VIDEO' | 'IMAGE';
   coords: GpsCoordinates | null;
-  ghanaPostCode: string;
   gpsAccuracy: number | null;
+  locationSource?: string;
   onFlipCamera: () => void;
   onRetake: () => void;
   onRequestPermissions: () => void;
@@ -42,8 +42,8 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
   recordedUri,
   mediaType,
   coords,
-  ghanaPostCode,
   gpsAccuracy,
+  locationSource = 'LIVE',
   onFlipCamera,
   onRetake,
   onRequestPermissions
@@ -165,18 +165,22 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
       <View style={styles.watermarkBox}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <ShieldCheck color={tokens.colors.brand.gold} size={12} />
-          <Text style={styles.watermarkGold}>FORENSIC GPS WATERMARK (ACT 772)</Text>
+          <Text style={styles.watermarkGold}>FORENSIC WATERMARK (ACT 772)</Text>
         </View>
         <Text style={styles.watermarkWhite}>
-          UTC: {new Date().toISOString().substring(11, 19)} | {hasValidFix ? `LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'Location unavailable. Refresh GPS or move outdoors.'}
+          UTC: {new Date().toISOString().substring(11, 19)} | {hasValidFix ? `LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'Location unavailable'}
         </Text>
-        {hasValidFix && (
+        {hasValidFix ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <MapPin color={tokens.colors.brand.gold} size={11} />
             <Text style={styles.watermarkGold}>
-              {ghanaPostCode ? `DIGITAL POST: ${ghanaPostCode} ` : ''}{gpsAccuracy !== null ? `ACCURACY: ±${gpsAccuracy}m` : 'ACCURACY: Live Fix'}
+              {locationSource === 'LIVE' ? 'LIVE FIX' : 'LAST KNOWN FIX'}{gpsAccuracy !== null ? ` | ACCURACY: ±${gpsAccuracy}m` : ''}
             </Text>
           </View>
+        ) : (
+          <Text style={[styles.watermarkWhite, { color: tokens.colors.status.warning, fontSize: 10 }]}>
+            Digital address unavailable
+          </Text>
         )}
       </View>
     </View>

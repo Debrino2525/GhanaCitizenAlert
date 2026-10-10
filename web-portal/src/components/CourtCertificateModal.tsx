@@ -54,8 +54,11 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
               <span className="font-bold text-white">{certificate.trackingCode}</span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">GHANAPOST GPS</span>
-              <span className="font-bold text-amber-400">{certificate.ghanaPostCode || 'Not provided'}</span>
+              <span className="text-slate-500 block text-[11px]">INCIDENT LOCATION</span>
+              <span className="font-bold text-amber-400 truncate block">
+                {certificate.locationName || 'Location pending'}
+                {certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}° N, ${certificate.coordinates[1].toFixed(4)}° W)` : ' (GPS unavailable)'}
+              </span>
             </div>
           </div>
 

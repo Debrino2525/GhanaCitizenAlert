@@ -1,21 +1,20 @@
 /**
- * GhanaPost GPS Digital Addressing System Engine
- * Converts geographical WGS84 GPS coordinates (latitude, longitude)
- * into standard GhanaPost GPS Digital Addresses (e.g. GA-492-1029).
+ * Ghana Administrative Region Resolver
+ * Maps geographical WGS84 GPS coordinates (latitude, longitude)
+ * into official Ghanaian administrative regions.
+ * 
+ * Note: Formula-based Digital Address generation has been removed.
  */
 
-export interface GhanaPostAddress {
-  digitalAddress: string;
-  region: string;
-  regionCode: string;
-  districtCode: string;
-  uniqueCode: string;
+export interface GhanaRegionInfo {
+  code: string;
+  name: string;
 }
 
 /**
- * Region prefix mapping based on Ghana's administrative boundaries
+ * Maps GPS coordinates and/or reverse geocoded names to official Ghana region names.
  */
-export function getGhanaRegionCode(lat: number, lng: number, regionName?: string): { code: string; name: string } {
+export function getGhanaRegionCode(lat: number | null, lng: number | null, regionName?: string): GhanaRegionInfo {
   const normRegion = (regionName || '').toLowerCase();
 
   if (normRegion.includes('accra')) return { code: 'GA', name: 'Greater Accra' };
@@ -35,7 +34,11 @@ export function getGhanaRegionCode(lat: number, lng: number, regionName?: string
   if (normRegion.includes('ahafo')) return { code: 'AF', name: 'Ahafo' };
   if (normRegion.includes('bono')) return { code: 'BA', name: 'Bono' };
 
-  // Fallback to geographical latitude/longitude bounding boxes
+  if (lat === null || lng === null || (lat === 0 && lng === 0)) {
+    return { code: 'UNKNOWN', name: 'UNKNOWN' };
+  }
+
+  // Geographical bounding boxes for Ghana's administrative boundaries
   if (lat >= 5.4 && lat <= 6.1 && lng >= -0.6 && lng <= 0.2) {
     return { code: 'GA', name: 'Greater Accra' };
   }
@@ -67,32 +70,5 @@ export function getGhanaRegionCode(lat: number, lng: number, regionName?: string
     return { code: 'BA', name: 'Bono' };
   }
 
-  // Default to Greater Accra (GA) for general Ghana territory
-  return { code: 'GA', name: 'Greater Accra' };
-}
-
-/**
- * Computes a deterministic GhanaPost GPS digital address code from coordinates.
- * Formula maps 5m grid intervals into the standard XX-YYY-ZZZZ digital address scheme.
- */
-export function generateGhanaPostGpsCode(lat: number, lng: number, regionName?: string): string {
-  if (!lat || !lng || (lat === 0 && lng === 0)) {
-    return '';
-  }
-
-  const { code: regionPrefix } = getGhanaRegionCode(lat, lng, regionName);
-
-  // Deterministic 5x5m grid hash calculation
-  const absLat = Math.abs(lat);
-  const absLng = Math.abs(lng);
-
-  // District code component (3 digits, e.g. 100 - 999)
-  const districtNum = Math.floor(((absLat * 1000) % 900) + 100);
-  const districtCode = String(districtNum).padStart(3, '0');
-
-  // Unique property grid code component (4 digits, e.g. 1000 - 9999)
-  const uniqueNum = Math.floor(((absLng * 100000 + absLat * 10000) % 9000) + 1000);
-  const uniqueCode = String(uniqueNum).padStart(4, '0');
-
-  return `${regionPrefix}-${districtCode}-${uniqueCode}`;
+  return { code: 'UNKNOWN', name: 'UNKNOWN' };
 }

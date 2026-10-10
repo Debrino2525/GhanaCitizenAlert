@@ -198,7 +198,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                     <h4 className="text-sm font-bold text-white truncate">{inc.title}</h4>
                     <p className="text-xs text-slate-400 line-clamp-2 mt-1">{inc.description}</p>
                     <div className="mt-2 pt-2 border-t border-slate-800 text-[11px] flex justify-between text-slate-400">
-                      <span>📍 {inc.ghanaPostCode || inc.locationName || 'Location Not Set'}</span>
+                      <span>📍 {inc.locationName || 'Location pending'}</span>
                       <span className="font-semibold text-slate-300">
                         Severity: <span className={inc.severity === 'RED' || inc.severity === 'CRITICAL' ? 'text-red-400 font-bold' : 'text-amber-400'}>{inc.severity}</span>
                       </span>
@@ -231,7 +231,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                   <h3 className="text-base font-bold text-white mt-1.5">
                     {activeIncident.title}
                   </h3>
-                  <p className="text-xs text-slate-400">{activeIncident.locationName} ({activeIncident.ghanaPostCode || 'GPS Geotagged'})</p>
+                  <p className="text-xs text-slate-400">{activeIncident.locationName || 'Location pending'} • {activeIncident.region}</p>
                 </div>
 
                 <div className="text-right text-xs">

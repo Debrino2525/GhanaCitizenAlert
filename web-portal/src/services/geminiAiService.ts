@@ -178,21 +178,27 @@ export async function generatePoliceCaseBrief(
 
   // Calculate nearest station
   let closestStation = GHANA_COMMAND_STATIONS[0];
-  let minDistance = Infinity;
-  for (const st of GHANA_COMMAND_STATIONS) {
-    const dist = calculateHaversineDistanceKm(
-      st.coordinates[0],
-      st.coordinates[1],
-      incident.coordinates[0],
-      incident.coordinates[1]
-    );
-    if (dist < minDistance) {
-      minDistance = dist;
-      closestStation = st;
+  let minDistance = 0;
+  const hasCoords = Boolean(incident.coordinates && typeof incident.coordinates[0] === 'number' && typeof incident.coordinates[1] === 'number');
+
+  if (hasCoords && incident.coordinates) {
+    let minD = Infinity;
+    for (const st of GHANA_COMMAND_STATIONS) {
+      const dist = calculateHaversineDistanceKm(
+        st.coordinates[0],
+        st.coordinates[1],
+        incident.coordinates[0],
+        incident.coordinates[1]
+      );
+      if (dist < minD) {
+        minD = dist;
+        closestStation = st;
+      }
     }
+    minDistance = minD;
   }
 
-  const estimatedEta = Math.max(3, Math.round((minDistance * 1.25 / 65) * 60));
+  const estimatedEta = hasCoords ? Math.max(3, Math.round((minDistance * 1.25 / 65) * 60)) : 15;
   const dateStr = new Date(incident.createdAt).toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -207,10 +213,10 @@ export async function generatePoliceCaseBrief(
     executiveSummary: `On ${dateStr}, evidence was captured and transmitted via the Ghana CitizenAlert Emergency CAD Network. ${triage.threatSummary} Primary triage recommends ${triage.recommendedAgency} operational jurisdiction under statutory mandate with an assessed severity rating of ${triage.assessedSeverity}.`,
     legalFramework: triage.statutoryViolations,
     geospatialAssessment: {
-      ghanaPostCode: incident.ghanaPostCode || 'Unassigned Sector',
-      locationName: incident.locationName,
-      coordinates: `${incident.coordinates[0].toFixed(5)}° N, ${incident.coordinates[1].toFixed(5)}° W`,
-      tacticalSector: `${incident.region} Regional Operational Command Zone`,
+      ghanaPostCode: '',
+      locationName: incident.locationName || 'Location pending',
+      coordinates: hasCoords && incident.coordinates ? `${incident.coordinates[0].toFixed(5)}° N, ${incident.coordinates[1].toFixed(5)}° W` : 'Coordinates unavailable',
+      tacticalSector: `${incident.region || 'National'} Regional Operational Command Zone`,
       closestStationName: closestStation.name,
       estimatedEtaMinutes: estimatedEta
     },

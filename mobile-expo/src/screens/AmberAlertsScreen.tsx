@@ -79,7 +79,6 @@ type BulletinFilter = 'ALL' | 'EMERGENCY' | 'CIVIC';
 
 interface AmberAlertsScreenProps {
   coords: GpsCoordinates | null;
-  ghanaPostCode: string;
   region: string;
   locationName: string;
   landmark: string;
@@ -89,7 +88,6 @@ interface AmberAlertsScreenProps {
 
 export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
   coords,
-  ghanaPostCode,
   region,
   locationName,
   landmark,
@@ -233,10 +231,10 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 
       const payload = {
         alert_id: selectedAlert.id,
-        location_name: locationLabel,
-        ghanapost_code: ghanaPostCode.trim() ? ghanaPostCode.trim().toUpperCase() : null,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
+        location_name: locationLabel || 'Manual Sighting',
+        ghanapost_code: null,
+        latitude: coords ? coords.latitude : null,
+        longitude: coords ? coords.longitude : null,
         comment: tipDescription.trim(),
         reporter_phone: isAnonymous ? null : (reporterPhone || null),
         is_verified: false
@@ -444,11 +442,11 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     ) : null}
                   </View>
 
-                  {/* Broadcast Anchor */}
-                  {alertItem.ghanapost_code ? (
+                  {/* Broadcast Area */}
+                  {alertItem.last_seen_location ? (
                     <View style={styles.broadcastGpsBox}>
                       <Text style={styles.broadcastGpsText}>
-                        📍 Broadcast Anchor: {alertItem.ghanapost_code} • GPS CID Priority
+                        📍 Target Area: {alertItem.last_seen_location}
                       </Text>
                     </View>
                   ) : null}

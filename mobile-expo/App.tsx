@@ -102,9 +102,9 @@ function MainApp() {
     citizen,
     coords: gps.coords,
     gpsAccuracy: gps.gpsAccuracy,
+    locationSource: gps.locationSource,
+    gpsFixAgeSeconds: gps.gpsFixAgeSeconds,
     locationName: gps.locationName,
-    landmark: '',
-    ghanaPostCode: gps.ghanaPostCode,
     region: gps.region
   });
 
@@ -331,11 +331,12 @@ function MainApp() {
                 gpsAccuracy={gps.gpsAccuracy}
                 isLocating={gps.isLocating}
                 gpsStatus={gps.gpsStatus}
+                locationSource={gps.locationSource}
+                gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
                 locationName={gps.locationName}
-                ghanaPostCode={gps.ghanaPostCode}
+                region={gps.region}
                 onRefreshGps={gps.fetchCurrentLocation}
                 onLocationNameChange={gps.setLocationName}
-                onGhanaPostCodeChange={gps.setGhanaPostCode}
                 cameraRef={camera.cameraRef}
                 hasCameraPermission={camera.hasCameraPermission}
                 facing={camera.facing}
@@ -379,7 +380,6 @@ function MainApp() {
             {activeTab === 'ALERTS' && (
               <AmberAlertsScreen
                 coords={gps.coords}
-                ghanaPostCode={gps.ghanaPostCode}
                 region={gps.region}
                 locationName={gps.locationName}
                 landmark={draft.landmark}
@@ -393,9 +393,10 @@ function MainApp() {
               <SosPanicScreen
                 coords={gps.coords}
                 gpsAccuracy={gps.gpsAccuracy}
+                locationSource={gps.locationSource}
+                gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
                 locationName={gps.locationName}
                 landmark={draft.landmark}
-                ghanaPostCode={gps.ghanaPostCode}
                 region={gps.region}
                 isAnonymous={draft.isAnonymous}
                 reporterPhone={draft.reporterPhone}

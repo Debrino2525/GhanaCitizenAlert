@@ -81,29 +81,32 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
         throw error;
       }
 
-      const formatted: EmergencyAlert[] = (data || []).map((r: any) => ({
-        id: r.id,
-        alertType: r.alert_type,
-        title: r.title,
-        subjectName: r.subject_name || undefined,
-        subjectAge: r.subject_age || undefined,
-        subjectPhotoUrl: r.subject_photo_url || '',
-        lastSeenLocation: r.last_seen_location,
-        ghanaPostCode: r.ghanapost_code || '',
-        centerCoordinates: [r.latitude || 5.6037, r.longitude || -0.1870],
-        radiusKm: Number(r.radius_km) || 35,
-        details: r.details,
-        suspectDetails: r.suspect_details || undefined,
-        vehicleDetails: r.vehicle_details || undefined,
-        isActive: Boolean(r.is_active),
-        issuedByAgency: r.issued_by_agency || 'GPS_CID',
-        issuingOfficerName: r.issuing_officer_name || 'CAD Duty Officer',
-        approvingCommanderName: r.approving_commander_name || undefined,
-        badgeNumber: r.badge_number || 'GPS-CAD',
-        activeUntil: r.active_until,
-        createdAt: r.created_at,
-        sightingsCount: r.sightings_count || 0
-      }));
+      const formatted: EmergencyAlert[] = (data || []).map((r: any) => {
+        const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
+        return {
+          id: r.id,
+          alertType: r.alert_type,
+          title: r.title,
+          subjectName: r.subject_name || undefined,
+          subjectAge: r.subject_age || undefined,
+          subjectPhotoUrl: r.subject_photo_url || '',
+          lastSeenLocation: r.last_seen_location,
+          ghanaPostCode: r.ghanapost_code || '',
+          centerCoordinates: hasValidCoords ? [r.latitude, r.longitude] : null,
+          radiusKm: Number(r.radius_km) || 35,
+          details: r.details,
+          suspectDetails: r.suspect_details || undefined,
+          vehicleDetails: r.vehicle_details || undefined,
+          isActive: Boolean(r.is_active),
+          issuedByAgency: r.issued_by_agency || 'GPS_CID',
+          issuingOfficerName: r.issuing_officer_name || 'CAD Duty Officer',
+          approvingCommanderName: r.approving_commander_name || undefined,
+          badgeNumber: r.badge_number || 'GPS-CAD',
+          activeUntil: r.active_until,
+          createdAt: r.created_at,
+          sightingsCount: r.sightings_count || 0
+        };
+      });
 
       setAlerts(formatted);
       if (formatted.length > 0 && !selectedAlert) {
@@ -134,18 +137,21 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
         throw error;
       }
 
-      const formatted: SightingTip[] = (data || []).map((s: any) => ({
-        id: s.id,
-        alertId: s.alert_id,
-        timestamp: s.created_at || s.timestamp,
-        locationName: s.location_name,
-        ghanaPostCode: s.ghanapost_code || '',
-        coordinates: [s.latitude || 5.6037, s.longitude || -0.1870],
-        comment: s.comment,
-        photoUrl: s.photo_url || undefined,
-        reporterPhone: s.reporter_phone || undefined,
-        isVerified: Boolean(s.is_verified)
-      }));
+      const formatted: SightingTip[] = (data || []).map((s: any) => {
+        const hasValidCoords = typeof s.latitude === 'number' && !isNaN(s.latitude) && typeof s.longitude === 'number' && !isNaN(s.longitude);
+        return {
+          id: s.id,
+          alertId: s.alert_id,
+          timestamp: s.created_at || s.timestamp,
+          locationName: s.location_name,
+          ghanaPostCode: s.ghanapost_code || '',
+          coordinates: hasValidCoords ? [s.latitude, s.longitude] : null,
+          comment: s.comment,
+          photoUrl: s.photo_url || undefined,
+          reporterPhone: s.reporter_phone || undefined,
+          isVerified: Boolean(s.is_verified)
+        };
+      });
 
       setSightings(formatted);
     } catch (err) {

@@ -5,8 +5,9 @@ export interface CourtCertificate {
   trackingCode: string;
   generatedAt: string;
   incidentTimestamp: string;
-  ghanaPostCode: string;
-  coordinates: [number, number];
+  locationName: string;
+  locationSource?: string | null;
+  coordinates: [number, number] | null;
   mediaItems: {
     mediaId: string;
     type: string;
@@ -26,7 +27,8 @@ export function generateCourtCertificate(incident: IncidentReport): CourtCertifi
     trackingCode: incident.trackingCode,
     generatedAt: new Date().toISOString(),
     incidentTimestamp: incident.createdAt,
-    ghanaPostCode: incident.ghanaPostCode || 'Not provided',
+    locationName: incident.locationName,
+    locationSource: incident.locationSource || null,
     coordinates: incident.coordinates,
     mediaItems: incident.media.map(m => {
       const rawHash = m.sha256Hash || (m as any).sha256Checksum || '';

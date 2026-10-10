@@ -215,7 +215,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const handleNarrowToEvidence = useCallback(() => {
     if (!selectedIncident || !mapInstanceRef.current) return;
     const selPing = latestPings?.[selectedIncident.id];
-    const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+    const selCoords: [number, number] | null = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+    if (!selCoords || selCoords[0] == null || selCoords[1] == null) return;
 
     const targetStyle = (currentStyle !== 'google-hybrid' && currentStyle !== 'google-satellite') ? 'google-hybrid' : currentStyle;
     if (targetStyle !== currentStyle) {
@@ -234,7 +235,9 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const handleFitRouteBounds = useCallback(() => {
     if (!selectedIncident || !activeRoute || !mapInstanceRef.current) return;
     const selPing = latestPings?.[selectedIncident.id];
-    const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+    const selCoords: [number, number] | null = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+    if (!selCoords || selCoords[0] == null || selCoords[1] == null) return;
+
     const bounds = L.latLngBounds([
       activeRoute.originStation.coordinates,
       selCoords
@@ -394,10 +397,11 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
     markersGroup.clearLayers();
 
     // A. Draw Red / Amber Alert Geofence Circles
-    alerts.filter(a => a.isActive).forEach(alert => {
+    alerts.filter(a => a.isActive && a.centerCoordinates && typeof a.centerCoordinates[0] === 'number' && typeof a.centerCoordinates[1] === 'number').forEach(alert => {
       const color = alert.alertType === 'RED' ? '#dc2626' : '#f59e0b';
+      const centerCoords = alert.centerCoordinates!;
       
-      const circle = L.circle(alert.centerCoordinates, {
+      const circle = L.circle(centerCoords, {
         color: color,
         fillColor: color,
         fillOpacity: 0.22,
@@ -417,14 +421,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         iconAnchor: [16, 16]
       });
 
-      L.marker(alert.centerCoordinates, { icon: alertIcon })
+      L.marker(centerCoords, { icon: alertIcon })
         .addTo(markersGroup)
         .bindPopup(`
           <div style="font-family: sans-serif; font-size: 12px; color: #0f172a; min-width: 220px; padding: 4px;">
             <span style="background: ${color}; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${alert.alertType} ALERT</span>
             <h4 style="margin: 6px 0 3px 0; font-weight: bold; font-size: 13px;">${alert.title}</h4>
-            <p style="margin: 0; color: #475569;">Last seen: ${alert.lastSeenLocation}</p>
-            <p style="margin: 2px 0 0 0; color: #b45309; font-weight: bold;">GhanaPost: ${alert.ghanaPostCode || 'Not provided'}</p>
+            <p style="margin: 0; color: #475569;">Last seen: ${alert.lastSeenLocation || 'Location unavailable'}</p>
           </div>
         `);
     });
@@ -440,7 +443,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
     visibleIncidents.forEach(inc => {
       const livePing = latestPings?.[inc.id];
-      const effectiveCoords: [number, number] = livePing ? [livePing.lat, livePing.lng] : inc.coordinates;
+      const effectiveCoords: [number, number] | null = livePing ? [livePing.lat, livePing.lng] : inc.coordinates;
+      
+      // Do NOT plot pins if coordinates are null/unavailable
+      if (!effectiveCoords || effectiveCoords[0] == null || effectiveCoords[1] == null) {
+        return;
+      }
+
       const isSos = Boolean(livePing) || (inc.category === 'CRIMINAL_OFFENSE' && inc.title.includes('SOS'));
       const isResolved = inc.status === 'RESOLVED' || inc.status === 'DISMISSED';
 
@@ -510,6 +519,23 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
       const googleSatUrl = `https://www.google.com/maps?q=${effectiveCoords[0]},${effectiveCoords[1]}&ll=${effectiveCoords[0]},${effectiveCoords[1]}&z=20&t=k`;
 
+      let sourceBadgeHtml = '';
+      if (livePing) {
+        sourceBadgeHtml = `<span style="background: #15803d; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟢 GPS LIVE</span>`;
+      } else if (inc.locationSource === 'LIVE') {
+        sourceBadgeHtml = `<span style="background: #15803d; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟢 GPS LIVE</span>`;
+      } else if (inc.locationSource === 'LAST_KNOWN') {
+        const ageMin = inc.gpsFixAgeSeconds != null ? Math.max(1, Math.round(inc.gpsFixAgeSeconds / 60)) : null;
+        const ageLabel = ageMin != null ? `${ageMin}m old` : 'stale';
+        sourceBadgeHtml = `<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟡 LAST KNOWN (${ageLabel})</span>`;
+      } else if (inc.locationSource === 'MANUAL') {
+        sourceBadgeHtml = `<span style="background: #475569; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">⚪ MANUAL</span>`;
+      } else if (inc.locationSource === 'UNAVAILABLE') {
+        sourceBadgeHtml = `<span style="background: #dc2626; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🔴 UNAVAILABLE</span>`;
+      } else {
+        sourceBadgeHtml = `<span style="background: #334155; color: #94a3b8; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 10px;">Location source not recorded</span>`;
+      }
+
       marker.bindPopup(`
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; color: #0f172a; min-width: 250px; padding: 6px;">
           ${livePing ? `
@@ -530,8 +556,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           </div>
           <h4 style="margin: 7px 0 4px 0; font-weight: 800; font-size: 13px; line-height: 1.3;">${inc.title}</h4>
           <p style="margin: 0; color: #475569; font-size: 11px;">${inc.locationName}</p>
-          <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 11px;">📍 ${inc.ghanaPostCode || `${effectiveCoords[0].toFixed(3)}, ${effectiveCoords[1].toFixed(3)}`}</span>
+          <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+            ${sourceBadgeHtml}
             <span style="color: #059669; font-weight: 700; font-size: 10px; background: #ecfdf5; padding: 1px 5px; border-radius: 4px;">Act 772 Sealed</span>
           </div>
           <div style="margin-top: 8px; display: flex; gap: 4px;">
@@ -558,64 +584,68 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
     if (selectedIncident) {
       const selPing = latestPings?.[selectedIncident.id];
-      const selCoords: [number, number] = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
+      const selCoords: [number, number] | null = selPing ? [selPing.lat, selPing.lng] : selectedIncident.coordinates;
 
-      const route = computeTacticalDispatchRoute(
-        selCoords,
-        selectedIncident.locationName,
-        selectedIncident.assignedAgency,
-        selectedStation || undefined
-      );
+      if (selCoords && selCoords[0] != null && selCoords[1] != null) {
+        const route = computeTacticalDispatchRoute(
+          selCoords,
+          selectedIncident.locationName,
+          selectedIncident.assignedAgency,
+          selectedStation || undefined
+        );
 
-      setActiveRoute(route);
+        setActiveRoute(route);
 
-      // Station Marker
-      const stationIcon = L.divIcon({
-        className: 'custom-station-icon',
-        html: `
-          <div style="
-            background: linear-gradient(135deg, #1e3a8a, #0284c7);
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            border: 2px solid #FCD116;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 15px;
-            cursor: pointer;
-          ">
-            🚔
-          </div>
-        `,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17]
-      });
-
-      const stMarker = L.marker(route.originStation.coordinates, { icon: stationIcon })
-        .addTo(map)
-        .bindTooltip(`<b>DISPATCH ORIGIN</b><br/>${route.originStation.name}<br/>Units: ${route.originStation.patrolUnitsAvailable}`, {
-          sticky: true
+        // Station Marker
+        const stationIcon = L.divIcon({
+          className: 'custom-station-icon',
+          html: `
+            <div style="
+              background: linear-gradient(135deg, #1e3a8a, #0284c7);
+              width: 34px;
+              height: 34px;
+              border-radius: 10px;
+              border: 2px solid #FCD116;
+              box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 15px;
+              cursor: pointer;
+            ">
+              🚔
+            </div>
+          `,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
         });
 
-      stationMarkerRef.current = stMarker;
+        const stMarker = L.marker(route.originStation.coordinates, { icon: stationIcon })
+          .addTo(map)
+          .bindTooltip(`<b>DISPATCH ORIGIN</b><br/>${route.originStation.name}<br/>Units: ${route.originStation.patrolUnitsAvailable}`, {
+            sticky: true
+          });
 
-      // Draw Glowing Tactical Route Polyline
-      const polyline = L.polyline(route.routePolyline, {
-        color: '#38bdf8',
-        weight: 4.5,
-        opacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round',
-        dashArray: '8, 10'
-      }).addTo(map);
+        stationMarkerRef.current = stMarker;
 
-      routeLayerRef.current = polyline;
+        // Draw Glowing Tactical Route Polyline
+        const polyline = L.polyline(route.routePolyline, {
+          color: '#38bdf8',
+          weight: 4.5,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+          dashArray: '8, 10'
+        }).addTo(map);
 
-      // Smoothly narrow down and focus directly on the incident / evidence capture coordinates
-      map.flyTo(selCoords, 18.5, { duration: 0.85 });
+        routeLayerRef.current = polyline;
+
+        // Smoothly narrow down and focus directly on the incident / evidence capture coordinates
+        map.flyTo(selCoords, 18.5, { duration: 0.85 });
+      } else {
+        setActiveRoute(null);
+      }
     } else {
       setActiveRoute(null);
     }

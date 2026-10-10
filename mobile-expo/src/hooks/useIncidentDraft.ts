@@ -9,7 +9,8 @@ import { CitizenUser } from '../components/CitizenAccessWall';
 import {
   IncidentCategory,
   GpsCoordinates,
-  EvidenceMediaItem
+  EvidenceMediaItem,
+  LocationSource
 } from '../types';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult, formatPlainLanguageUploadError } from '../services/evidenceUploader';
@@ -21,9 +22,9 @@ export interface UseIncidentDraftProps {
   citizen: CitizenUser;
   coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
+  locationSource: LocationSource;
+  gpsFixAgeSeconds: number | null;
   locationName: string;
-  landmark: string;
-  ghanaPostCode: string;
   region: string;
 }
 
@@ -58,8 +59,9 @@ export const useIncidentDraft = ({
   citizen,
   coords,
   gpsAccuracy,
+  locationSource,
+  gpsFixAgeSeconds,
   locationName,
-  ghanaPostCode,
   region
 }: UseIncidentDraftProps): UseIncidentDraftResult => {
   const [category, setCategory] = useState<IncidentCategory>('CRIMINAL_OFFENSE');
@@ -279,11 +281,14 @@ export const useIncidentDraft = ({
               timestampUtc: new Date().toISOString(),
               fileSizeBytes: fileSize,
               gpsWatermark: {
-                lat: coords.latitude,
-                lng: coords.longitude,
+                lat: coords ? coords.latitude : null,
+                lng: coords ? coords.longitude : null,
                 landmark: landmark.trim() || 'Direct GPS Lock',
-                ghanaPostCode: ghanaPostCode ? ghanaPostCode.toUpperCase() : '',
-                accuracyMeters: typeof gpsAccuracy === 'number' ? gpsAccuracy : 0
+                accuracyMeters: (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
+                  ? gpsAccuracy
+                  : null,
+                locationSource,
+                fixAgeSeconds: gpsFixAgeSeconds ?? null,
               },
               isTamperProofVerified: false,
               uploadStatus: 'QUEUED'
@@ -291,17 +296,22 @@ export const useIncidentDraft = ({
           ]
         : [];
 
+      const effectiveLocationName = combinedLocation.trim() || (locationSource === 'UNAVAILABLE' ? 'Location pending' : 'Manual Location');
       const payload: any = {
         tracking_code: trackingCode,
         category,
         title: title.trim(),
         description: description.trim(),
-        location_name: combinedLocation || 'Unknown location',
-        ghanapost_code: ghanaPostCode.trim() ? ghanaPostCode.trim().toUpperCase() : '',
-        region: region || 'Greater Accra',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        gps_accuracy_m: typeof gpsAccuracy === 'number' ? gpsAccuracy : null,
+        location_name: effectiveLocationName,
+        ghanapost_code: null,
+        region: region || 'UNKNOWN',
+        latitude: coords ? coords.latitude : null,
+        longitude: coords ? coords.longitude : null,
+        location_source: locationSource,
+        gps_fix_age_s: gpsFixAgeSeconds ?? null,
+        gps_accuracy_m: (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
+          ? gpsAccuracy
+          : null,
         media: initialMediaList,
         is_anonymous: isAnonymous,
         reporter_data: isAnonymous
@@ -370,13 +380,16 @@ export const useIncidentDraft = ({
             category,
             title: title.trim(),
             description: description.trim(),
-            locationName: combinedLocation,
-            ghanaPostCode: ghanaPostCode.toUpperCase(),
-            region: region || 'Greater Accra',
-            latitude: coords.latitude,
-            longitude: coords.longitude,
+            locationName: effectiveLocationName,
+            region: region || 'UNKNOWN',
+            latitude: coords ? coords.latitude : null,
+            longitude: coords ? coords.longitude : null,
+            location_source: locationSource,
+            gps_fix_age_s: gpsFixAgeSeconds ?? null,
             landmark: landmark.trim(),
-            gpsAccuracy: typeof gpsAccuracy === 'number' ? gpsAccuracy : null,
+            gpsAccuracy: (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
+              ? gpsAccuracy
+              : null,
             mediaType,
             recordedDuration: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
             permanentVideoUri: permanentUri,
@@ -459,13 +472,16 @@ export const useIncidentDraft = ({
         category,
         title: title.trim(),
         description: description.trim(),
-        locationName: combinedLocation,
-        ghanaPostCode: ghanaPostCode.toUpperCase(),
-        region: region || 'Greater Accra',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
+        locationName: effectiveLocationName,
+        region: region || 'UNKNOWN',
+        latitude: coords ? coords.latitude : null,
+        longitude: coords ? coords.longitude : null,
+        location_source: locationSource,
+        gps_fix_age_s: gpsFixAgeSeconds ?? null,
         landmark: landmark.trim(),
-        gpsAccuracy: typeof gpsAccuracy === 'number' ? gpsAccuracy : null,
+        gpsAccuracy: (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
+          ? gpsAccuracy
+          : null,
         mediaType,
         recordedDuration: recordedDuration || 15,
         permanentVideoUri: permanentUri,
@@ -525,55 +541,91 @@ export const useIncidentDraft = ({
         return;
       }
 
-      // Media upload succeeded: link verified URL back to the incident in Supabase
-      const verifiedMediaList: EvidenceMediaItem[] = [
+      // Media upload succeeded: link verified URL back to the incident in Supabase via attach_incident_media RPC
+      // Sanitize media items for attach_incident_media: omit localUri
+      const mediaToAttach = [
         {
           type: mediaType,
           video_storage_path: fileName,
-          durationSeconds: recordedDuration || (mediaType === 'VIDEO' ? 15 : 1),
+          durationSeconds: recordedDuration || 0,
           rawS3Url: uploadResult.publicUrl || canonicalPublicUrl,
           thumbnailUrl: uploadResult.publicUrl || canonicalPublicUrl,
-          localUri: permanentUri,
           sha256Checksum: computedHash || null,
           timestampUtc: new Date().toISOString(),
           fileSizeBytes: uploadResult.verifiedSize || fileSize,
           gpsWatermark: {
-            lat: coords.latitude,
-            lng: coords.longitude,
+            lat: coords ? coords.latitude : null,
+            lng: coords ? coords.longitude : null,
             landmark: landmark.trim() || 'Direct GPS Lock',
-            ghanaPostCode: ghanaPostCode ? ghanaPostCode.toUpperCase() : '',
-            accuracyMeters: typeof gpsAccuracy === 'number' ? gpsAccuracy : 0
+            accuracyMeters: (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
+              ? gpsAccuracy
+              : null,
+            locationSource,
+            fixAgeSeconds: gpsFixAgeSeconds ?? null,
           },
           isTamperProofVerified: Boolean(computedHash && computedHash.length === 64),
           uploadStatus: 'UPLOADED'
         }
       ];
 
-      const { error: updateErr } = await supabase
-        .from('incidents')
-        .update({ media: verifiedMediaList })
-        .eq('tracking_code', trackingCode);
+      // Call public.attach_incident_media RPC with retry logic
+      let attachSucceeded = false;
+      let attachErrorMsg = '';
 
-      if (updateErr) {
-        console.warn('[EVIDENCE_UPDATE_ERROR] Failed to update incident media list:', updateErr);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const { data: attachResult, error: attachErr } = await supabase.rpc('attach_incident_media', {
+            p_tracking_code: trackingCode,
+            p_media: mediaToAttach,
+          });
+
+          if (!attachErr && attachResult === true) {
+            attachSucceeded = true;
+            break;
+          }
+
+          attachErrorMsg = attachErr?.message || (attachResult === false ? 'Server rejected media attachment' : 'Unknown RPC response');
+          console.warn(`[ATTACH_MEDIA_ATTEMPT_${attempt}_FAILED]`, attachErrorMsg);
+          if (attempt < 3) {
+            await new Promise(res => setTimeout(res, attempt * 1000));
+          }
+        } catch (e: any) {
+          attachErrorMsg = e?.message || 'Network error during media attachment';
+          console.warn(`[ATTACH_MEDIA_ATTEMPT_${attempt}_ERROR]`, e);
+          if (attempt < 3) {
+            await new Promise(res => setTimeout(res, attempt * 1000));
+          }
+        }
       }
-
-      // Remove from offline queue and clean up cache
-      await removePendingReport(trackingCode, true);
-      if (recordedUri) await cleanupCachedEvidence(recordedUri);
 
       setIsSubmitting(false);
       setIsUploadingMedia(false);
       setUploadProgress(100);
-      setUploadStatusText('✅ Report & Evidence Sealed');
-      safeHaptics.success();
-      announceAccessibility(`Report and evidence transmitted successfully. Tracking Code ${trackingCode}`);
 
-      Alert.alert(
-        '✅ Report & Evidence Sealed',
-        `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.`,
-        [{ text: 'OK' }]
-      );
+      if (!attachSucceeded) {
+        console.warn(`[ATTACH_MEDIA_FINAL_FAILURE] Case ${trackingCode}:`, attachErrorMsg);
+        setUploadStatusText('⚠️ Report sent, video pending attachment');
+        safeHaptics.warning();
+        Alert.alert(
+          '⚠️ Evidence Attachment Pending',
+          `Your initial incident report (${trackingCode}) was received, but linking the video file is still pending.\n\nThe video is preserved safely in your offline queue and will automatically retry in the background.\n\nReason: ${attachErrorMsg}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Remove from offline queue and clean up cache only on confirmed success
+        await removePendingReport(trackingCode, true);
+        if (recordedUri) await cleanupCachedEvidence(recordedUri);
+
+        setUploadStatusText('✅ Report & Evidence Sealed');
+        safeHaptics.success();
+        announceAccessibility(`Report and evidence transmitted successfully. Tracking Code ${trackingCode}`);
+
+        Alert.alert(
+          '✅ Report & Evidence Sealed',
+          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.`,
+          [{ text: 'OK' }]
+        );
+      }
 
       setTitle('');
       setDescription('');
@@ -602,9 +654,10 @@ export const useIncidentDraft = ({
     citizen,
     coords,
     gpsAccuracy,
+    locationSource,
+    gpsFixAgeSeconds,
     locationName,
     landmark,
-    ghanaPostCode,
     region,
     title,
     description,

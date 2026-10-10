@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { IncidentReport, IncidentStatus, AgencyType, SosPing } from '../types';
+import { IncidentReport, IncidentStatus, AgencyType, SosPing, LocationSource } from '../types';
 import {
   Shield,
   FileCheck,
@@ -38,6 +38,45 @@ import {
   AiTriageResult
 } from '../services/geminiAiService';
 import { AiCaseBriefModal } from './AiCaseBriefModal';
+
+export const renderLocationSourceBadge = (locationSource?: LocationSource | null, fixAgeSeconds?: number | null) => {
+  if (locationSource === 'LIVE') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
+        LIVE
+      </span>
+    );
+  }
+  if (locationSource === 'LAST_KNOWN') {
+    const ageMin = fixAgeSeconds != null ? Math.max(1, Math.round(fixAgeSeconds / 60)) : null;
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
+        LAST KNOWN {ageMin ? `(${ageMin}m old)` : ''}
+      </span>
+    );
+  }
+  if (locationSource === 'MANUAL') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+        MANUAL
+      </span>
+    );
+  }
+  if (locationSource === 'UNAVAILABLE') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
+        UNAVAILABLE
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+      Location source not recorded
+    </span>
+  );
+};
 
 interface PoliceCommandDashboardProps {
   incidents: IncidentReport[];
@@ -412,8 +451,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
       const matchTrack = inc.trackingCode.toLowerCase().includes(q);
       const matchTitle = inc.title.toLowerCase().includes(q);
       const matchLoc = (inc.locationName || '').toLowerCase().includes(q);
-      const matchGps = (inc.ghanaPostCode || '').toLowerCase().includes(q);
-      if (!matchTrack && !matchTitle && !matchLoc && !matchGps) return false;
+      if (!matchTrack && !matchTitle && !matchLoc) return false;
     }
     return true;
   });
@@ -651,13 +689,13 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80">
-                    <span className="font-mono text-blue-400 font-bold text-[11px]">
-                      📍 {inc.ghanaPostCode || `${inc.coordinates[0].toFixed(3)}, ${inc.coordinates[1].toFixed(3)}`}
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80 gap-2">
+                    <span className="font-mono text-blue-400 font-bold text-[11px] truncate">
+                      📍 {inc.coordinates ? `${inc.coordinates[0].toFixed(4)}° N, ${inc.coordinates[1].toFixed(4)}° W` : 'Location unavailable'}
                     </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-950 text-slate-300 border border-slate-800">
-                      {inc.assignedAgency} • {inc.status.replace(/_/g, ' ')}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {renderLocationSourceBadge(inc.locationSource, inc.gpsFixAgeSeconds)}
+                    </div>
                   </div>
                 </div>
               );
@@ -751,6 +789,26 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
             {/* CARD 1: GOOGLE MAPS TACTICAL DISPATCH BANNER */}
             {(() => {
+              if (!selectedIncident.coordinates) {
+                return (
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center space-x-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                        <Navigation className="w-5 h-5 text-slate-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-slate-300">Tactical Route Unavailable</span>
+                          {renderLocationSourceBadge(selectedIncident.locationSource, selectedIncident.gpsFixAgeSeconds)}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Incident was reported without GPS telemetry. Sector: <span className="text-slate-300 font-semibold">{selectedIncident.locationName}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
               const route = computeTacticalDispatchRoute(
                 selectedIncident.coordinates,
                 selectedIncident.locationName,
@@ -1005,24 +1063,35 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     <span>🇬🇭</span>
                     <span>CITIZEN-ALERT EVIDENCE LOCK (ACT 772)</span>
                   </p>
-                  <p className="text-slate-200">
-                    LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W
-                  </p>
-                  <p className="text-amber-400 font-bold">
-                    GHANAPOST: {selectedIncident.ghanaPostCode || 'Not provided'} (±{currentMedia?.gpsWatermark?.accuracyMeters || 3.2}m)
-                  </p>
+                  {selectedIncident.coordinates ? (
+                    <>
+                      <p className="text-slate-200">
+                        LAT: {selectedIncident.coordinates[0].toFixed(5)}° N | LNG: {selectedIncident.coordinates[1].toFixed(5)}° W
+                      </p>
+                      <p className="text-emerald-400 font-bold">
+                        {selectedIncident.locationSource === 'LIVE' ? 'GPS LIVE FIX' : selectedIncident.locationSource === 'LAST_KNOWN' ? 'LAST KNOWN FIX' : 'MANUAL LOCATION'}
+                        {(selectedIncident.locationSource === 'LIVE' || selectedIncident.locationSource === 'LAST_KNOWN') && (selectedIncident.gpsAccuracyM || currentMedia?.gpsWatermark?.accuracyMeters) ? ` (±${selectedIncident.gpsAccuracyM || currentMedia?.gpsWatermark?.accuracyMeters}m)` : ''}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-red-400 font-bold">
+                      LOCATION UNAVAILABLE
+                    </p>
+                  )}
                 </div>
 
                 {/* Direct Google Maps Satellite / OpenStreetMap link */}
-                <a
-                  href={`https://www.google.com/maps?q=${selectedIncident?.coordinates?.[0] ?? 5.6037},${selectedIncident?.coordinates?.[1] ?? -0.1870}&ll=${selectedIncident?.coordinates?.[0] ?? 5.6037},${selectedIncident?.coordinates?.[1] ?? -0.1870}&z=20&t=k`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-lg backdrop-blur-md transition"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  <span>Satellite</span>
-                </a>
+                {selectedIncident.coordinates && (
+                  <a
+                    href={`https://www.google.com/maps?q=${selectedIncident.coordinates[0]},${selectedIncident.coordinates[1]}&ll=${selectedIncident.coordinates[0]},${selectedIncident.coordinates[1]}&z=20&t=k`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-lg backdrop-blur-md transition"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Satellite</span>
+                  </a>
+                )}
               </div>
 
               {/* Forensic Player Controls */}
@@ -1400,7 +1469,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             <div className="absolute bottom-3 left-3 bg-black/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-700/80 text-[11px] font-mono text-white shadow-2xl pointer-events-none">
               <p className="text-ghana-gold font-bold">🇬🇭 CITIZEN-ALERT FORENSIC TELEMETRY</p>
               <p className="text-slate-300">
-                LAT: {(selectedIncident?.coordinates?.[0] ?? 5.6037).toFixed(5)}° N | LNG: {(selectedIncident?.coordinates?.[1] ?? -0.1870).toFixed(5)}° W • {selectedIncident?.ghanaPostCode || 'Not provided'}
+                {selectedIncident?.coordinates ? `LAT: ${selectedIncident.coordinates[0].toFixed(5)}° N | LNG: ${selectedIncident.coordinates[1].toFixed(5)}° W` : 'LOCATION UNAVAILABLE'}
               </p>
             </div>
           </div>

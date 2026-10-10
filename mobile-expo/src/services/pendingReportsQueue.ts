@@ -4,7 +4,7 @@ import { File } from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from '../lib/supabase';
 import { uploadEvidenceStreaming, formatPlainLanguageUploadError } from './evidenceUploader';
-import { IncidentCategory, MediaType, EvidenceMediaItem } from '../types';
+import { IncidentCategory, MediaType, EvidenceMediaItem, LocationSource } from '../types';
 
 const STORAGE_KEY = '@citizen_alert_pending_reports_v1';
 
@@ -15,10 +15,11 @@ export interface PendingReportItem {
   title: string;
   description: string;
   locationName: string;
-  ghanaPostCode: string;
   region: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
+  location_source?: LocationSource;
+  gps_fix_age_s?: number | null;
   landmark: string;
   gpsAccuracy: number | null;
   mediaType: MediaType;
@@ -166,9 +167,10 @@ export async function processPendingReport(
               gpsWatermark: {
                 lat: report.latitude,
                 lng: report.longitude,
-                landmark: report.landmark || 'GPS Lock',
-                ghanaPostCode: report.ghanaPostCode || '',
-                accuracyMeters: report.gpsAccuracy || 0
+                landmark: report.landmark || 'Incident Location',
+                accuracyMeters: (report.location_source === 'LIVE' || report.location_source === 'LAST_KNOWN') ? report.gpsAccuracy : null,
+                locationSource: report.location_source || (report.latitude !== null ? 'LAST_KNOWN' : 'UNAVAILABLE'),
+                fixAgeSeconds: report.gps_fix_age_s ?? null,
               },
               isTamperProofVerified: false,
               uploadStatus: 'QUEUED'
@@ -176,6 +178,7 @@ export async function processPendingReport(
           ]
         : [];
 
+      const effectiveSource = report.location_source || (report.latitude !== null ? 'LAST_KNOWN' : 'UNAVAILABLE');
       const payload: any = {
         tracking_code: report.trackingCode,
         category: report.category,
@@ -183,12 +186,16 @@ export async function processPendingReport(
         description: report.description,
         location_name: report.isAnonymous
           ? 'Withheld (anonymous)'
-          : (report.locationName || (report.landmark ? `${report.landmark}` : 'Unknown location')),
-        ghanapost_code: report.isAnonymous ? '' : (report.ghanaPostCode ? report.ghanaPostCode.toUpperCase() : ''),
-        region: report.region || 'Greater Accra',
+          : (report.locationName || (effectiveSource === 'UNAVAILABLE' ? 'Location pending' : 'Manual location')),
+        ghanapost_code: null,
+        region: report.region || 'UNKNOWN',
         latitude: report.latitude,
         longitude: report.longitude,
-        gps_accuracy_m: typeof report.gpsAccuracy === 'number' ? report.gpsAccuracy : null,
+        location_source: effectiveSource,
+        gps_fix_age_s: report.gps_fix_age_s ?? null,
+        gps_accuracy_m: (effectiveSource === 'LIVE' || effectiveSource === 'LAST_KNOWN') && typeof report.gpsAccuracy === 'number'
+          ? report.gpsAccuracy
+          : null,
         media: initialMediaList,
         is_anonymous: report.isAnonymous,
         reporter_data: report.isAnonymous
@@ -259,36 +266,39 @@ export async function processPendingReport(
       }
 
       const canonicalPublicUrl = report.fileName ? supabase.storage.from('evidence').getPublicUrl(report.fileName).data.publicUrl : '';
-      const verifiedMediaList: EvidenceMediaItem[] = [
+      // Sanitize media items for attach_incident_media: omit localUri
+      const mediaToAttach = [
         {
           type: report.mediaType,
           video_storage_path: report.fileName,
           durationSeconds: report.recordedDuration || (report.mediaType === 'VIDEO' ? 15 : 1),
           rawS3Url: uploadRes.publicUrl || canonicalPublicUrl,
           thumbnailUrl: uploadRes.publicUrl || canonicalPublicUrl,
-          localUri: report.permanentVideoUri,
           sha256Checksum: report.sha256Checksum || null,
           timestampUtc: report.createdAt,
           fileSizeBytes: uploadRes.verifiedSize || report.fileSizeBytes,
           gpsWatermark: {
             lat: report.latitude,
             lng: report.longitude,
-            landmark: report.landmark || 'GPS Lock',
-            ghanaPostCode: report.ghanaPostCode || '',
-            accuracyMeters: report.gpsAccuracy || 0
+            landmark: report.landmark || 'Incident Location',
+            accuracyMeters: (report.location_source === 'LIVE' || report.location_source === 'LAST_KNOWN') ? report.gpsAccuracy : null,
+            locationSource: report.location_source || (report.latitude !== null ? 'LAST_KNOWN' : 'UNAVAILABLE'),
+            fixAgeSeconds: report.gps_fix_age_s ?? null,
           },
           isTamperProofVerified: Boolean(report.sha256Checksum && report.sha256Checksum.length === 64),
           uploadStatus: 'UPLOADED'
         }
       ];
 
-      const { error: updateErr } = await supabase
-        .from('incidents')
-        .update({ media: verifiedMediaList })
-        .eq('tracking_code', report.trackingCode);
+      const { data: attachResult, error: attachErr } = await supabase.rpc('attach_incident_media', {
+        p_tracking_code: report.trackingCode,
+        p_media: mediaToAttach
+      });
 
-      if (updateErr) {
-        console.warn('[PENDING_QUEUE_UPDATE_ERROR] Failed to update incident media list:', updateErr);
+      if (attachErr || attachResult === false) {
+        const attachErrMsg = attachErr?.message || (attachResult === false ? 'Server rejected media attachment RPC' : 'Unknown RPC error');
+        console.warn('[PENDING_QUEUE_ATTACH_ERROR]', attachErrMsg);
+        throw new Error(attachErrMsg);
       }
 
       report.mediaUploaded = true;

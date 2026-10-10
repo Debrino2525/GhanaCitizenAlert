@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Crosshair, RefreshCw, Radio } from 'lucide-react-native';
-import { GpsCoordinates, GpsLockStatus } from '../types';
+import { Crosshair, RefreshCw, Radio, Clock, MapPin, AlertTriangle } from 'lucide-react-native';
+import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
 import { TranslationMap } from '../constants/i18n';
 import { tokens } from '../theme/tokens';
 
@@ -10,8 +10,11 @@ interface GpsTelemetryCardProps {
   gpsAccuracy: number | null;
   isLocating: boolean;
   gpsStatus: GpsLockStatus;
+  locationSource: LocationSource;
+  gpsFixAgeSeconds: number | null;
   t: TranslationMap;
   onRefreshGps: () => void;
+  onManualLocationPress?: () => void;
 }
 
 export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
@@ -19,52 +22,95 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   gpsAccuracy,
   isLocating,
   gpsStatus,
+  locationSource,
+  gpsFixAgeSeconds,
   t,
-  onRefreshGps
+  onRefreshGps,
+  onManualLocationPress,
 }) => {
-  const hasValidFix = coords && (coords.latitude !== 0 || coords.longitude !== 0) && gpsStatus === 'LOCKED';
+  const isLive = locationSource === 'LIVE' && coords !== null;
+  const isStale = locationSource === 'LAST_KNOWN' && coords !== null;
+  const isManual = locationSource === 'MANUAL';
+  const isUnavailable = locationSource === 'UNAVAILABLE' || coords === null;
+
+  const formatAgeText = (seconds: number | null): string => {
+    if (seconds === null || seconds === undefined) return '';
+    if (seconds < 60) return `${seconds}s old`;
+    const mins = Math.floor(seconds / 60);
+    return `${mins}m old`;
+  };
 
   return (
-    <View style={styles.gpsCard}>
+    <View
+      style={[
+        styles.gpsCard,
+        isLive && styles.gpsCardLive,
+        isStale && styles.gpsCardStale,
+        isManual && styles.gpsCardManual,
+        isUnavailable && styles.gpsCardUnavailable,
+      ]}
+    >
       <View style={styles.gpsCardHeader}>
         <View style={styles.gpsIndicatorRow}>
-          <Radio
-            color={
-              hasValidFix
-                ? tokens.colors.status.success
-                : isLocating
-                ? tokens.colors.status.warning
-                : tokens.colors.status.danger
-            }
-            size={16}
-          />
-          <Text style={styles.gpsCardTitle}>
-            {isLocating
-              ? t.gpsLocating
-              : hasValidFix
-              ? t.gpsLocked
-              : 'GPS SIGNAL REQUIRED'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          onPress={onRefreshGps}
-          disabled={isLocating}
-          style={styles.recalibrateBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Recalibrate GPS Coordinates"
-        >
-          {isLocating ? (
-            <ActivityIndicator size="small" color={tokens.colors.bg.base} />
+          {isLive ? (
+            <Radio color={tokens.colors.status.success} size={16} />
+          ) : isStale ? (
+            <Clock color={tokens.colors.status.warning} size={16} />
+          ) : isManual ? (
+            <MapPin color={tokens.colors.text.secondary} size={16} />
           ) : (
-            <View style={styles.btnInnerRow}>
-              <RefreshCw color={tokens.colors.bg.base} size={12} />
-              <Text style={styles.recalibrateBtnText}>Refresh GPS</Text>
-            </View>
+            <AlertTriangle color={tokens.colors.status.danger} size={16} />
           )}
-        </TouchableOpacity>
+
+          <View>
+            <Text
+              style={[
+                styles.gpsCardTitle,
+                isLive && { color: tokens.colors.status.success },
+                isStale && { color: tokens.colors.status.warning },
+                isManual && { color: tokens.colors.text.secondary },
+                isUnavailable && { color: tokens.colors.status.danger },
+              ]}
+            >
+              {isLocating
+                ? t.gpsLocating
+                : isLive
+                ? 'GPS ACQUIRED (LIVE)'
+                : isStale
+                ? `Last known location, ${formatAgeText(gpsFixAgeSeconds)}. Not live.`
+                : isManual
+                ? 'Manual Location (Reported)'
+                : 'LOCATION UNAVAILABLE'}
+            </Text>
+            {isStale && (
+              <Text style={styles.staleNoticeText}>
+                Hardware GPS fix is older than 15s. Tap Refresh to acquire live fix.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.headerBtnGroup}>
+          <TouchableOpacity
+            onPress={onRefreshGps}
+            disabled={isLocating}
+            style={styles.recalibrateBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Acquire Fresh GPS Fix"
+          >
+            {isLocating ? (
+              <ActivityIndicator size="small" color={tokens.colors.bg.base} />
+            ) : (
+              <View style={styles.btnInnerRow}>
+                <RefreshCw color={tokens.colors.bg.base} size={12} />
+                <Text style={styles.recalibrateBtnText}>Refresh GPS</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {hasValidFix ? (
+      {coords ? (
         <View style={styles.gpsCoordsRow}>
           <View style={styles.gpsCoordItem}>
             <Text style={styles.gpsCoordLabel}>LATITUDE</Text>
@@ -78,11 +124,19 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
           <View style={styles.gpsCoordDivider} />
           <View style={styles.gpsCoordItem}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-              <Crosshair color={tokens.colors.status.success} size={10} />
+              <Crosshair
+                color={isLive ? tokens.colors.status.success : tokens.colors.status.warning}
+                size={10}
+              />
               <Text style={styles.gpsCoordLabel}>ACCURACY</Text>
             </View>
-            <Text style={[styles.gpsCoordVal, { color: tokens.colors.status.success }]}>
-              {gpsAccuracy !== null ? `±${gpsAccuracy}m` : 'Live Fix'}
+            <Text
+              style={[
+                styles.gpsCoordVal,
+                { color: isLive ? tokens.colors.status.success : tokens.colors.status.warning },
+              ]}
+            >
+              {gpsAccuracy !== null ? `±${gpsAccuracy}m` : isLive ? 'Live Fix' : 'Estimated'}
             </Text>
           </View>
         </View>
@@ -90,7 +144,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
         <View style={styles.unavailableBox}>
           <Crosshair color={tokens.colors.status.warning} size={14} />
           <Text style={styles.unavailableText}>
-            Location unavailable. Refresh GPS or move outdoors.
+            No live satellite lock. Move outdoors, tap Refresh GPS, or enter location manually below.
           </Text>
         </View>
       )}
@@ -105,87 +159,112 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: tokens.colors.police.dark,
     padding: tokens.spacing.md,
-    gap: tokens.spacing.sm
+    gap: tokens.spacing.sm,
+  },
+  gpsCardLive: {
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+  gpsCardStale: {
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.05)',
+  },
+  gpsCardManual: {
+    borderColor: tokens.colors.police.badge,
+  },
+  gpsCardUnavailable: {
+    borderColor: 'rgba(239, 68, 68, 0.4)',
   },
   gpsCardHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    gap: tokens.spacing.sm,
   },
   gpsIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: tokens.spacing.xs
+    gap: tokens.spacing.sm,
+    flex: 1,
   },
   gpsCardTitle: {
-    color: tokens.colors.police.badge,
+    fontFamily: tokens.typography.fontFamily.monoBold,
     fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '800',
-    letterSpacing: 0.5
+    letterSpacing: 0.8,
+  },
+  staleNoticeText: {
+    fontFamily: tokens.typography.fontFamily.sansRegular,
+    fontSize: 10,
+    color: tokens.colors.status.warning,
+    marginTop: 2,
+  },
+  headerBtnGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   recalibrateBtn: {
     backgroundColor: tokens.colors.brand.gold,
-    paddingHorizontal: tokens.spacing.md,
-    paddingVertical: tokens.spacing.xs,
+    paddingHorizontal: tokens.spacing.sm,
+    paddingVertical: 6,
     borderRadius: tokens.radius.sm,
-    minHeight: 32,
-    justifyContent: 'center'
+    minHeight: 28,
+    justifyContent: 'center',
   },
   btnInnerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4
+    gap: 4,
   },
   recalibrateBtnText: {
-    color: tokens.colors.bg.base,
+    fontFamily: tokens.typography.fontFamily.sans,
     fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
+    color: tokens.colors.bg.base,
   },
   gpsCoordsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    backgroundColor: tokens.colors.bg.base,
-    padding: tokens.spacing.sm,
+    justifyContent: 'space-between',
+    backgroundColor: tokens.colors.surface.cardSubtle,
     borderRadius: tokens.radius.md,
+    padding: tokens.spacing.sm,
     borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
+    borderColor: tokens.colors.border.subtle,
   },
   gpsCoordItem: {
+    flex: 1,
     alignItems: 'center',
-    flex: 1
+    gap: 2,
   },
   gpsCoordDivider: {
     width: 1,
     height: 24,
-    backgroundColor: tokens.colors.border.subtle
+    backgroundColor: tokens.colors.border.subtle,
   },
   gpsCoordLabel: {
-    color: tokens.colors.text.muted,
+    fontFamily: tokens.typography.fontFamily.mono,
     fontSize: 9,
-    fontWeight: 'bold'
+    color: tokens.colors.text.muted,
+    letterSpacing: 0.5,
   },
   gpsCoordVal: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.xs,
     fontFamily: tokens.typography.fontFamily.monoBold,
-    fontWeight: 'bold',
-    marginTop: 2
+    fontSize: tokens.typography.fontSize.xs,
+    color: tokens.colors.text.white,
   },
   unavailableBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: tokens.spacing.sm,
-    backgroundColor: tokens.colors.bg.base,
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
     padding: tokens.spacing.sm,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.4)'
+    borderColor: 'rgba(245, 158, 11, 0.2)',
   },
   unavailableText: {
-    color: tokens.colors.status.warning,
+    fontFamily: tokens.typography.fontFamily.sansMedium,
     fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '600',
-    flex: 1
-  }
+    color: tokens.colors.status.warning,
+    flex: 1,
+  },
 });

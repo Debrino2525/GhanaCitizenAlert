@@ -52,7 +52,7 @@ STATUTORY LEGAL FRAMEWORK:
 ${brief.legalFramework.map((f, i) => `${i + 1}. ${f}`).join('\n')}
 
 GEOSPATIAL & TACTICAL DISPATCH:
-Location: ${brief.geospatialAssessment.locationName} (${brief.geospatialAssessment.ghanaPostCode})
+Location: ${brief.geospatialAssessment.locationName}
 GPS: ${brief.geospatialAssessment.coordinates}
 Nearest Station: ${brief.geospatialAssessment.closestStationName} (ETA ~${brief.geospatialAssessment.estimatedEtaMinutes} mins)
 
@@ -232,7 +232,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                       <span>Scene Coordinates & Sector</span>
                     </span>
                     <p className="text-white font-mono font-bold text-xs">{brief.geospatialAssessment.coordinates}</p>
-                    <p className="text-slate-400">{brief.geospatialAssessment.locationName} ({brief.geospatialAssessment.ghanaPostCode})</p>
+                    <p className="text-slate-400">{brief.geospatialAssessment.locationName}</p>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">

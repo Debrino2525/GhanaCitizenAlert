@@ -10,8 +10,10 @@ export interface PublicFeedIncident {
   description: string;
   location_name: string;
   region: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
+  location_source?: string | null;
+  gps_fix_age_s?: number | null;
   severity: string;
   status: string;
   public_corroborations: number;
@@ -58,22 +60,27 @@ export const PublicWebFeed: React.FC = () => {
         throw rawError || error;
       }
 
-      const mapped: PublicFeedIncident[] = (rawData || []).map((r: any) => ({
-        id: r.id,
-        tracking_code: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
-        category: r.category || 'CIVIC_ALERT',
-        title: r.title,
-        description: r.description,
-        location_name: r.location_name,
-        region: r.region,
-        latitude: r.latitude || 5.6037,
-        longitude: r.longitude || -0.1870,
-        severity: r.severity || 'NORMAL',
-        status: r.status || 'RECEIVED_PENDING_TRIAGE',
-        public_corroborations: r.public_corroborations || 0,
-        created_at: r.created_at,
-        updated_at: r.updated_at
-      }));
+      const mapped: PublicFeedIncident[] = (rawData || []).map((r: any) => {
+        const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
+        return {
+          id: r.id,
+          tracking_code: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
+          category: r.category || 'CIVIC_ALERT',
+          title: r.title,
+          description: r.description,
+          location_name: r.location_name || 'Location pending',
+          region: r.region || 'National',
+          latitude: hasValidCoords ? r.latitude : null,
+          longitude: hasValidCoords ? r.longitude : null,
+          location_source: r.location_source || null,
+          gps_fix_age_s: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
+          severity: r.severity || 'NORMAL',
+          status: r.status || 'RECEIVED_PENDING_TRIAGE',
+          public_corroborations: r.public_corroborations || 0,
+          created_at: r.created_at,
+          updated_at: r.updated_at
+        };
+      });
 
       setIncidents(mapped);
     } catch (err: any) {
@@ -200,10 +207,35 @@ export const PublicWebFeed: React.FC = () => {
                   <h3 className="text-base font-bold text-white mt-1">
                     {inc.title}
                   </h3>
-                  <p className="text-xs text-slate-400 font-mono mt-0.5 flex items-center space-x-1">
-                    <MapPin className="w-3.5 h-3.5 text-red-400" />
-                    <span>{inc.location_name} • {inc.region}</span>
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <p className="text-xs text-slate-400 font-mono flex items-center space-x-1">
+                      <MapPin className="w-3.5 h-3.5 text-red-400" />
+                      <span>{inc.location_name} • {inc.region}</span>
+                    </p>
+                    {inc.location_source === 'LIVE' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
+                        LIVE
+                      </span>
+                    ) : inc.location_source === 'LAST_KNOWN' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
+                        LAST KNOWN {inc.gps_fix_age_s ? `(${Math.max(1, Math.round(inc.gps_fix_age_s / 60))}m old)` : ''}
+                      </span>
+                    ) : inc.location_source === 'MANUAL' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                        MANUAL
+                      </span>
+                    ) : inc.location_source === 'UNAVAILABLE' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
+                        UNAVAILABLE
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+                        Location source not recorded
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <span className="text-xs text-slate-500 font-mono">

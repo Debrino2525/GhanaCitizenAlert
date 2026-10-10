@@ -32,7 +32,7 @@ import {
   Download
 } from 'lucide-react-native';
 import { TranslationMap, LANDMARK_SUGGESTIONS } from '../constants/i18n';
-import { GpsCoordinates, GpsLockStatus, IncidentCategory } from '../types';
+import { GpsCoordinates, GpsLockStatus, IncidentCategory, LocationSource } from '../types';
 import { GpsTelemetryCard } from '../components/GpsTelemetryCard';
 import { ViewfinderOverlay } from '../components/ViewfinderOverlay';
 import { UploadProgressHud } from '../components/UploadProgressHud';
@@ -46,11 +46,12 @@ interface EvidenceCaptureScreenProps {
   gpsAccuracy: number | null;
   isLocating: boolean;
   gpsStatus: GpsLockStatus;
+  locationSource: LocationSource;
+  gpsFixAgeSeconds: number | null;
   locationName: string;
-  ghanaPostCode: string;
+  region: string;
   onRefreshGps: () => void;
   onLocationNameChange: (text: string) => void;
-  onGhanaPostCodeChange: (text: string) => void;
   // Camera props
   cameraRef: React.RefObject<any>;
   hasCameraPermission: boolean | null;
@@ -102,11 +103,12 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
   gpsAccuracy,
   isLocating,
   gpsStatus,
+  locationSource,
+  gpsFixAgeSeconds,
   locationName,
-  ghanaPostCode,
+  region,
   onRefreshGps,
   onLocationNameChange,
-  onGhanaPostCodeChange,
   cameraRef,
   hasCameraPermission,
   facing,
@@ -205,6 +207,8 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             gpsAccuracy={gpsAccuracy}
             isLocating={isLocating}
             gpsStatus={gpsStatus}
+            locationSource={locationSource}
+            gpsFixAgeSeconds={gpsFixAgeSeconds}
             t={t}
             onRefreshGps={onRefreshGps}
           />
@@ -221,8 +225,8 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             recordedUri={recordedUri}
             mediaType={mediaType}
             coords={coords}
-            ghanaPostCode={ghanaPostCode}
             gpsAccuracy={gpsAccuracy}
+            locationSource={locationSource}
             onFlipCamera={onFlipCamera}
             onRetake={onRetake}
             onRequestPermissions={onRequestCameraPermissions}
@@ -377,25 +381,49 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
               />
             </View>
 
-            {/* GhanaPost GPS (Auto-Calculated) */}
+            {/* Location Telemetry / Verification Status */}
             <View style={styles.inputGroup}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={styles.fieldLabel}>{t.ghanaPostLabel}</Text>
-                <Text style={{ color: tokens.colors.text.muted, fontSize: tokens.typography.fontSize.xxs }}>
-                  Auto-Generated from GPS
+                <Text style={styles.fieldLabel}>LOCATION SOURCE & REGION</Text>
+                <Text
+                  style={{
+                    color:
+                      locationSource === 'LIVE'
+                        ? tokens.colors.status.success
+                        : locationSource === 'LAST_KNOWN'
+                        ? tokens.colors.status.warning
+                        : tokens.colors.text.muted,
+                    fontSize: tokens.typography.fontSize.xxs,
+                    fontFamily: tokens.typography.fontFamily.monoBold,
+                  }}
+                >
+                  {locationSource === 'LIVE'
+                    ? '● LIVE GPS LOCK'
+                    : locationSource === 'LAST_KNOWN'
+                    ? '▲ LAST KNOWN (CACHED)'
+                    : locationSource === 'MANUAL'
+                    ? '■ MANUAL ENTRY'
+                    : '✕ LOCATION PENDING'}
                 </Text>
               </View>
-              <TextInput
-                style={[styles.input, { color: tokens.colors.brand.gold, fontFamily: tokens.typography.fontFamily.monoBold }]}
-                placeholder="e.g. GA-382-9104"
-                placeholderTextColor={tokens.colors.text.muted}
-                value={ghanaPostCode}
-                onChangeText={onGhanaPostCodeChange}
-                autoCapitalize="characters"
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-                blurOnSubmit={true}
-              />
+              <View
+                style={[
+                  styles.input,
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: tokens.colors.surface.cardSubtle,
+                  },
+                ]}
+              >
+                <Text style={{ color: tokens.colors.text.primary, fontFamily: tokens.typography.fontFamily.sansMedium }}>
+                  Region: {region || 'UNKNOWN'}
+                </Text>
+                <Text style={{ color: tokens.colors.text.muted, fontSize: 11, fontFamily: tokens.typography.fontFamily.mono }}>
+                  {coords ? `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}` : 'No Coordinates'}
+                </Text>
+              </View>
             </View>
 
             {/* Incident Category Selection */}
@@ -570,11 +598,12 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
               </Text>
             </View>
 
-            {/* Location & GPS */}
+            {/* Location & GPS Telemetry */}
             <View style={styles.dossierRow}>
-              <Text style={styles.dossierLabel}>LOCATION & DIGITAL POST</Text>
+              <Text style={styles.dossierLabel}>LOCATION & GPS TELEMETRY</Text>
               <Text style={styles.dossierValue}>
-                {landmark ? `${landmark}, ` : ''}{locationName} ({ghanaPostCode})
+                {landmark ? `${landmark}, ` : ''}{locationName || 'Location pending'} [{locationSource}]
+                {coords ? ` (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})` : ''}
               </Text>
             </View>
 
