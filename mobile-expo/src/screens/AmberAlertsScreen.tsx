@@ -12,8 +12,10 @@ import {
   RefreshControl,
   Keyboard,
   TouchableWithoutFeedback,
-  Share
+  Share,
+  Linking
 } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import {
   AlertTriangle,
   Radio,
@@ -30,7 +32,10 @@ import {
   CheckCircle2,
   Share2,
   X,
-  Filter
+  Filter,
+  Play,
+  Video,
+  Lock
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { GpsCoordinates } from '../types';
@@ -72,10 +77,35 @@ export interface MobilePublicCivicBulletin {
   status: string;
   assigned_agency?: string;
   public_corroborations: number;
+  media?: any;
   created_at: string;
 }
 
 type BulletinFilter = 'ALL' | 'EMERGENCY' | 'CIVIC';
+
+interface EvidenceVideoPlayerProps {
+  uri: string;
+}
+
+const EvidenceVideoPlayer: React.FC<EvidenceVideoPlayerProps> = memo(({ uri }) => {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = true;
+    p.play();
+  });
+
+  return (
+    <View style={styles.nativeVideoContainer}>
+      <VideoView
+        style={styles.nativeVideoView}
+        player={player}
+        fullscreenOptions={{ enable: true }}
+        allowsPictureInPicture={true}
+        nativeControls={true}
+        contentFit="contain"
+      />
+    </View>
+  );
+});
 
 interface AmberAlertsScreenProps {
   coords: GpsCoordinates | null;
@@ -108,6 +138,51 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
   const [tipDescription, setTipDescription] = useState<string>('');
   const [isSubmittingTip, setIsSubmittingTip] = useState<boolean>(false);
 
+  // Fullscreen Evidence Video/Photo Viewer modal state
+  const [selectedMediaItem, setSelectedMediaItem] = useState<{
+    uri: string;
+    isVideo: boolean;
+    title: string;
+    trackingCode: string;
+    duration?: number;
+    sha?: string | null;
+    location?: string;
+  } | null>(null);
+
+  // Helper to extract and resolve media from bulletin
+  const getBulletinMediaInfo = useCallback((media: any) => {
+    if (!media) return null;
+    let items = media;
+    if (typeof media === 'string') {
+      try {
+        items = JSON.parse(media);
+      } catch {
+        items = [];
+      }
+    }
+    if (!Array.isArray(items) || items.length === 0) return null;
+    const item = items[0];
+    if (!item) return null;
+
+    let resolvedUri: string | null = item.rawS3Url || item.thumbnailUrl || item.uri || item.localUri || null;
+    if (!resolvedUri && item.video_storage_path) {
+      resolvedUri = supabase.storage.from('evidence').getPublicUrl(item.video_storage_path).data.publicUrl;
+    }
+    if (!resolvedUri) return null;
+
+    const isVideo = item.type === 'VIDEO' || (typeof resolvedUri === 'string' && /\.(mp4|mov)$/i.test(resolvedUri));
+    const duration = item.durationSeconds || 15;
+    const sha = item.sha256Checksum || item.sha256Hash || null;
+
+    return {
+      ...item,
+      resolvedUri,
+      isVideo,
+      duration,
+      sha
+    };
+  }, []);
+
   // Fetch both Emergency Alerts and Published Public Incidents
   const fetchAllBulletins = useCallback(async () => {
     try {
@@ -127,10 +202,10 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
         setEmergencyAlerts((amberData as MobileEmergencyAlert[]) || []);
       }
 
-      // 2. Fetch Officer-Published Civic Bulletins
+      // 2. Fetch Officer-Published Civic Bulletins (with verified video/photo media payload)
       const { data: civicData, error: civicErr } = await supabase
         .from('incidents')
-        .select('id, tracking_code, category, title, description, location_name, ghanapost_code, region, latitude, longitude, severity, status, assigned_agency, public_corroborations, created_at')
+        .select('id, tracking_code, category, title, description, location_name, ghanapost_code, region, latitude, longitude, severity, status, assigned_agency, public_corroborations, media, created_at')
         .eq('is_public_published', true)
         .order('created_at', { ascending: false });
 
@@ -478,6 +553,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   ? 'DOVVSU'
                   : 'POLICE CID'
               );
+              const bulletinMedia = getBulletinMediaInfo(bulletin.media);
 
               return (
                 <View key={bulletin.id} style={styles.civicCard}>
@@ -500,6 +576,73 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     <Text style={styles.civicTitle}>{bulletin.title}</Text>
                     <Text style={styles.civicDescription}>{bulletin.description}</Text>
                   </View>
+
+                  {/* Verified Video / Photo Evidence Section */}
+                  {bulletinMedia && bulletinMedia.resolvedUri && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        safeHaptics.light();
+                        setSelectedMediaItem({
+                          uri: bulletinMedia.resolvedUri!,
+                          isVideo: bulletinMedia.isVideo,
+                          title: bulletin.title,
+                          trackingCode: bulletin.tracking_code,
+                          duration: bulletinMedia.duration,
+                          sha: bulletinMedia.sha,
+                          location: `${bulletin.location_name} • ${bulletin.region}`
+                        });
+                      }}
+                      style={styles.evidenceMediaCard}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={bulletinMedia.isVideo ? 'Watch verified video evidence' : 'View verified photo evidence'}
+                    >
+                      {bulletinMedia.isVideo ? (
+                        <View style={styles.evidenceVideoPlaceholder}>
+                          <View style={styles.evidenceBadgeRow}>
+                            <View style={styles.verifiedMediaBadge}>
+                              <ShieldCheck color={tokens.colors.status.success} size={12} />
+                              <Text style={styles.verifiedMediaBadgeText}>POLICE VERIFIED EVIDENCE VIDEO</Text>
+                            </View>
+                            <View style={styles.durationBadge}>
+                              <Clock color={tokens.colors.brand.gold} size={10} />
+                              <Text style={styles.durationBadgeText}>{bulletinMedia.duration}s</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.playCenterBox}>
+                            <View style={styles.playCircle}>
+                              <Play color={tokens.colors.bg.base} size={20} fill={tokens.colors.bg.base} style={{ marginLeft: 2 }} />
+                            </View>
+                            <Text style={styles.watchVideoPrompt}>Tap to Stream Verified Warning Footage</Text>
+                          </View>
+
+                          {bulletinMedia.sha && (
+                            <View style={styles.hashFooter}>
+                              <Lock color={tokens.colors.text.muted} size={10} />
+                              <Text style={styles.hashFooterText} numberOfLines={1}>
+                                SHA-256: {bulletinMedia.sha.substring(0, 16)}… (Act 772 Sealed)
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      ) : (
+                        <View style={styles.evidenceImageContainer}>
+                          <Image
+                            source={{ uri: bulletinMedia.resolvedUri }}
+                            style={styles.evidenceImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.evidenceBadgeRowAbsolute}>
+                            <View style={styles.verifiedMediaBadge}>
+                              <ShieldCheck color={tokens.colors.status.success} size={12} />
+                              <Text style={styles.verifiedMediaBadgeText}>POLICE VERIFIED EVIDENCE PHOTO</Text>
+                            </View>
+                          </View>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  )}
 
                   {/* Location & GPS Landmark */}
                   <View style={styles.civicLocationBox}>
@@ -609,6 +752,94 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
             </View>
           </View>
         </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Fullscreen Evidence Video / Photo Viewer Modal */}
+      <Modal
+        visible={Boolean(selectedMediaItem)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedMediaItem(null)}
+      >
+        <View style={styles.mediaModalBackdrop}>
+          <View style={styles.mediaModalCard}>
+            {/* Modal Header */}
+            <View style={styles.mediaModalHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Text style={styles.trackingCodePill}>{selectedMediaItem?.trackingCode}</Text>
+                  <View style={styles.verifiedMediaBadge}>
+                    <ShieldCheck color={tokens.colors.status.success} size={12} />
+                    <Text style={styles.verifiedMediaBadgeText}>POLICE VERIFIED EVIDENCE</Text>
+                  </View>
+                </View>
+                <Text style={styles.mediaModalTitle} numberOfLines={1}>
+                  {selectedMediaItem?.title}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedMediaItem(null)}
+                style={styles.modalCloseBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close Evidence Modal"
+              >
+                <X color={tokens.colors.text.white} size={20} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Media Presentation Container */}
+            <View style={styles.mediaViewerContainer}>
+              {selectedMediaItem?.isVideo ? (
+                <View style={styles.videoPlayerBox}>
+                  <View style={styles.videoHeaderRow}>
+                    <Video color={tokens.colors.brand.gold} size={16} />
+                    <Text style={styles.videoPlayerTitle}>CitizenAlert In-App Player</Text>
+                    {selectedMediaItem.duration ? (
+                      <Text style={styles.videoDurationPill}>{selectedMediaItem.duration}s clip</Text>
+                    ) : null}
+                  </View>
+
+                  {selectedMediaItem.uri ? (
+                    <EvidenceVideoPlayer uri={selectedMediaItem.uri} />
+                  ) : (
+                    <View style={styles.videoFallbackBox}>
+                      <AlertTriangle color={tokens.colors.status.warning} size={24} />
+                      <Text style={styles.videoFallbackText}>Video source unavailable</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.imageViewerBox}>
+                  {selectedMediaItem?.uri ? (
+                    <Image
+                      source={{ uri: selectedMediaItem.uri }}
+                      style={styles.fullEvidenceImage}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                </View>
+              )}
+            </View>
+
+            {/* Forensic Integrity & Location Watermark Bar */}
+            <View style={styles.mediaFooterBox}>
+              <View style={styles.mediaFooterRow}>
+                <MapPin color={tokens.colors.brand.gold} size={12} />
+                <Text style={styles.mediaFooterLocationText} numberOfLines={1}>
+                  {selectedMediaItem?.location || 'Verified Incident Location'}
+                </Text>
+              </View>
+              {selectedMediaItem?.sha ? (
+                <View style={styles.mediaFooterRow}>
+                  <Lock color={tokens.colors.status.success} size={12} />
+                  <Text style={styles.mediaFooterShaText} numberOfLines={1}>
+                    SHA-256: {selectedMediaItem.sha}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1075,5 +1306,250 @@ const styles = StyleSheet.create({
     color: tokens.colors.text.white,
     fontSize: tokens.typography.fontSize.md,
     fontWeight: '900'
+  },
+
+  /* Evidence Media Cards & Preview Styles */
+  evidenceMediaCard: {
+    borderRadius: tokens.radius.lg,
+    overflow: 'hidden',
+    backgroundColor: tokens.colors.bg.base,
+    borderWidth: 1,
+    borderColor: 'rgba(252, 209, 22, 0.25)'
+  },
+  evidenceVideoPlaceholder: {
+    backgroundColor: '#0B132B',
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.sm,
+    borderRadius: tokens.radius.lg
+  },
+  evidenceBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6
+  },
+  evidenceBadgeRowAbsolute: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  verifiedMediaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)'
+  },
+  verifiedMediaBadgeText: {
+    color: tokens.colors.status.success,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(252, 209, 22, 0.15)',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4
+  },
+  durationBadgeText: {
+    color: tokens.colors.brand.gold,
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.monoBold,
+    fontWeight: 'bold'
+  },
+  playCenterBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: tokens.spacing.md,
+    gap: 6
+  },
+  playCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: tokens.colors.brand.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: tokens.colors.brand.gold,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4
+  },
+  watchVideoPrompt: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '700',
+    textAlign: 'center'
+  },
+  hashFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: 6
+  },
+  hashFooterText: {
+    color: tokens.colors.text.muted,
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.mono,
+    flex: 1
+  },
+  evidenceImageContainer: {
+    height: 180,
+    width: '100%',
+    borderRadius: tokens.radius.lg,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: tokens.colors.bg.base
+  },
+  evidenceImage: {
+    width: '100%',
+    height: '100%'
+  },
+
+  /* Media Viewer Modal Styles */
+  mediaModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: tokens.spacing.md
+  },
+  mediaModalCard: {
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(252, 209, 22, 0.4)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 10
+  },
+  mediaModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: tokens.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.border.subtle,
+    backgroundColor: tokens.colors.bg.base
+  },
+  mediaModalTitle: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: '800'
+  },
+  mediaViewerContainer: {
+    padding: tokens.spacing.md,
+    backgroundColor: '#050B14',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  videoPlayerBox: {
+    width: '100%',
+    backgroundColor: '#08101E',
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.md
+  },
+  videoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  videoPlayerTitle: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: 'bold',
+    flex: 1,
+    marginLeft: 6
+  },
+  videoDurationPill: {
+    color: tokens.colors.brand.gold,
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.monoBold,
+    backgroundColor: 'rgba(252, 209, 22, 0.12)',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4
+  },
+  nativeVideoContainer: {
+    width: '100%',
+    height: 240,
+    backgroundColor: '#000000',
+    borderRadius: tokens.radius.md,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  nativeVideoView: {
+    width: '100%',
+    height: '100%'
+  },
+  videoFallbackBox: {
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: tokens.radius.md
+  },
+  videoFallbackText: {
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xs
+  },
+  imageViewerBox: {
+    width: '100%',
+    height: 240,
+    borderRadius: tokens.radius.lg,
+    overflow: 'hidden',
+    backgroundColor: '#000'
+  },
+  fullEvidenceImage: {
+    width: '100%',
+    height: '100%'
+  },
+  mediaFooterBox: {
+    padding: tokens.spacing.md,
+    backgroundColor: tokens.colors.bg.base,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.border.subtle,
+    gap: 4
+  },
+  mediaFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  mediaFooterLocationText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: 'bold',
+    flex: 1
+  },
+  mediaFooterShaText: {
+    color: tokens.colors.text.muted,
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.mono,
+    flex: 1
   }
 });

@@ -30,6 +30,7 @@
     "expo-media-library": "~18.0.0",
     "expo-secure-store": "^57.0.4",
     "expo-status-bar": "~57.0.1",
+    "expo-video": "^57.0.5",
     "expo-web-browser": "^57.0.3",
     "lucide-react-native": "^1.53.0",
     "react": "19.2.3",
