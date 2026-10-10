@@ -104,6 +104,7 @@ function MainApp() {
     gpsAccuracy: gps.gpsAccuracy,
     locationSource: gps.locationSource,
     gpsFixAgeSeconds: gps.gpsFixAgeSeconds,
+    gpsFixTimestamp: gps.gpsFixTimestamp,
     locationName: gps.locationName,
     region: gps.region
   });

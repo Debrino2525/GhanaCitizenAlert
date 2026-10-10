@@ -35,6 +35,23 @@ export const getGpsDevMetrics = () => ({
 });
 
 /**
+ * Derives the effective location source at USE time based on the fix's age and accuracy.
+ * Rule: LIVE if fixTimestamp exists AND (age <= 30s AND accuracy <= 25m).
+ */
+export const effectiveLocationSource = (
+  fixTimestamp: number | null | undefined,
+  accuracy: number | null | undefined,
+  now: number = Date.now(),
+  sourceOverride?: LocationSource
+): LocationSource => {
+  if (sourceOverride === 'MANUAL') return 'MANUAL';
+  if (!fixTimestamp) return sourceOverride === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'UNAVAILABLE';
+  const ageSeconds = Math.max(0, Math.floor((now - fixTimestamp) / 1000));
+  const isFresh = ageSeconds <= 30 && typeof accuracy === 'number' && accuracy <= 25;
+  return isFresh ? 'LIVE' : 'LAST_KNOWN';
+};
+
+/**
  * Truthful GPS Engine for Ghana CitizenAlert.
  * - Single writer: strictly 1 in-flight acquisition at a time.
  * - Deterministic terminal states: LIVE (fresh <=15s) | LAST_KNOWN (stale) | UNAVAILABLE.
@@ -59,6 +76,8 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   const isMountedRef = useRef<boolean>(true);
   const directFixTimeoutRef = useRef<any>(null);
   const watcherTimeoutRef = useRef<any>(null);
+  const lastFixTimestampRef = useRef<number | null>(null);
+  const lastAccuracyRef = useRef<number | null>(null);
 
   // Keep latest coords in ref for non-reactive access inside async callbacks (prevents stale closure)
   const coordsRef = useRef<GpsCoordinates | null>(null);
@@ -117,6 +136,8 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
       const newCoords = { latitude: lat, longitude: lng };
       coordsRef.current = newCoords;
+      lastFixTimestampRef.current = fixTimestamp;
+      lastAccuracyRef.current = accuracy;
       setCoords(newCoords);
       setGpsAccuracy(accuracy);
       setGpsFixAgeSeconds(ageSeconds);
@@ -193,6 +214,8 @@ export const useGpsLocation = (): UseGpsLocationResult => {
           setLocationSource('UNAVAILABLE');
           setCoords(null);
           coordsRef.current = null;
+          lastFixTimestampRef.current = null;
+          lastAccuracyRef.current = null;
           setGpsAccuracy(null);
           setGpsFixAgeSeconds(null);
           setGpsFixTimestamp(null);
@@ -205,14 +228,14 @@ export const useGpsLocation = (): UseGpsLocationResult => {
           return;
         }
 
-        // 2. Direct Hardware Position Query with 6.5s timeout (skip cached getLastKnown to request new fix)
+        // 2. Direct Hardware Position Query with 5.5s timeout (shares 10s ACQUISITION_HARD_TIMEOUT_MS budget)
         try {
           const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
           const posTimeout = new Promise<null>((resolve) => {
             directFixTimeoutRef.current = setTimeout(() => {
               directFixTimeoutRef.current = null;
               resolve(null);
-            }, 6500);
+            }, 5500);
           });
           const directFix = await Promise.race([posPromise, posTimeout]);
           if (directFixTimeoutRef.current) {
@@ -233,9 +256,12 @@ export const useGpsLocation = (): UseGpsLocationResult => {
           return;
         }
 
-        // 4. If direct fix was stale or timed out, retry once via bounded watcher (up to 4.5s)
+        // 4. If direct fix was stale or timed out, retry once via bounded watcher sharing remaining 10s budget
+        const elapsedMs = Date.now() - requestStartTime;
+        const remainingWatcherBudgetMs = Math.max(1500, ACQUISITION_HARD_TIMEOUT_MS - elapsedMs);
+
         if (__DEV__) {
-          console.log(`[GPS State] [Req #${currentReqId}] Direct fix stale/timed out. Retrying via watchPositionAsync...`);
+          console.log(`[GPS State] [Req #${currentReqId}] Direct fix stale/timed out. Retrying via watchPositionAsync (${remainingWatcherBudgetMs}ms remaining budget)...`);
         }
 
         await new Promise<void>((resolve) => {
@@ -253,14 +279,14 @@ export const useGpsLocation = (): UseGpsLocationResult => {
             }
           };
 
-          // Bounded watcher window (4.5s)
+          // Bounded watcher window sharing 10s hard timeout budget
           watcherTimeoutRef.current = setTimeout(() => {
             watcherTimeoutRef.current = null;
             if (__DEV__ && isMountedRef.current) {
-              console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired.`);
+              console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired (${remainingWatcherBudgetMs}ms budget).`);
             }
             completeWatcher();
-          }, 4500);
+          }, remainingWatcherBudgetMs);
 
           Location.watchPositionAsync(
             {
@@ -311,10 +337,18 @@ export const useGpsLocation = (): UseGpsLocationResult => {
           inFlightRef.current = false;
           setIsLocating(false);
 
-          // Guarantee a terminal state if no coords were ever resolved
+          // Guarantee a terminal state
           if (!coordsRef.current) {
             setGpsStatus((prev) => (prev === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'UNAVAILABLE'));
             setLocationSource('UNAVAILABLE');
+          } else {
+            // Old coords exist: if no fresh fix was obtained, explicitly derive STALE and LAST_KNOWN
+            const now = Date.now();
+            const currentFixTs = lastFixTimestampRef.current;
+            const currentAcc = lastAccuracyRef.current;
+            const eff = effectiveLocationSource(currentFixTs, currentAcc, now, locationSource);
+            setLocationSource(eff);
+            setGpsStatus(eff === 'LIVE' ? 'LIVE' : 'STALE');
           }
 
           if (__DEV__) {
@@ -330,13 +364,29 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
   const setManualLocation = useCallback(
     (name: string, regionName: string = 'UNKNOWN', manualCoords: GpsCoordinates | null = null) => {
+      requestIdRef.current++;
+      if (directFixTimeoutRef.current) {
+        clearTimeout(directFixTimeoutRef.current);
+        directFixTimeoutRef.current = null;
+      }
+      if (watcherTimeoutRef.current) {
+        clearTimeout(watcherTimeoutRef.current);
+        watcherTimeoutRef.current = null;
+      }
       cleanupWatcher();
-      inFlightRef.current = false;
+      if (inFlightRef.current) {
+        inFlightRef.current = false;
+        if (__DEV__) {
+          devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
+        }
+      }
       setIsLocating(false);
       setLocationSource('MANUAL');
       setGpsStatus('MANUAL');
       setCoords(manualCoords);
       coordsRef.current = manualCoords;
+      lastFixTimestampRef.current = null;
+      lastAccuracyRef.current = null;
       setGpsAccuracy(null); // Never report accuracy for manual entries
       setGpsFixAgeSeconds(null);
       setGpsFixTimestamp(null);

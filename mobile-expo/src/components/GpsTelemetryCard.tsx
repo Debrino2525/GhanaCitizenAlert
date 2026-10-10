@@ -2,6 +2,7 @@ import React, { memo, useCallback, useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Crosshair, RefreshCw, Radio, Clock, MapPin, AlertTriangle, Settings } from 'lucide-react-native';
 import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
+import { effectiveLocationSource } from '../hooks/useGpsLocation';
 import { TranslationMap } from '../constants/i18n';
 import { tokens } from '../theme/tokens';
 import { safeHaptics } from '../utils/haptics';
@@ -32,10 +33,11 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   onManualLocationPress,
 }) => {
   const isPermissionDenied = gpsStatus === 'PERMISSION_DENIED';
-  const isLive = !isLocating && locationSource === 'LIVE' && coords !== null;
-  const isStale = !isLocating && locationSource === 'LAST_KNOWN' && coords !== null;
+  const effectiveSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, Date.now(), locationSource);
+  const isLive = !isLocating && effectiveSource === 'LIVE' && coords !== null;
+  const isStale = !isLocating && effectiveSource === 'LAST_KNOWN' && coords !== null;
   const isManual = !isLocating && locationSource === 'MANUAL';
-  const isUnavailable = !isLocating && (locationSource === 'UNAVAILABLE' || coords === null);
+  const isUnavailable = !isLocating && (effectiveSource === 'UNAVAILABLE' || coords === null);
 
   // Dynamic ticking age calculation based on the fix's own timestamp
   const [liveAgeSeconds, setLiveAgeSeconds] = useState<number | null>(gpsFixAgeSeconds);

@@ -25,6 +25,7 @@ import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { GpsCoordinates, LocationSource } from '../types';
+import { effectiveLocationSource } from '../hooks/useGpsLocation';
 import { tokens } from '../theme/tokens';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 
@@ -86,14 +87,14 @@ async function getBestAvailableLocation(
     const loc = await Promise.race([locPromise, timeoutPromise]);
     if (loc?.coords && loc.coords.latitude !== 0 && loc.coords.longitude !== 0) {
       const ageSeconds = Math.max(0, Math.floor((now - loc.timestamp) / 1000));
-      const isFresh = ageSeconds <= 15;
       const acc = typeof loc.coords.accuracy === 'number' ? Math.round(loc.coords.accuracy * 10) / 10 : null;
+      const source = effectiveLocationSource(loc.timestamp, acc, now);
 
       return {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
         accuracy: acc,
-        locationSource: isFresh ? 'LIVE' : 'LAST_KNOWN',
+        locationSource: source,
         fixAgeSeconds: ageSeconds
       };
     }
@@ -105,12 +106,13 @@ async function getBestAvailableLocation(
     if (lastKnown?.coords && lastKnown.coords.latitude !== 0 && lastKnown.coords.longitude !== 0) {
       const ageSeconds = Math.max(0, Math.floor((now - lastKnown.timestamp) / 1000));
       const acc = typeof lastKnown.coords.accuracy === 'number' ? Math.round(lastKnown.coords.accuracy * 10) / 10 : null;
+      const source = effectiveLocationSource(lastKnown.timestamp, acc, now);
 
       return {
         latitude: lastKnown.coords.latitude,
         longitude: lastKnown.coords.longitude,
         accuracy: acc,
-        locationSource: 'LAST_KNOWN',
+        locationSource: source,
         fixAgeSeconds: ageSeconds
       };
     }
@@ -118,11 +120,12 @@ async function getBestAvailableLocation(
 
   // Tier 3: Location hook coordinates passed down via props
   if (fallbackCoords && fallbackCoords.latitude !== 0 && fallbackCoords.longitude !== 0) {
+    const source = effectiveLocationSource(undefined, fallbackAccuracy, now, fallbackSource);
     return {
       latitude: fallbackCoords.latitude,
       longitude: fallbackCoords.longitude,
       accuracy: fallbackAccuracy,
-      locationSource: fallbackSource === 'LIVE' ? 'LIVE' : 'LAST_KNOWN',
+      locationSource: source,
       fixAgeSeconds: fallbackAge ?? 30
     };
   }
@@ -358,11 +361,10 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
             async (freshLoc) => {
               const nowMs = Date.now();
               const fixAge = Math.max(0, Math.floor((nowMs - freshLoc.timestamp) / 1000));
-              const isFresh = fixAge <= 15;
-              const source: LocationSource = isFresh ? 'LIVE' : 'LAST_KNOWN';
               const freshAcc = typeof freshLoc.coords.accuracy === 'number'
                 ? Math.round(freshLoc.coords.accuracy * 10) / 10
                 : null;
+              const source: LocationSource = effectiveLocationSource(freshLoc.timestamp, freshAcc, nowMs);
               const freshResolved: SosResolvedLocation = {
                 latitude: freshLoc.coords.latitude,
                 longitude: freshLoc.coords.longitude,

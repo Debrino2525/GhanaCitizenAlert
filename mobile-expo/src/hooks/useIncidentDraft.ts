@@ -12,6 +12,7 @@ import {
   EvidenceMediaItem,
   LocationSource
 } from '../types';
+import { effectiveLocationSource } from './useGpsLocation';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
 import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult, formatPlainLanguageUploadError } from '../services/evidenceUploader';
 import { savePendingReport, removePendingReport, updatePendingReportStatus } from '../services/pendingReportsQueue';
@@ -24,6 +25,7 @@ export interface UseIncidentDraftProps {
   gpsAccuracy: number | null;
   locationSource: LocationSource;
   gpsFixAgeSeconds: number | null;
+  gpsFixTimestamp?: number | null;
   locationName: string;
   region: string;
 }
@@ -61,6 +63,7 @@ export const useIncidentDraft = ({
   gpsAccuracy,
   locationSource,
   gpsFixAgeSeconds,
+  gpsFixTimestamp,
   locationName,
   region
 }: UseIncidentDraftProps): UseIncidentDraftResult => {
@@ -297,6 +300,10 @@ export const useIncidentDraft = ({
         : [];
 
       const effectiveLocationName = combinedLocation.trim() || (locationSource === 'UNAVAILABLE' ? 'Location pending' : 'Manual Location');
+      const submitTime = Date.now();
+      const effectiveSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, submitTime, locationSource);
+      const effectiveFixAge = gpsFixTimestamp ? Math.max(0, Math.floor((submitTime - gpsFixTimestamp) / 1000)) : gpsFixAgeSeconds;
+
       const payload: any = {
         tracking_code: trackingCode,
         category,
@@ -307,9 +314,9 @@ export const useIncidentDraft = ({
         region: region || 'UNKNOWN',
         latitude: coords ? coords.latitude : null,
         longitude: coords ? coords.longitude : null,
-        location_source: locationSource,
-        gps_fix_age_s: gpsFixAgeSeconds ?? null,
-        gps_accuracy_m: (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
+        location_source: effectiveSource,
+        gps_fix_age_s: effectiveFixAge ?? null,
+        gps_accuracy_m: (effectiveSource === 'LIVE' || effectiveSource === 'LAST_KNOWN') && typeof gpsAccuracy === 'number'
           ? gpsAccuracy
           : null,
         media: initialMediaList,

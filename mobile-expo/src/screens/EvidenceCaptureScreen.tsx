@@ -33,6 +33,7 @@ import {
 } from 'lucide-react-native';
 import { TranslationMap, LANDMARK_SUGGESTIONS } from '../constants/i18n';
 import { GpsCoordinates, GpsLockStatus, IncidentCategory, LocationSource } from '../types';
+import { effectiveLocationSource } from '../hooks/useGpsLocation';
 import { GpsTelemetryCard } from '../components/GpsTelemetryCard';
 import { ViewfinderOverlay } from '../components/ViewfinderOverlay';
 import { UploadProgressHud } from '../components/UploadProgressHud';
@@ -158,39 +159,48 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
   } | null>(null);
 
   const handleSnapPhoto = useCallback(() => {
+    const now = Date.now();
+    const effSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, now, locationSource);
+    const effAge = gpsFixTimestamp ? Math.max(0, Math.floor((now - gpsFixTimestamp) / 1000)) : gpsFixAgeSeconds;
     setGpsSnapshot({
       coords,
       gpsAccuracy,
-      locationSource,
-      gpsFixAgeSeconds,
+      locationSource: effSource,
+      gpsFixAgeSeconds: effAge,
       gpsFixTimestamp: gpsFixTimestamp ?? null,
-      capturedAtTimestamp: Date.now(),
+      capturedAtTimestamp: now,
     });
     onSnapPhoto();
   }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onSnapPhoto]);
 
   const handleToggleRecording = useCallback(() => {
     if (!isRecording) {
+      const now = Date.now();
+      const effSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, now, locationSource);
+      const effAge = gpsFixTimestamp ? Math.max(0, Math.floor((now - gpsFixTimestamp) / 1000)) : gpsFixAgeSeconds;
       setGpsSnapshot({
         coords,
         gpsAccuracy,
-        locationSource,
-        gpsFixAgeSeconds,
+        locationSource: effSource,
+        gpsFixAgeSeconds: effAge,
         gpsFixTimestamp: gpsFixTimestamp ?? null,
-        capturedAtTimestamp: Date.now(),
+        capturedAtTimestamp: now,
       });
     }
     onToggleRecording();
   }, [isRecording, coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onToggleRecording]);
 
   const handlePickFromGallery = useCallback(() => {
+    const now = Date.now();
+    const effSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, now, locationSource);
+    const effAge = gpsFixTimestamp ? Math.max(0, Math.floor((now - gpsFixTimestamp) / 1000)) : gpsFixAgeSeconds;
     setGpsSnapshot({
       coords,
       gpsAccuracy,
-      locationSource,
-      gpsFixAgeSeconds,
+      locationSource: effSource,
+      gpsFixAgeSeconds: effAge,
       gpsFixTimestamp: gpsFixTimestamp ?? null,
-      capturedAtTimestamp: Date.now(),
+      capturedAtTimestamp: now,
     });
     onPickFromGallery();
   }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onPickFromGallery]);
@@ -200,9 +210,10 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
     onRetake();
   }, [onRetake]);
 
+  const activeLiveSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, Date.now(), locationSource);
   const activeViewfinderCoords = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.coords : coords;
   const activeViewfinderAccuracy = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsAccuracy : gpsAccuracy;
-  const activeViewfinderSource = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.locationSource : locationSource;
+  const activeViewfinderSource = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.locationSource : activeLiveSource;
   const activeViewfinderAge = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsFixAgeSeconds : gpsFixAgeSeconds;
   const activeViewfinderTimestamp = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsFixTimestamp : gpsFixTimestamp;
   const activeViewfinderCapturedAt = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.capturedAtTimestamp : null;
