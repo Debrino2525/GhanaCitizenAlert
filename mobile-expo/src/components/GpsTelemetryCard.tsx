@@ -35,9 +35,9 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
 
   const formatAgeText = (seconds: number | null): string => {
     if (seconds === null || seconds === undefined) return '';
-    if (seconds < 60) return `${seconds}s old`;
+    if (seconds < 120) return `${seconds}s old`;
     const mins = Math.floor(seconds / 60);
-    return `${mins}m old`;
+    return `${mins} min old`;
   };
 
   return (

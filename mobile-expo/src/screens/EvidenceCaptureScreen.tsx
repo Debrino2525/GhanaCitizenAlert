@@ -154,6 +154,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
     locationSource: LocationSource;
     gpsFixAgeSeconds: number | null;
     gpsFixTimestamp: number | null;
+    capturedAtTimestamp: number;
   } | null>(null);
 
   const handleSnapPhoto = useCallback(() => {
@@ -163,6 +164,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
       locationSource,
       gpsFixAgeSeconds,
       gpsFixTimestamp: gpsFixTimestamp ?? null,
+      capturedAtTimestamp: Date.now(),
     });
     onSnapPhoto();
   }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onSnapPhoto]);
@@ -175,6 +177,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
         locationSource,
         gpsFixAgeSeconds,
         gpsFixTimestamp: gpsFixTimestamp ?? null,
+        capturedAtTimestamp: Date.now(),
       });
     }
     onToggleRecording();
@@ -187,6 +190,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
       locationSource,
       gpsFixAgeSeconds,
       gpsFixTimestamp: gpsFixTimestamp ?? null,
+      capturedAtTimestamp: Date.now(),
     });
     onPickFromGallery();
   }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onPickFromGallery]);
@@ -201,6 +205,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
   const activeViewfinderSource = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.locationSource : locationSource;
   const activeViewfinderAge = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsFixAgeSeconds : gpsFixAgeSeconds;
   const activeViewfinderTimestamp = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsFixTimestamp : gpsFixTimestamp;
+  const activeViewfinderCapturedAt = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.capturedAtTimestamp : null;
   const activeViewfinderIsLocating = (isRecording || hasRecordedMedia) ? false : isLocating;
 
   return (
@@ -288,6 +293,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             isLocating={activeViewfinderIsLocating}
             gpsFixAgeSeconds={activeViewfinderAge}
             gpsFixTimestamp={activeViewfinderTimestamp}
+            capturedAtTimestamp={activeViewfinderCapturedAt}
             onFlipCamera={onFlipCamera}
             onRetake={handleRetake}
             onRequestPermissions={onRequestCameraPermissions}

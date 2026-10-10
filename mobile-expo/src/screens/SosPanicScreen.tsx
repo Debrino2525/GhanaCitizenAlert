@@ -337,6 +337,12 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       safeHaptics.success();
       announceAccessibility('Emergency SOS distress beacon transmitted. Location sent to Police Command.');
 
+      if (__DEV__) {
+        console.log(
+          `[SOS Dispatch] Beacon transmitted: tracking_code=${trackingCodeUsed}, source=${bestGps.locationSource}, age=${bestGps.fixAgeSeconds ?? 0}s, coords=(${bestGps.latitude ?? 'NULL'}, ${bestGps.longitude ?? 'NULL'}), accuracy=±${bestGps.accuracy ?? 'N/A'}m`
+        );
+      }
+
       // Start background watcher if initial fix was not live
       if (bestGps.locationSource !== 'LIVE') {
         try {
@@ -352,40 +358,46 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
             async (freshLoc) => {
               const nowMs = Date.now();
               const fixAge = Math.max(0, Math.floor((nowMs - freshLoc.timestamp) / 1000));
-              if (fixAge <= 15) {
-                const freshAcc = typeof freshLoc.coords.accuracy === 'number'
-                  ? Math.round(freshLoc.coords.accuracy * 10) / 10
-                  : null;
-                const freshResolved: SosResolvedLocation = {
-                  latitude: freshLoc.coords.latitude,
-                  longitude: freshLoc.coords.longitude,
-                  accuracy: freshAcc,
-                  locationSource: 'LIVE',
-                  fixAgeSeconds: fixAge,
-                };
-                setActiveCoords(freshResolved);
+              const isFresh = fixAge <= 15;
+              const source: LocationSource = isFresh ? 'LIVE' : 'LAST_KNOWN';
+              const freshAcc = typeof freshLoc.coords.accuracy === 'number'
+                ? Math.round(freshLoc.coords.accuracy * 10) / 10
+                : null;
+              const freshResolved: SosResolvedLocation = {
+                latitude: freshLoc.coords.latitude,
+                longitude: freshLoc.coords.longitude,
+                accuracy: freshAcc,
+                locationSource: source,
+                fixAgeSeconds: fixAge,
+              };
+              setActiveCoords(freshResolved);
 
-                // Update the live incident location in Supabase via server RPC
-                try {
-                  const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_incident_location', {
-                    p_tracking_code: trackingCodeUsed,
-                    p_lat: freshLoc.coords.latitude,
-                    p_lng: freshLoc.coords.longitude,
-                    p_accuracy: freshAcc,
-                    p_source: 'LIVE',
-                    p_age_s: fixAge,
-                  });
+              if (__DEV__) {
+                console.log(
+                  `[SOS Watcher] Fix received: source=${source}, age=${fixAge}s, coords=(${freshLoc.coords.latitude.toFixed(5)}, ${freshLoc.coords.longitude.toFixed(5)}), acc=±${freshAcc}m. Upgrading report...`
+                );
+              }
 
-                  if (rpcErr || rpcResult === false) {
-                    console.warn('[SOS Location Update Rejected/Error]', rpcErr?.message || `update_incident_location returned false for ${trackingCodeUsed}`);
-                  } else {
-                    if (__DEV__) {
-                      console.log(`[SOS Location Watcher] Successfully updated ${trackingCodeUsed} to (${freshLoc.coords.latitude}, ${freshLoc.coords.longitude})`);
-                    }
+              // Update the live incident location in Supabase via server RPC
+              try {
+                const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_incident_location', {
+                  p_tracking_code: trackingCodeUsed,
+                  p_lat: freshLoc.coords.latitude,
+                  p_lng: freshLoc.coords.longitude,
+                  p_accuracy: freshAcc,
+                  p_source: source,
+                  p_age_s: fixAge,
+                });
+
+                if (rpcErr || rpcResult === false) {
+                  console.warn('[SOS Location Update Rejected/Error]', rpcErr?.message || `update_incident_location returned false for ${trackingCodeUsed}`);
+                } else {
+                  if (__DEV__) {
+                    console.log(`[SOS Watcher] Successfully updated ${trackingCodeUsed} via update_incident_location (source=${source}, age=${fixAge}s)`);
                   }
-                } catch (e: any) {
-                  console.warn('[SOS Location Update Exception]', e?.message);
                 }
+              } catch (e: any) {
+                console.warn('[SOS Location Update Exception]', e?.message);
               }
             }
           );

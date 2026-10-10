@@ -29,6 +29,7 @@ interface ViewfinderOverlayProps {
   isLocating?: boolean;
   gpsFixAgeSeconds?: number | null;
   gpsFixTimestamp?: number | null;
+  capturedAtTimestamp?: number | null;
   onFlipCamera: () => void;
   onRetake: () => void;
   onRequestPermissions: () => void;
@@ -50,11 +51,23 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
   isLocating = false,
   gpsFixAgeSeconds = null,
   gpsFixTimestamp = null,
+  capturedAtTimestamp = null,
   onFlipCamera,
   onRetake,
   onRequestPermissions
 }) => {
   const hasValidFix = coords !== null && (coords.latitude !== 0 || coords.longitude !== 0);
+
+  const formatGpsAge = (seconds: number | null | undefined): string => {
+    if (seconds === null || seconds === undefined) return 'stale';
+    if (seconds < 120) return `${seconds}s old`;
+    const mins = Math.floor(seconds / 60);
+    return `${mins} min old`;
+  };
+
+  const captureUtcString = capturedAtTimestamp
+    ? `${new Date(capturedAtTimestamp).toISOString().substring(11, 19)}Z`
+    : `${new Date().toISOString().substring(11, 19)}Z`;
 
   return (
     <View style={styles.cameraWrapper}>
@@ -177,7 +190,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         {isLocating ? (
           <>
             <Text style={styles.watermarkWhite}>
-              {hasValidFix && coords ? `PREV FIX (${gpsFixAgeSeconds ? `${gpsFixAgeSeconds}s old` : 'stale'}): LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'UTC: ACQUIRING GPS LOCK…'}
+              CAPTURED {captureUtcString} | {hasValidFix && coords ? `PREV FIX (${formatGpsAge(gpsFixAgeSeconds)}): LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'ACQUIRING GPS LOCK…'}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <ActivityIndicator size="small" color={tokens.colors.brand.gold} />
@@ -189,12 +202,12 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         ) : hasValidFix && coords ? (
           <>
             <Text style={styles.watermarkWhite}>
-              {gpsFixTimestamp ? `FIX UTC: ${new Date(gpsFixTimestamp).toISOString().substring(11, 19)}Z (Age: ${gpsFixAgeSeconds ?? 0}s)` : `UTC: ${new Date().toISOString().substring(11, 19)}Z`} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
+              CAPTURED {captureUtcString} | FIX {formatGpsAge(gpsFixAgeSeconds)} | {locationSource === 'LIVE' ? 'LIVE FIX' : locationSource === 'LAST_KNOWN' ? 'LAST KNOWN' : 'MANUAL'}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <MapPin color={locationSource === 'LIVE' ? tokens.colors.status.success : tokens.colors.brand.gold} size={11} />
               <Text style={[styles.watermarkGold, locationSource === 'LIVE' && { color: tokens.colors.status.success }]}>
-                {locationSource === 'LIVE' ? 'LIVE FIX' : locationSource === 'LAST_KNOWN' ? `LAST KNOWN (${gpsFixAgeSeconds ? `${gpsFixAgeSeconds}s old` : 'stale'})` : 'MANUAL LOCATION'}
+                LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
                 {(locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && gpsAccuracy !== null ? ` | ACCURACY: ±${gpsAccuracy}m` : ''}
               </Text>
             </View>
@@ -202,7 +215,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         ) : (
           <>
             <Text style={styles.watermarkWhite}>
-              UTC: {new Date().toISOString().substring(11, 19)}Z | Location unavailable
+              CAPTURED {captureUtcString} | LOCATION UNAVAILABLE
             </Text>
             <Text style={[styles.watermarkWhite, { color: tokens.colors.status.danger, fontSize: 10 }]}>
               NO SATELLITE FIX • MOVE OUTDOORS
