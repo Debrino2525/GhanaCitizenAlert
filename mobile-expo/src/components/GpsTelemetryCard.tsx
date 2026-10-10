@@ -1,9 +1,10 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Crosshair, RefreshCw, Radio, Clock, MapPin, AlertTriangle, Settings } from 'lucide-react-native';
 import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
 import { TranslationMap } from '../constants/i18n';
 import { tokens } from '../theme/tokens';
+import { safeHaptics } from '../utils/haptics';
 
 interface GpsTelemetryCardProps {
   coords: GpsCoordinates | null;
@@ -33,6 +34,11 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   const isStale = !isLocating && locationSource === 'LAST_KNOWN' && coords !== null;
   const isManual = !isLocating && locationSource === 'MANUAL';
   const isUnavailable = !isLocating && (locationSource === 'UNAVAILABLE' || coords === null);
+
+  const handleRefreshPress = useCallback(() => {
+    safeHaptics.medium();
+    onRefreshGps();
+  }, [onRefreshGps]);
 
   const formatAgeText = (seconds: number | null): string => {
     if (seconds === null || seconds === undefined) return '';
@@ -79,7 +85,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
               numberOfLines={1}
             >
               {isLocating
-                ? 'ACQUIRING HARDWARE GPS FIX…'
+                ? 'ACQUIRING GPS…'
                 : isLive
                 ? 'GPS ACQUIRED (LIVE)'
                 : isStale
@@ -128,7 +134,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              onPress={onRefreshGps}
+              onPress={handleRefreshPress}
               disabled={isLocating}
               style={[styles.recalibrateBtn, isLocating && { opacity: 0.6 }]}
               accessibilityRole="button"

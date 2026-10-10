@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { GpsCoordinates, GpsLockStatus, LocationSource } from '../types';
 import { getGhanaRegionCode } from '../utils/ghanaPostGps';
+import { safeHaptics } from '../utils/haptics';
 
 export interface UseGpsLocationResult {
   coords: GpsCoordinates | null;
@@ -109,6 +110,10 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       setGpsFixTimestamp(fixTimestamp);
       setLocationSource(targetSource);
       setGpsStatus(targetStatus);
+
+      if (isFresh) {
+        safeHaptics.success();
+      }
 
       // Detect Ghanaian Administrative Region
       const detectedRegion = getGhanaRegionCode(lat, lng).name;
