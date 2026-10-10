@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -147,6 +147,62 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
+  // Shutter-press GPS snapshot to guarantee immutable forensic watermark during/after recording
+  const [gpsSnapshot, setGpsSnapshot] = useState<{
+    coords: GpsCoordinates | null;
+    gpsAccuracy: number | null;
+    locationSource: LocationSource;
+    gpsFixAgeSeconds: number | null;
+    gpsFixTimestamp: number | null;
+  } | null>(null);
+
+  const handleSnapPhoto = useCallback(() => {
+    setGpsSnapshot({
+      coords,
+      gpsAccuracy,
+      locationSource,
+      gpsFixAgeSeconds,
+      gpsFixTimestamp: gpsFixTimestamp ?? null,
+    });
+    onSnapPhoto();
+  }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onSnapPhoto]);
+
+  const handleToggleRecording = useCallback(() => {
+    if (!isRecording) {
+      setGpsSnapshot({
+        coords,
+        gpsAccuracy,
+        locationSource,
+        gpsFixAgeSeconds,
+        gpsFixTimestamp: gpsFixTimestamp ?? null,
+      });
+    }
+    onToggleRecording();
+  }, [isRecording, coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onToggleRecording]);
+
+  const handlePickFromGallery = useCallback(() => {
+    setGpsSnapshot({
+      coords,
+      gpsAccuracy,
+      locationSource,
+      gpsFixAgeSeconds,
+      gpsFixTimestamp: gpsFixTimestamp ?? null,
+    });
+    onPickFromGallery();
+  }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, gpsFixTimestamp, onPickFromGallery]);
+
+  const handleRetake = useCallback(() => {
+    setGpsSnapshot(null);
+    onRetake();
+  }, [onRetake]);
+
+  const activeViewfinderCoords = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.coords : coords;
+  const activeViewfinderAccuracy = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsAccuracy : gpsAccuracy;
+  const activeViewfinderSource = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.locationSource : locationSource;
+  const activeViewfinderAge = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsFixAgeSeconds : gpsFixAgeSeconds;
+  const activeViewfinderTimestamp = (isRecording || hasRecordedMedia) && gpsSnapshot ? gpsSnapshot.gpsFixTimestamp : gpsFixTimestamp;
+  const activeViewfinderIsLocating = (isRecording || hasRecordedMedia) ? false : isLocating;
+
   return (
     <View style={styles.section}>
       {/* 3-Step Flow Progress Indicator */}
@@ -226,21 +282,21 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             hasRecordedMedia={hasRecordedMedia}
             recordedUri={recordedUri}
             mediaType={mediaType}
-            coords={coords}
-            gpsAccuracy={gpsAccuracy}
-            locationSource={locationSource}
-            isLocating={isLocating}
-            gpsFixAgeSeconds={gpsFixAgeSeconds}
-            gpsFixTimestamp={gpsFixTimestamp}
+            coords={activeViewfinderCoords}
+            gpsAccuracy={activeViewfinderAccuracy}
+            locationSource={activeViewfinderSource}
+            isLocating={activeViewfinderIsLocating}
+            gpsFixAgeSeconds={activeViewfinderAge}
+            gpsFixTimestamp={activeViewfinderTimestamp}
             onFlipCamera={onFlipCamera}
-            onRetake={onRetake}
+            onRetake={handleRetake}
             onRequestPermissions={onRequestCameraPermissions}
           />
 
           {/* Direct In-App Capture Toolbar */}
           <View style={styles.captureOptionsRow}>
             <TouchableOpacity
-              onPress={onSnapPhoto}
+              onPress={handleSnapPhoto}
               disabled={isRecording}
               style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
               accessibilityRole="button"
@@ -252,7 +308,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
 
             <View style={styles.recordBtnContainer}>
               <TouchableOpacity
-                onPress={onToggleRecording}
+                onPress={handleToggleRecording}
                 style={[styles.recordBtnPulse, isRecording && styles.recordBtnPulseActive]}
                 activeOpacity={0.7}
                 accessibilityRole="button"
@@ -276,7 +332,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             </View>
 
             <TouchableOpacity
-              onPress={onPickFromGallery}
+              onPress={handlePickFromGallery}
               disabled={isRecording}
               style={[styles.sideActionBtn, isRecording && { opacity: 0.5 }]}
               accessibilityRole="button"

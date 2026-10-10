@@ -22,6 +22,15 @@ export interface UseGpsLocationResult {
 const FRESH_FIX_MAX_AGE_SECONDS = 15;
 const ACQUISITION_HARD_TIMEOUT_MS = 10000; // 10s maximum bounded acquisition window
 
+// Dev-only counters to verify 0/0 leak-free lifecycle
+let devActiveWatchersCount = 0;
+let devInFlightAcquisitionsCount = 0;
+
+export const getGpsDevMetrics = () => ({
+  activeWatchers: devActiveWatchersCount,
+  inFlightAcquisitions: devInFlightAcquisitionsCount,
+});
+
 /**
  * Truthful GPS Engine for Ghana CitizenAlert.
  * - Single writer: strictly 1 in-flight acquisition at a time.
@@ -46,9 +55,9 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   const watcherRef = useRef<Location.LocationSubscription | null>(null);
   const isMountedRef = useRef<boolean>(true);
 
-  // Keep latest coords in ref for non-reactive access inside async callbacks
-  const latestCoordsRef = useRef<GpsCoordinates | null>(null);
-  latestCoordsRef.current = coords;
+  // Keep latest coords in ref for non-reactive access inside async callbacks (prevents stale closure)
+  const coordsRef = useRef<GpsCoordinates | null>(null);
+  coordsRef.current = coords;
 
   const cleanupWatcher = useCallback(() => {
     if (watcherRef.current) {
@@ -56,6 +65,9 @@ export const useGpsLocation = (): UseGpsLocationResult => {
         watcherRef.current.remove();
       } catch {}
       watcherRef.current = null;
+      if (__DEV__) {
+        devActiveWatchersCount = Math.max(0, devActiveWatchersCount - 1);
+      }
     }
   }, []);
 
@@ -83,7 +95,9 @@ export const useGpsLocation = (): UseGpsLocationResult => {
         );
       }
 
-      setCoords({ latitude: lat, longitude: lng });
+      const newCoords = { latitude: lat, longitude: lng };
+      coordsRef.current = newCoords;
+      setCoords(newCoords);
       setGpsAccuracy(accuracy);
       setGpsFixAgeSeconds(ageSeconds);
       setGpsFixTimestamp(fixTimestamp);
@@ -124,12 +138,15 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
     inFlightRef.current = true;
     const currentReqId = ++requestIdRef.current;
+    if (__DEV__) {
+      devInFlightAcquisitionsCount++;
+    }
     setIsLocating(true);
     setGpsStatus('LOCATING');
     cleanupWatcher();
 
     if (__DEV__) {
-      console.log(`[GPS State] [Req #${currentReqId}] Started acquisition pipeline...`);
+      console.log(`[GPS State] [Req #${currentReqId}] Started acquisition pipeline... Active in-flight=${devInFlightAcquisitionsCount}, watchers=${devActiveWatchersCount}`);
     }
 
     let acquiredFresh = false;
@@ -230,6 +247,9 @@ export const useGpsLocation = (): UseGpsLocationResult => {
               } catch {}
             } else {
               watcherRef.current = sub;
+              if (__DEV__) {
+                devActiveWatchersCount++;
+              }
             }
           })
           .catch(() => {
@@ -243,18 +263,24 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       }
     } finally {
       cleanupWatcher();
+      if (__DEV__) {
+        devInFlightAcquisitionsCount = Math.max(0, devInFlightAcquisitionsCount - 1);
+      }
+
       if (isMountedRef.current && currentReqId === requestIdRef.current) {
         inFlightRef.current = false;
         setIsLocating(false);
 
         // Guarantee a terminal state if no coords were ever resolved
-        if (!latestCoordsRef.current) {
+        if (!coordsRef.current) {
           setGpsStatus('UNAVAILABLE');
           setLocationSource('UNAVAILABLE');
         }
 
         if (__DEV__) {
-          console.log(`[GPS State] [Req #${currentReqId}] Acquisition finished (terminal state reached).`);
+          console.log(
+            `[GPS State] [Req #${currentReqId}] Acquisition finished (terminal state reached). In-flight=${devInFlightAcquisitionsCount}, Watchers=${devActiveWatchersCount}`
+          );
         }
       } else {
         inFlightRef.current = false;
@@ -270,6 +296,7 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       setLocationSource('MANUAL');
       setGpsStatus('MANUAL');
       setCoords(manualCoords);
+      coordsRef.current = manualCoords;
       setGpsAccuracy(null); // Never report accuracy for manual entries
       setGpsFixAgeSeconds(null);
       setGpsFixTimestamp(null);
@@ -286,7 +313,14 @@ export const useGpsLocation = (): UseGpsLocationResult => {
 
     return () => {
       isMountedRef.current = false;
+      requestIdRef.current++;
+      inFlightRef.current = false;
       cleanupWatcher();
+      if (__DEV__) {
+        devInFlightAcquisitionsCount = 0;
+        devActiveWatchersCount = 0;
+        console.log('[GPS State] Unmounted hook. Reset dev metrics to 0/0');
+      }
     };
   }, []); // Strictly empty dependency array: triggers ONLY once on mount
 
