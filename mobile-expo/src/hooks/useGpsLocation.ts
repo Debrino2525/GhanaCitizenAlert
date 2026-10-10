@@ -11,6 +11,7 @@ export interface UseGpsLocationResult {
   gpsStatus: GpsLockStatus;
   locationSource: LocationSource;
   gpsFixAgeSeconds: number | null;
+  gpsFixTimestamp: number | null;
   region: string;
   locationName: string;
   fetchCurrentLocation: () => Promise<void>;
@@ -19,13 +20,14 @@ export interface UseGpsLocationResult {
 }
 
 const FRESH_FIX_MAX_AGE_SECONDS = 15;
+const ACQUISITION_HARD_TIMEOUT_MS = 10000; // 10s maximum bounded acquisition window
 
 /**
  * Truthful GPS Engine for Ghana CitizenAlert.
- * - Enforces a strict 15-second freshness threshold.
- * - Rejects stale cached fixes from being flagged as 'LIVE'.
- * - Switches to watchPositionAsync if getCurrentPositionAsync returns stale cache.
- * - Never invents or defaults coordinates.
+ * - Single writer: strictly 1 in-flight acquisition at a time.
+ * - Deterministic terminal states: LIVE (fresh <=15s) | LAST_KNOWN (stale) | UNAVAILABLE.
+ * - Eliminates effect re-trigger loops by removing mutable state dependencies from fetchCurrentLocation.
+ * - Automatically falls back from getCurrentPositionAsync to watchPositionAsync within a single bounded 10s window.
  */
 export const useGpsLocation = (): UseGpsLocationResult => {
   const [coords, setCoords] = useState<GpsCoordinates | null>(null);
@@ -34,10 +36,19 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   const [gpsStatus, setGpsStatus] = useState<GpsLockStatus>('LOCATING');
   const [locationSource, setLocationSource] = useState<LocationSource>('UNAVAILABLE');
   const [gpsFixAgeSeconds, setGpsFixAgeSeconds] = useState<number | null>(null);
+  const [gpsFixTimestamp, setGpsFixTimestamp] = useState<number | null>(null);
   const [region, setRegion] = useState<string>('UNKNOWN');
   const [locationName, setLocationName] = useState<string>('Location pending');
 
+  // Single-writer and in-flight tracking refs
+  const inFlightRef = useRef<boolean>(false);
+  const requestIdRef = useRef<number>(0);
   const watcherRef = useRef<Location.LocationSubscription | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  // Keep latest coords in ref for non-reactive access inside async callbacks
+  const latestCoordsRef = useRef<GpsCoordinates | null>(null);
+  latestCoordsRef.current = coords;
 
   const cleanupWatcher = useCallback(() => {
     if (watcherRef.current) {
@@ -48,8 +59,10 @@ export const useGpsLocation = (): UseGpsLocationResult => {
     }
   }, []);
 
-  const handleApplyLocationFix = useCallback(
-    async (location: Location.LocationObject, apiMethod: string): Promise<boolean> => {
+  const applyLocationFix = useCallback(
+    async (location: Location.LocationObject, apiMethod: string, reqId: number): Promise<boolean> => {
+      if (!isMountedRef.current || reqId !== requestIdRef.current) return false;
+
       const now = Date.now();
       const fixTimestamp = location.timestamp;
       const ageMs = Math.max(0, now - fixTimestamp);
@@ -60,58 +73,40 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       const rawAcc = typeof location.coords.accuracy === 'number' ? location.coords.accuracy : null;
       const accuracy = rawAcc !== null ? Math.round(rawAcc * 10) / 10 : null;
 
+      const targetStatus: GpsLockStatus = isFresh ? 'LIVE' : 'STALE';
+      const targetSource: LocationSource = isFresh ? 'LIVE' : 'LAST_KNOWN';
+
       if (__DEV__) {
         console.log(
-          `[GPS Fix Audit] API: ${apiMethod} | Timestamp: ${new Date(fixTimestamp).toISOString()} | Age: ${ageSeconds}s | ` +
-            `Fresh: ${isFresh} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Accuracy: ±${accuracy ?? 'N/A'}m | ` +
-            `Speed: ${location.coords.speed ?? 'N/A'}`
+          `[GPS State] [Req #${reqId}] ${apiMethod} -> ${targetStatus} | Age: ${ageSeconds}s | ` +
+            `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)} | Acc: ±${accuracy ?? 'N/A'}m | Fresh: ${isFresh}`
         );
       }
 
       setCoords({ latitude: lat, longitude: lng });
       setGpsAccuracy(accuracy);
       setGpsFixAgeSeconds(ageSeconds);
+      setGpsFixTimestamp(fixTimestamp);
+      setLocationSource(targetSource);
+      setGpsStatus(targetStatus);
 
-      if (isFresh) {
-        setLocationSource('LIVE');
-        setGpsStatus('LIVE');
-      } else {
-        setLocationSource('LAST_KNOWN');
-        setGpsStatus('STALE');
-      }
-
-      // Region boundary detection
-      let detectedRegion = getGhanaRegionCode(lat, lng).name;
+      // Detect Ghanaian Administrative Region
+      const detectedRegion = getGhanaRegionCode(lat, lng).name;
       setRegion(detectedRegion);
 
-      // Reverse geocoding attempt (non-blocking)
-      try {
-        const revPromise = Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-        const revTimeout = new Promise<Location.LocationGeocodedAddress[]>((resolve) =>
-          setTimeout(() => resolve([]), 2500)
-        );
-        const reverseResults = await Promise.race([revPromise, revTimeout]);
-
-        if (reverseResults && reverseResults.length > 0) {
-          const rev = reverseResults[0];
-          const parts = [
-            rev.street,
-            rev.district || rev.subregion,
-            rev.city || rev.name,
-            rev.region,
-          ].filter(Boolean);
-
-          const autoAreaName = parts.join(', ') || '';
-          if (autoAreaName) {
-            setLocationName(autoAreaName);
+      // Reverse geocode in background (non-blocking)
+      Location.reverseGeocodeAsync({ latitude: lat, longitude: lng })
+        .then((reverseResults) => {
+          if (!isMountedRef.current || reqId !== requestIdRef.current) return;
+          if (reverseResults && reverseResults.length > 0) {
+            const rev = reverseResults[0];
+            const parts = [rev.street, rev.district || rev.subregion, rev.city || rev.name, rev.region].filter(Boolean);
+            const autoAreaName = parts.join(', ');
+            if (autoAreaName) setLocationName(autoAreaName);
+            if (rev.region) setRegion(rev.region);
           }
-          if (rev.region) {
-            setRegion(rev.region);
-          }
-        }
-      } catch {
-        // Safe reverse geocode ignore
-      }
+        })
+        .catch(() => {});
 
       return isFresh;
     },
@@ -119,9 +114,25 @@ export const useGpsLocation = (): UseGpsLocationResult => {
   );
 
   const fetchCurrentLocation = useCallback(async () => {
+    // Single-writer mutex: if already acquiring, reject concurrent redundant requests
+    if (inFlightRef.current) {
+      if (__DEV__) {
+        console.log('[GPS Engine] Acquisition already in flight. Request ignored.');
+      }
+      return;
+    }
+
+    inFlightRef.current = true;
+    const currentReqId = ++requestIdRef.current;
     setIsLocating(true);
     setGpsStatus('LOCATING');
     cleanupWatcher();
+
+    if (__DEV__) {
+      console.log(`[GPS State] [Req #${currentReqId}] Started acquisition pipeline...`);
+    }
+
+    let acquiredFresh = false;
 
     try {
       // 1. Permission Check
@@ -132,14 +143,15 @@ export const useGpsLocation = (): UseGpsLocationResult => {
       }
 
       if (status !== 'granted') {
+        if (!isMountedRef.current || currentReqId !== requestIdRef.current) return;
         setGpsStatus('ERROR');
         setLocationSource('UNAVAILABLE');
         setCoords(null);
         setGpsAccuracy(null);
         setGpsFixAgeSeconds(null);
+        setGpsFixTimestamp(null);
         setLocationName('Location pending');
         setRegion('UNKNOWN');
-        setIsLocating(false);
         Alert.alert(
           'Location Permission Needed',
           'CitizenAlert requires GPS permissions to tag evidence with tamper-proof coordinates and enable emergency dispatch.'
@@ -147,99 +159,136 @@ export const useGpsLocation = (): UseGpsLocationResult => {
         return;
       }
 
-      // 2. Query getCurrentPositionAsync with High Accuracy
-      let directFix: Location.LocationObject | null = null;
+      // 2. Query getCurrentPositionAsync with 4.5s Promise.race timeout
       try {
-        const posPromise = Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
+        const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         const posTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4500));
-        directFix = await Promise.race([posPromise, posTimeout]);
+        const directFix = await Promise.race([posPromise, posTimeout]);
+
+        if (directFix && directFix.coords) {
+          acquiredFresh = await applyLocationFix(directFix, 'getCurrentPositionAsync(High)', currentReqId);
+        }
       } catch (e) {
-        directFix = null;
+        // Direct fix query failed or timed out
       }
 
-      let isFresh = false;
-      if (directFix && directFix.coords) {
-        isFresh = await handleApplyLocationFix(directFix, 'getCurrentPositionAsync(High)');
+      // 3. If fresh fix achieved, we are in a terminal LIVE state!
+      if (acquiredFresh) {
+        return;
       }
 
-      // 3. If direct fix was missing or STALE (>15s), activate watchPositionAsync for a true hardware fix
-      if (!isFresh) {
-        if (__DEV__) {
-          console.log('[GPS Engine] getCurrentPosition returned stale or timed out. Activating watchPositionAsync...');
+      // 4. Fallback Tier: Check last known position as intermediate fallback while watcher listens
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown && lastKnown.coords && isMountedRef.current && currentReqId === requestIdRef.current) {
+          await applyLocationFix(lastKnown, 'getLastKnownPositionAsync(CacheFallback)', currentReqId);
         }
+      } catch {}
 
-        // Check last known position as intermediate fallback while watcher acquires satellite lock
-        if (!directFix) {
-          try {
-            const lastKnown = await Location.getLastKnownPositionAsync();
-            if (lastKnown && lastKnown.coords) {
-              await handleApplyLocationFix(lastKnown, 'getLastKnownPositionAsync(CacheFallback)');
-            }
-          } catch {}
-        }
+      // 5. If still not fresh, start watchPositionAsync with hard bounded timeout
+      if (__DEV__) {
+        console.log(`[GPS State] [Req #${currentReqId}] Awaiting live satellite pulse via watchPositionAsync...`);
+      }
 
-        // Launch continuous high-accuracy watcher to capture the next live satellite pulse
-        watcherRef.current = await Location.watchPositionAsync(
+      await new Promise<void>((resolve) => {
+        let isResolved = false;
+
+        const completeWatcher = () => {
+          if (!isResolved) {
+            isResolved = true;
+            cleanupWatcher();
+            resolve();
+          }
+        };
+
+        // Hard timeout on watcher (e.g. 5.5s remaining to hit 10s total bounded window)
+        const timeoutHandle = setTimeout(() => {
+          if (__DEV__) {
+            console.log(`[GPS State] [Req #${currentReqId}] Watcher acquisition window expired.`);
+          }
+          completeWatcher();
+        }, 5500);
+
+        Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
             timeInterval: 1000,
             distanceInterval: 1,
           },
           async (freshLocation) => {
-            const freshApplied = await handleApplyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)');
+            const freshApplied = await applyLocationFix(freshLocation, 'watchPositionAsync(LiveStream)', currentReqId);
             if (freshApplied) {
-              // Successfully acquired live fix; detach watcher and finish locating
-              cleanupWatcher();
-              setIsLocating(false);
+              clearTimeout(timeoutHandle);
+              completeWatcher();
             }
           }
-        );
-
-        // Allow watcher up to 5 seconds to receive a live satellite event before releasing spinner
-        setTimeout(() => {
-          setIsLocating(false);
-        }, 5000);
-        return;
-      }
+        )
+          .then((sub) => {
+            if (isResolved) {
+              try {
+                sub.remove();
+              } catch {}
+            } else {
+              watcherRef.current = sub;
+            }
+          })
+          .catch(() => {
+            clearTimeout(timeoutHandle);
+            completeWatcher();
+          });
+      });
     } catch (err) {
       if (__DEV__) {
-        console.warn('[GPS Engine Error]', err);
-      }
-      if (!coords) {
-        setGpsStatus('UNAVAILABLE');
-        setLocationSource('UNAVAILABLE');
-        setCoords(null);
-        setGpsAccuracy(null);
+        console.warn(`[GPS State] [Req #${currentReqId}] Error:`, err);
       }
     } finally {
-      if (!watcherRef.current) {
+      cleanupWatcher();
+      if (isMountedRef.current && currentReqId === requestIdRef.current) {
+        inFlightRef.current = false;
         setIsLocating(false);
+
+        // Guarantee a terminal state if no coords were ever resolved
+        if (!latestCoordsRef.current) {
+          setGpsStatus('UNAVAILABLE');
+          setLocationSource('UNAVAILABLE');
+        }
+
+        if (__DEV__) {
+          console.log(`[GPS State] [Req #${currentReqId}] Acquisition finished (terminal state reached).`);
+        }
+      } else {
+        inFlightRef.current = false;
       }
     }
-  }, [cleanupWatcher, handleApplyLocationFix, coords]);
+  }, [cleanupWatcher, applyLocationFix]);
 
   const setManualLocation = useCallback(
     (name: string, regionName: string = 'UNKNOWN', manualCoords: GpsCoordinates | null = null) => {
       cleanupWatcher();
+      inFlightRef.current = false;
+      setIsLocating(false);
       setLocationSource('MANUAL');
       setGpsStatus('MANUAL');
       setCoords(manualCoords);
       setGpsAccuracy(null); // Never report accuracy for manual entries
       setGpsFixAgeSeconds(null);
+      setGpsFixTimestamp(null);
       setLocationName(name || 'Manual Location');
       setRegion(regionName || 'UNKNOWN');
     },
     [cleanupWatcher]
   );
 
+  // Run initial acquisition ONCE on mount
   useEffect(() => {
+    isMountedRef.current = true;
     fetchCurrentLocation();
+
     return () => {
+      isMountedRef.current = false;
       cleanupWatcher();
     };
-  }, [fetchCurrentLocation, cleanupWatcher]);
+  }, []); // Strictly empty dependency array: triggers ONLY once on mount
 
   return {
     coords,
@@ -248,6 +297,7 @@ export const useGpsLocation = (): UseGpsLocationResult => {
     gpsStatus,
     locationSource,
     gpsFixAgeSeconds,
+    gpsFixTimestamp,
     region,
     locationName,
     fetchCurrentLocation,

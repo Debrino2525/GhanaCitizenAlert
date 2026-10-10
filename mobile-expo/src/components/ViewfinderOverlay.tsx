@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { CameraView, CameraType } from 'expo-camera';
 import {
   Camera,
@@ -10,7 +10,7 @@ import {
   Lock,
   Sparkles
 } from 'lucide-react-native';
-import { GpsCoordinates } from '../types';
+import { GpsCoordinates, LocationSource } from '../types';
 import { tokens } from '../theme/tokens';
 
 interface ViewfinderOverlayProps {
@@ -25,7 +25,10 @@ interface ViewfinderOverlayProps {
   mediaType: 'VIDEO' | 'IMAGE';
   coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
-  locationSource?: string;
+  locationSource?: LocationSource;
+  isLocating?: boolean;
+  gpsFixAgeSeconds?: number | null;
+  gpsFixTimestamp?: number | null;
   onFlipCamera: () => void;
   onRetake: () => void;
   onRequestPermissions: () => void;
@@ -43,12 +46,15 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
   mediaType,
   coords,
   gpsAccuracy,
-  locationSource = 'LIVE',
+  locationSource = 'UNAVAILABLE',
+  isLocating = false,
+  gpsFixAgeSeconds = null,
+  gpsFixTimestamp = null,
   onFlipCamera,
   onRetake,
   onRequestPermissions
 }) => {
-  const hasValidFix = coords && (coords.latitude !== 0 || coords.longitude !== 0);
+  const hasValidFix = coords !== null && (coords.latitude !== 0 || coords.longitude !== 0);
 
   return (
     <View style={styles.cameraWrapper}>
@@ -167,20 +173,41 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
           <ShieldCheck color={tokens.colors.brand.gold} size={12} />
           <Text style={styles.watermarkGold}>FORENSIC WATERMARK (ACT 772)</Text>
         </View>
-        <Text style={styles.watermarkWhite}>
-          UTC: {new Date().toISOString().substring(11, 19)} | {hasValidFix ? `LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'Location unavailable'}
-        </Text>
-        {hasValidFix ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <MapPin color={tokens.colors.brand.gold} size={11} />
-            <Text style={styles.watermarkGold}>
-              {locationSource === 'LIVE' ? 'LIVE FIX' : 'LAST KNOWN FIX'}{gpsAccuracy !== null ? ` | ACCURACY: ±${gpsAccuracy}m` : ''}
+
+        {isLocating ? (
+          <>
+            <Text style={styles.watermarkWhite}>
+              {hasValidFix && coords ? `PREV FIX (${gpsFixAgeSeconds ? `${gpsFixAgeSeconds}s old` : 'stale'}): LAT: ${coords.latitude.toFixed(4)} LNG: ${coords.longitude.toFixed(4)}` : 'UTC: ACQUIRING GPS LOCK…'}
             </Text>
-          </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <ActivityIndicator size="small" color={tokens.colors.brand.gold} />
+              <Text style={[styles.watermarkGold, { color: tokens.colors.brand.gold, fontSize: 10 }]}>
+                SEARCHING SATELLITE PULSE…
+              </Text>
+            </View>
+          </>
+        ) : hasValidFix && coords ? (
+          <>
+            <Text style={styles.watermarkWhite}>
+              {gpsFixTimestamp ? `FIX UTC: ${new Date(gpsFixTimestamp).toISOString().substring(11, 19)}Z (Age: ${gpsFixAgeSeconds ?? 0}s)` : `UTC: ${new Date().toISOString().substring(11, 19)}Z`} | LAT: {coords.latitude.toFixed(4)} LNG: {coords.longitude.toFixed(4)}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <MapPin color={locationSource === 'LIVE' ? tokens.colors.status.success : tokens.colors.brand.gold} size={11} />
+              <Text style={[styles.watermarkGold, locationSource === 'LIVE' && { color: tokens.colors.status.success }]}>
+                {locationSource === 'LIVE' ? 'LIVE FIX' : locationSource === 'LAST_KNOWN' ? `LAST KNOWN (${gpsFixAgeSeconds ? `${gpsFixAgeSeconds}s old` : 'stale'})` : 'MANUAL LOCATION'}
+                {(locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') && gpsAccuracy !== null ? ` | ACCURACY: ±${gpsAccuracy}m` : ''}
+              </Text>
+            </View>
+          </>
         ) : (
-          <Text style={[styles.watermarkWhite, { color: tokens.colors.status.warning, fontSize: 10 }]}>
-            Digital address unavailable
-          </Text>
+          <>
+            <Text style={styles.watermarkWhite}>
+              UTC: {new Date().toISOString().substring(11, 19)}Z | Location unavailable
+            </Text>
+            <Text style={[styles.watermarkWhite, { color: tokens.colors.status.danger, fontSize: 10 }]}>
+              NO SATELLITE FIX • MOVE OUTDOORS
+            </Text>
+          </>
         )}
       </View>
     </View>

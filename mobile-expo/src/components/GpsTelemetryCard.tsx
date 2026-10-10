@@ -28,10 +28,10 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
   onRefreshGps,
   onManualLocationPress,
 }) => {
-  const isLive = locationSource === 'LIVE' && coords !== null;
-  const isStale = locationSource === 'LAST_KNOWN' && coords !== null;
-  const isManual = locationSource === 'MANUAL';
-  const isUnavailable = locationSource === 'UNAVAILABLE' || coords === null;
+  const isLive = !isLocating && locationSource === 'LIVE' && coords !== null;
+  const isStale = !isLocating && locationSource === 'LAST_KNOWN' && coords !== null;
+  const isManual = !isLocating && locationSource === 'MANUAL';
+  const isUnavailable = !isLocating && (locationSource === 'UNAVAILABLE' || coords === null);
 
   const formatAgeText = (seconds: number | null): string => {
     if (seconds === null || seconds === undefined) return '';
@@ -44,6 +44,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
     <View
       style={[
         styles.gpsCard,
+        isLocating && styles.gpsCardLocating,
         isLive && styles.gpsCardLive,
         isStale && styles.gpsCardStale,
         isManual && styles.gpsCardManual,
@@ -52,7 +53,9 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
     >
       <View style={styles.gpsCardHeader}>
         <View style={styles.gpsIndicatorRow}>
-          {isLive ? (
+          {isLocating ? (
+            <ActivityIndicator size="small" color={tokens.colors.brand.gold} />
+          ) : isLive ? (
             <Radio color={tokens.colors.status.success} size={16} />
           ) : isStale ? (
             <Clock color={tokens.colors.status.warning} size={16} />
@@ -62,18 +65,20 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
             <AlertTriangle color={tokens.colors.status.danger} size={16} />
           )}
 
-          <View>
+          <View style={{ flex: 1, paddingRight: 8 }}>
             <Text
               style={[
                 styles.gpsCardTitle,
+                isLocating && { color: tokens.colors.brand.gold },
                 isLive && { color: tokens.colors.status.success },
                 isStale && { color: tokens.colors.status.warning },
                 isManual && { color: tokens.colors.text.secondary },
                 isUnavailable && { color: tokens.colors.status.danger },
               ]}
+              numberOfLines={1}
             >
               {isLocating
-                ? t.gpsLocating
+                ? 'ACQUIRING HARDWARE GPS FIX…'
                 : isLive
                 ? 'GPS ACQUIRED (LIVE)'
                 : isStale
@@ -82,6 +87,11 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
                 ? 'Manual Location (Reported)'
                 : 'LOCATION UNAVAILABLE'}
             </Text>
+            {isLocating && coords && (
+              <Text style={styles.staleNoticeText}>
+                Acquiring fresh satellite pulse… (Previous fix: {formatAgeText(gpsFixAgeSeconds)})
+              </Text>
+            )}
             {isStale && (
               <Text style={styles.staleNoticeText}>
                 Hardware GPS fix is older than 15s. Tap Refresh to acquire live fix.
@@ -94,12 +104,15 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
           <TouchableOpacity
             onPress={onRefreshGps}
             disabled={isLocating}
-            style={styles.recalibrateBtn}
+            style={[styles.recalibrateBtn, isLocating && { opacity: 0.6 }]}
             accessibilityRole="button"
             accessibilityLabel="Acquire Fresh GPS Fix"
           >
             {isLocating ? (
-              <ActivityIndicator size="small" color={tokens.colors.bg.base} />
+              <View style={styles.btnInnerRow}>
+                <ActivityIndicator size="small" color={tokens.colors.bg.base} />
+                <Text style={styles.recalibrateBtnText}>Searching…</Text>
+              </View>
             ) : (
               <View style={styles.btnInnerRow}>
                 <RefreshCw color={tokens.colors.bg.base} size={12} />
@@ -111,7 +124,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
       </View>
 
       {coords ? (
-        <View style={styles.gpsCoordsRow}>
+        <View style={[styles.gpsCoordsRow, isLocating && { opacity: 0.45 }]}>
           <View style={styles.gpsCoordItem}>
             <Text style={styles.gpsCoordLabel}>LATITUDE</Text>
             <Text style={styles.gpsCoordVal}>{coords.latitude.toFixed(5)}° N</Text>
@@ -125,7 +138,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
           <View style={styles.gpsCoordItem}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
               <Crosshair
-                color={isLive ? tokens.colors.status.success : tokens.colors.status.warning}
+                color={isLive ? tokens.colors.status.success : tokens.colors.text.muted}
                 size={10}
               />
               <Text style={styles.gpsCoordLabel}>ACCURACY</Text>
@@ -133,10 +146,10 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
             <Text
               style={[
                 styles.gpsCoordVal,
-                { color: isLive ? tokens.colors.status.success : tokens.colors.status.warning },
+                { color: isLive ? tokens.colors.status.success : tokens.colors.text.secondary },
               ]}
             >
-              {gpsAccuracy !== null ? `±${gpsAccuracy}m` : isLive ? 'Live Fix' : 'Estimated'}
+              {isLocating ? 'Locking…' : gpsAccuracy !== null ? `±${gpsAccuracy}m` : isLive ? 'Live Fix' : 'Estimated'}
             </Text>
           </View>
         </View>
@@ -144,7 +157,7 @@ export const GpsTelemetryCard: React.FC<GpsTelemetryCardProps> = memo(({
         <View style={styles.unavailableBox}>
           <Crosshair color={tokens.colors.status.warning} size={14} />
           <Text style={styles.unavailableText}>
-            No live satellite lock. Move outdoors, tap Refresh GPS, or enter location manually below.
+            {isLocating ? 'Listening for GPS satellite signal…' : 'No live satellite lock. Move outdoors, tap Refresh GPS, or enter location manually below.'}
           </Text>
         </View>
       )}
@@ -160,6 +173,9 @@ const styles = StyleSheet.create({
     borderColor: tokens.colors.police.dark,
     padding: tokens.spacing.md,
     gap: tokens.spacing.sm,
+  },
+  gpsCardLocating: {
+    borderColor: 'rgba(234, 179, 8, 0.4)',
   },
   gpsCardLive: {
     borderColor: 'rgba(16, 185, 129, 0.4)',

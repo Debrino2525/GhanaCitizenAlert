@@ -333,6 +333,7 @@ function MainApp() {
                 gpsStatus={gps.gpsStatus}
                 locationSource={gps.locationSource}
                 gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
+                gpsFixTimestamp={gps.gpsFixTimestamp}
                 locationName={gps.locationName}
                 region={gps.region}
                 onRefreshGps={gps.fetchCurrentLocation}

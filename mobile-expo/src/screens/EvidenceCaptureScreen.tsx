@@ -48,6 +48,7 @@ interface EvidenceCaptureScreenProps {
   gpsStatus: GpsLockStatus;
   locationSource: LocationSource;
   gpsFixAgeSeconds: number | null;
+  gpsFixTimestamp?: number | null;
   locationName: string;
   region: string;
   onRefreshGps: () => void;
@@ -105,6 +106,7 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
   gpsStatus,
   locationSource,
   gpsFixAgeSeconds,
+  gpsFixTimestamp,
   locationName,
   region,
   onRefreshGps,
@@ -227,6 +229,9 @@ export const EvidenceCaptureScreen: React.FC<EvidenceCaptureScreenProps> = memo(
             coords={coords}
             gpsAccuracy={gpsAccuracy}
             locationSource={locationSource}
+            isLocating={isLocating}
+            gpsFixAgeSeconds={gpsFixAgeSeconds}
+            gpsFixTimestamp={gpsFixTimestamp}
             onFlipCamera={onFlipCamera}
             onRetake={onRetake}
             onRequestPermissions={onRequestCameraPermissions}
