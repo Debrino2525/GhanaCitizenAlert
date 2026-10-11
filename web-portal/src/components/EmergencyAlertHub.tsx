@@ -528,6 +528,25 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                           <span>{alert.issuedByAgency} • {alert.badgeNumber}</span>
                           <span className="text-emerald-400 font-bold">{alert.sightingsCount} Tips</span>
                         </div>
+
+                        <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400 font-mono">
+                          <span>
+                            🕒 Issued: {new Date(alert.createdAt).toLocaleString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                          <span className={new Date(alert.activeUntil).getTime() < Date.now() ? 'text-red-400' : 'text-amber-400'}>
+                            ⏳ Exp: {new Date(alert.activeUntil).toLocaleString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -626,6 +645,34 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold">Authorizing Commander</span>
                   <span className="text-white font-semibold">{selectedAlert.approvingCommanderName || 'Division Command'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Broadcast Issued (UTC)</span>
+                  <span className="text-blue-300 font-mono">
+                    {new Date(selectedAlert.createdAt).toLocaleString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Geofence Expiry</span>
+                  <span className={`font-mono ${new Date(selectedAlert.activeUntil).getTime() < Date.now() ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {new Date(selectedAlert.activeUntil).toLocaleString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Geofence Radius</span>
+                  <span className="text-white font-semibold">{selectedAlert.radiusKm} km</span>
                 </div>
               </div>
 

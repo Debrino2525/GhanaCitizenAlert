@@ -39,8 +39,29 @@ import {
 } from '../services/geminiAiService';
 import { AiCaseBriefModal } from './AiCaseBriefModal';
 
-export const renderLocationSourceBadge = (locationSource?: LocationSource | null, fixAgeSeconds?: number | null) => {
+export const renderLocationSourceBadge = (
+  locationSource?: LocationSource | null,
+  fixAgeSeconds?: number | null,
+  updatedAt?: string | null
+) => {
+  // If locationSource was recorded as LIVE, verify its freshness
   if (locationSource === 'LIVE') {
+    let ageSec = fixAgeSeconds;
+    if (ageSec == null && updatedAt) {
+      ageSec = Math.max(0, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 1000));
+    }
+
+    // A live GPS fix is only truly live if fresh within 90 seconds (1.5 minutes)
+    if (ageSec != null && ageSec > 90) {
+      const ageMin = Math.max(1, Math.round(ageSec / 60));
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="Beacon stopped or device offline">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
+          LAST KNOWN ({ageMin}m old)
+        </span>
+      );
+    }
+
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
@@ -49,7 +70,11 @@ export const renderLocationSourceBadge = (locationSource?: LocationSource | null
     );
   }
   if (locationSource === 'LAST_KNOWN') {
-    const ageMin = fixAgeSeconds != null ? Math.max(1, Math.round(fixAgeSeconds / 60)) : null;
+    let ageMin = fixAgeSeconds != null ? Math.max(1, Math.round(fixAgeSeconds / 60)) : null;
+    if (!ageMin && updatedAt) {
+      const elapsedMin = Math.max(1, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000));
+      ageMin = elapsedMin;
+    }
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
@@ -676,21 +701,40 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   <h3 className="text-sm font-bold text-white line-clamp-1 mb-1">{inc.title}</h3>
                   <p className="text-xs text-slate-400 line-clamp-2 mb-2">{inc.description}</p>
                   
-                  {latestPings[inc.id] && (
-                    <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-red-950/80 border border-red-800 text-red-300 text-[11px] font-mono my-2 shadow-inner">
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping shrink-0" />
-                      <span className="font-bold truncate">
-                        📡 LIVE BEACON: {latestPings[inc.id].lat.toFixed(4)}, {latestPings[inc.id].lng.toFixed(4)} (±{latestPings[inc.id].accuracy}m) • {formatPingAge(latestPings[inc.id].created_at)}
-                      </span>
-                    </div>
-                  )}
+                  {latestPings[inc.id] && (() => {
+                    const pingAgeSec = Math.max(0, Math.floor((Date.now() - new Date(latestPings[inc.id].created_at).getTime()) / 1000));
+                    const isPingActive = pingAgeSec <= 120; // Active within 2 minutes
+
+                    return (
+                      <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono my-2 shadow-inner ${
+                        isPingActive
+                          ? 'bg-red-950/80 border-red-800 text-red-300'
+                          : 'bg-slate-900 border-slate-800 text-slate-400'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isPingActive ? 'bg-red-500 animate-ping' : 'bg-slate-500'}`} />
+                        <span className="font-bold truncate">
+                          {isPingActive ? '📡 LIVE BEACON:' : '🛑 BEACON TERMINATED:'} {latestPings[inc.id].lat.toFixed(4)}, {latestPings[inc.id].lng.toFixed(4)} (±{latestPings[inc.id].accuracy}m) • {formatPingAge(latestPings[inc.id].created_at)}
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80 gap-2">
-                    <span className="font-mono text-blue-400 font-bold text-[11px] truncate">
-                      📍 {inc.coordinates ? `${inc.coordinates[0].toFixed(4)}° N, ${inc.coordinates[1].toFixed(4)}° W` : 'Location unavailable'}
-                    </span>
+                    <div className="min-w-0">
+                      <span className="font-mono text-blue-400 font-bold text-[11px] truncate block">
+                        📍 {inc.coordinates ? `${inc.coordinates[0].toFixed(4)}° N, ${inc.coordinates[1].toFixed(4)}° W` : 'Location unavailable'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                        🕒 {new Date(inc.createdAt).toLocaleString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {renderLocationSourceBadge(inc.locationSource, inc.gpsFixAgeSeconds)}
+                      {renderLocationSourceBadge(inc.locationSource, inc.gpsFixAgeSeconds, inc.updatedAt)}
                     </div>
                   </div>
                 </div>
@@ -747,41 +791,64 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             </div>
 
             {/* CARD 0: LIVE SOS BEACON TRACKING BANNER (If Active Pings Exist) */}
-            {latestPings[selectedIncident.id] && (
-              <div className="bg-red-950/60 border-2 border-red-500 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center space-x-3.5 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0 shadow-lg">
-                    <Radio className="w-6 h-6 animate-ping" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-black uppercase px-2.5 py-0.5 rounded bg-red-600 text-white shadow-md">
-                        🚨 LIVE SOS DISTRESS BEACON
-                      </span>
-                      <span className="text-xs font-mono font-bold text-red-300 flex items-center space-x-1">
-                        <Activity className="w-3 h-3 text-red-400" />
-                        <span>Last Ping: {formatPingAge(latestPings[selectedIncident.id].created_at)}</span>
-                      </span>
-                    </div>
-                    <p className="text-sm font-mono text-white font-extrabold mt-1">
-                      GPS Fix: {latestPings[selectedIncident.id].lat.toFixed(5)}° N, {latestPings[selectedIncident.id].lng.toFixed(5)}° W (±{latestPings[selectedIncident.id].accuracy}m accuracy)
-                    </p>
-                  </div>
-                </div>
+            {latestPings[selectedIncident.id] && (() => {
+              const pingAgeSec = Math.max(0, Math.floor((Date.now() - new Date(latestPings[selectedIncident.id].created_at).getTime()) / 1000));
+              const isPingActive = pingAgeSec <= 120; // Active within 2 minutes
 
-                <div className="flex items-center space-x-2 shrink-0">
-                  <a
-                    href={`https://www.google.com/maps?q=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}&ll=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}&z=20&t=k`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center space-x-1.5 transition shadow-lg shadow-red-600/30"
-                  >
-                    <Navigation className="w-3.5 h-3.5" />
-                    <span>Track Live GPS in Maps</span>
-                  </a>
+              return (
+                <div className={`border-2 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4 ${
+                  isPingActive
+                    ? 'bg-red-950/60 border-red-500'
+                    : 'bg-slate-900 border-slate-700'
+                }`}>
+                  <div className="flex items-center space-x-3.5 min-w-0">
+                    <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-lg ${
+                      isPingActive
+                        ? 'bg-red-600/20 border-red-500/50 text-red-400'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}>
+                      <Radio className={`w-6 h-6 ${isPingActive ? 'animate-ping' : ''}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded shadow-md ${
+                          isPingActive
+                            ? 'bg-red-600 text-white'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}>
+                          {isPingActive ? '🚨 LIVE SOS DISTRESS BEACON' : '🛑 SOS BEACON TERMINATED'}
+                        </span>
+                        <span className={`text-xs font-mono font-bold flex items-center space-x-1 ${
+                          isPingActive ? 'text-red-300' : 'text-slate-400'
+                        }`}>
+                          <Activity className={`w-3 h-3 ${isPingActive ? 'text-red-400' : 'text-slate-500'}`} />
+                          <span>Last Ping: {formatPingAge(latestPings[selectedIncident.id].created_at)}</span>
+                        </span>
+                      </div>
+                      <p className="text-sm font-mono text-white font-extrabold mt-1">
+                        GPS Fix: {latestPings[selectedIncident.id].lat.toFixed(5)}° N, {latestPings[selectedIncident.id].lng.toFixed(5)}° W (±{latestPings[selectedIncident.id].accuracy}m accuracy)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <a
+                      href={`https://www.google.com/maps?q=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}&ll=${latestPings[selectedIncident.id].lat},${latestPings[selectedIncident.id].lng}&z=20&t=k`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`px-3.5 py-2 rounded-xl text-white font-black text-xs flex items-center space-x-1.5 transition shadow-lg ${
+                        isPingActive
+                          ? 'bg-red-600 hover:bg-red-500 shadow-red-600/30'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                      }`}
+                    >
+                      <Navigation className="w-3.5 h-3.5" />
+                      <span>{isPingActive ? 'Track Live GPS in Maps' : 'View Last Coordinates in Maps'}</span>
+                    </a>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* CARD 1: GOOGLE MAPS TACTICAL DISPATCH BANNER */}
             {(() => {

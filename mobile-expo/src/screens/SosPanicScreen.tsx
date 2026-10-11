@@ -445,6 +445,9 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   };
 
   const handleCancelSos = () => {
+    const trackingCodeToCancel = activeTrackingCode;
+    const incidentIdToCancel = activeIncidentId;
+
     if (sosWatcherRef.current) {
       try {
         sosWatcherRef.current.remove();
@@ -458,6 +461,41 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     setFailedPings(0);
     safeHaptics.warning();
     announceAccessibility('Emergency distress beacon stopped on device.');
+
+    // Notify backend/database that the live distress beacon has stopped
+    (async () => {
+      try {
+        if (trackingCodeToCancel) {
+          const { error } = await supabase
+            .from('incidents')
+            .update({
+              location_source: 'LAST_KNOWN',
+              updated_at: new Date().toISOString()
+            })
+            .eq('tracking_code', trackingCodeToCancel);
+
+          if (error && __DEV__) {
+            console.warn('[SOS Cancel Notice] Update incident location_source error:', error.message);
+          }
+        } else if (incidentIdToCancel) {
+          const { error } = await supabase
+            .from('incidents')
+            .update({
+              location_source: 'LAST_KNOWN',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', incidentIdToCancel);
+
+          if (error && __DEV__) {
+            console.warn('[SOS Cancel Notice] Update incident location_source error:', error.message);
+          }
+        }
+      } catch (err: any) {
+        if (__DEV__) {
+          console.warn('[SOS Cancel Exception]', err?.message);
+        }
+      }
+    })();
 
     Alert.alert(
       'Distress Beacon Stopped',
