@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Shield,
   ShieldCheck,
@@ -95,13 +96,14 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
       const user = data.user;
       const userMeta = user.user_metadata || {};
+      const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
       const authenticatedCitizen: CitizenUser = {
         id: user.id,
         name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
         email: user.email || email.trim().toLowerCase(),
         phone: userMeta.phone || '',
         ghanaCard: userMeta.ghana_card || '',
-        avatarUrl: userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
+        avatarUrl: savedAvatar || userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
         trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
         isVerified: Boolean(userMeta.is_verified || false),
         loginMethod: 'EMAIL',
@@ -185,16 +187,17 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  const buildAndSetCitizenUser = (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' = 'GOOGLE') => {
+  const buildAndSetCitizenUser = async (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' = 'GOOGLE') => {
     const userMeta = user.user_metadata || {};
     const defaultName = provider === 'APPLE' ? 'Apple Citizen' : 'Google Citizen';
+    const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
     const authenticatedCitizen: CitizenUser = {
       id: user.id,
       name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
       email: user.email || '',
       phone: userMeta.phone || '',
       ghanaCard: userMeta.ghana_card || '',
-      avatarUrl: userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
+      avatarUrl: savedAvatar || userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
       trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
       isVerified: Boolean(userMeta.is_verified || false),
       loginMethod: provider,

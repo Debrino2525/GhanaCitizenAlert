@@ -26,7 +26,8 @@ import {
   X,
   Activity,
   UploadCloud,
-  RotateCcw
+  RotateCcw,
+  Clock
 } from 'lucide-react';
 import { generateCourtCertificate, CourtCertificate } from '../services/evidenceVault';
 import { supabase } from '../services/supabaseClient';
@@ -42,18 +43,31 @@ import { AiCaseBriefModal } from './AiCaseBriefModal';
 export const renderLocationSourceBadge = (
   locationSource?: LocationSource | null,
   fixAgeSeconds?: number | null,
-  updatedAt?: string | null
+  updatedAt?: string | null,
+  title?: string | null,
+  status?: string | null
 ) => {
+  const isTerminated = status === 'RESOLVED' || status === 'DISMISSED' || (title && (title.includes('STAND DOWN') || title.includes('CANCELLED')));
+
+  if (isTerminated) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-300 border border-slate-700" title="Distress beacon stopped or case resolved">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1" />
+        STAND DOWN (CANCELLED)
+      </span>
+    );
+  }
+
+  // Calculate actual elapsed wall-clock time since the incident was created or updated
+  const elapsedSec = updatedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 1000))
+    : (fixAgeSeconds ?? 9999);
+
   // If locationSource was recorded as LIVE, verify its freshness
   if (locationSource === 'LIVE') {
-    let ageSec = fixAgeSeconds;
-    if (ageSec == null && updatedAt) {
-      ageSec = Math.max(0, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 1000));
-    }
-
     // A live GPS fix is only truly live if fresh within 90 seconds (1.5 minutes)
-    if (ageSec != null && ageSec > 90) {
-      const ageMin = Math.max(1, Math.round(ageSec / 60));
+    if (elapsedSec > 90) {
+      const ageMin = Math.max(1, Math.round(elapsedSec / 60));
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="Beacon stopped or device offline">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
@@ -70,15 +84,11 @@ export const renderLocationSourceBadge = (
     );
   }
   if (locationSource === 'LAST_KNOWN') {
-    let ageMin = fixAgeSeconds != null ? Math.max(1, Math.round(fixAgeSeconds / 60)) : null;
-    if (!ageMin && updatedAt) {
-      const elapsedMin = Math.max(1, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000));
-      ageMin = elapsedMin;
-    }
+    const ageMin = Math.max(1, Math.round(elapsedSec / 60));
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
-        LAST KNOWN {ageMin ? `(${ageMin}m old)` : ''}
+        LAST KNOWN ({ageMin}m old)
       </span>
     );
   }
@@ -744,7 +754,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {renderLocationSourceBadge(inc.locationSource, inc.gpsFixAgeSeconds, inc.updatedAt)}
+                      {renderLocationSourceBadge(inc.locationSource, inc.gpsFixAgeSeconds, inc.updatedAt, inc.title, inc.status)}
                     </div>
                   </div>
                 </div>
@@ -769,8 +779,15 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-950 text-blue-300 border border-blue-800">
                       {selectedIncident.assignedAgency}
                     </span>
-                    <span className="text-xs text-slate-400 font-mono">
-                      {new Date(selectedIncident.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      {new Date(selectedIncident.createdAt).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
                     </span>
                   </div>
                   <h2 className="text-base sm:text-lg font-bold text-white mt-1.5 leading-snug">{selectedIncident.title}</h2>
@@ -896,7 +913,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-slate-300">Tactical Route Unavailable</span>
-                          {renderLocationSourceBadge(selectedIncident.locationSource, selectedIncident.gpsFixAgeSeconds)}
+                          {renderLocationSourceBadge(selectedIncident.locationSource, selectedIncident.gpsFixAgeSeconds, selectedIncident.updatedAt, selectedIncident.title, selectedIncident.status)}
                         </div>
                         <p className="text-xs text-slate-400 mt-1">
                           Incident was reported without GPS telemetry. Sector: <span className="text-slate-300 font-semibold">{selectedIncident.locationName}</span>
@@ -1166,7 +1183,19 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         LAT: {selectedIncident.coordinates[0].toFixed(5)}° N | LNG: {selectedIncident.coordinates[1].toFixed(5)}° W
                       </p>
                       <p className="text-emerald-400 font-bold">
-                        {selectedIncident.locationSource === 'LIVE' ? 'GPS LIVE FIX' : selectedIncident.locationSource === 'LAST_KNOWN' ? 'LAST KNOWN FIX' : 'MANUAL LOCATION'}
+                        {(() => {
+                          const isTerminated = selectedIncident.status === 'RESOLVED' || selectedIncident.status === 'DISMISSED' || selectedIncident.title.includes('STAND DOWN') || selectedIncident.title.includes('CANCELLED');
+                          const elapsedSec = selectedIncident.updatedAt
+                            ? Math.max(0, Math.floor((Date.now() - new Date(selectedIncident.updatedAt).getTime()) / 1000))
+                            : (selectedIncident.gpsFixAgeSeconds ?? 9999);
+                          if (isTerminated) return 'STAND DOWN (CANCELLED)';
+                          if (selectedIncident.locationSource === 'LIVE' && elapsedSec <= 90) return 'GPS LIVE FIX';
+                          if (selectedIncident.locationSource === 'LIVE' || selectedIncident.locationSource === 'LAST_KNOWN') {
+                            const ageMin = Math.max(1, Math.round(elapsedSec / 60));
+                            return `LAST KNOWN FIX (${ageMin}m old)`;
+                          }
+                          return 'MANUAL LOCATION';
+                        })()}
                         {(selectedIncident.locationSource === 'LIVE' || selectedIncident.locationSource === 'LAST_KNOWN') && (selectedIncident.gpsAccuracyM || currentMedia?.gpsWatermark?.accuracyMeters) ? ` (±${selectedIncident.gpsAccuracyM || currentMedia?.gpsWatermark?.accuracyMeters}m)` : ''}
                       </p>
                     </>

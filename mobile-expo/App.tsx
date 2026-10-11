@@ -43,6 +43,7 @@ import { TabBar } from './src/components/TabBar';
 import { CitizenProfileSheet } from './src/components/CitizenProfileSheet';
 import { EvidenceCaptureScreen } from './src/screens/EvidenceCaptureScreen';
 import { AmberAlertsScreen } from './src/screens/AmberAlertsScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SosPanicScreen } from './src/screens/SosPanicScreen';
 import { PendingReportsScreen } from './src/screens/PendingReportsScreen';
 import { getPendingReports, initAutoSyncNetworkListener } from './src/services/pendingReportsQueue';
@@ -133,37 +134,52 @@ function MainApp() {
 
   // Restore persisted Supabase session on app launch & listen to auth state
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const user = session.user;
-        const userMeta = user.user_metadata || {};
-        setCitizen({
-          id: user.id,
-          name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
-          email: user.email || '',
-          phone: userMeta.phone || '',
-          ghanaCard: userMeta.ghana_card || '',
-          trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
-          isVerified: Boolean(userMeta.is_verified || false),
-          loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
-          accessToken: session.access_token
-        });
-        setIsAuthenticated(true);
-        draft.setIsAnonymous(false);
-        draft.setReporterPhone(userMeta.phone || '');
+    const restoreSession = async () => {
+      try {
+        const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const user = session.user;
+          const userMeta = user.user_metadata || {};
+          const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
+          setCitizen({
+            id: user.id,
+            name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
+            email: user.email || '',
+            phone: userMeta.phone || '',
+            ghanaCard: userMeta.ghana_card || '',
+            avatarUrl: effectiveAvatar,
+            trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+            isVerified: Boolean(userMeta.is_verified || false),
+            loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
+            accessToken: session.access_token
+          });
+          setIsAuthenticated(true);
+          draft.setIsAnonymous(false);
+          draft.setReporterPhone(userMeta.phone || '');
+        } else if (savedAvatar) {
+          setCitizen((prev) => ({ ...prev, avatarUrl: savedAvatar }));
+        }
+      } catch (err) {
+        console.warn('[Session Restore] Error:', err);
       }
-    });
+    };
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    restoreSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const user = session.user;
         const userMeta = user.user_metadata || {};
+        const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+        const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
         setCitizen({
           id: user.id,
           name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
           email: user.email || '',
           phone: userMeta.phone || '',
           ghanaCard: userMeta.ghana_card || '',
+          avatarUrl: effectiveAvatar,
           trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
           isVerified: Boolean(userMeta.is_verified || false),
           loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
@@ -417,8 +433,19 @@ function MainApp() {
         onClose={() => setIsCitizenProfileOpen(false)}
         onToggleAnonymous={draft.setIsAnonymous}
         onSignOut={handleSignOut}
-        onUpdateAvatar={(newAvatarUrl) => {
+        onUpdateAvatar={async (newAvatarUrl) => {
           setCitizen((prev) => ({ ...prev, avatarUrl: newAvatarUrl }));
+          try {
+            await AsyncStorage.setItem('@citizen_avatar_data', newAvatarUrl);
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+              await supabase.auth.updateUser({
+                data: { avatar_url: newAvatarUrl }
+              }).catch(() => {});
+            }
+          } catch (e) {
+            console.warn('[Avatar Save Error]', e);
+          }
         }}
       />
     </View>

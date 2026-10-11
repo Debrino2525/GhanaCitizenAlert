@@ -28,6 +28,7 @@ import { GpsCoordinates, LocationSource } from '../types';
 import { effectiveLocationSource } from '../hooks/useGpsLocation';
 import { tokens } from '../theme/tokens';
 import { safeHaptics, announceAccessibility } from '../utils/haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const SOS_HOLD_MS = 1500; // Hold duration in milliseconds
 
@@ -177,6 +178,25 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   activeTrackingCodeRef.current = activeTrackingCode;
   const sosWatcherRef = useRef<Location.LocationSubscription | null>(null);
 
+  // Restore active SOS state from AsyncStorage across tab switches
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const savedCode = await AsyncStorage.getItem('@active_sos_tracking_code');
+        const savedId = await AsyncStorage.getItem('@active_sos_incident_id');
+        if (isMounted && savedCode) {
+          setActiveTrackingCode(savedCode);
+          setActiveIncidentId(savedId || null);
+          setSosActive(true);
+        }
+      } catch {}
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Pulse animation for active beacon
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
@@ -278,6 +298,9 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       ? `Coordinates: ${bestGps.latitude.toFixed(5)}, ${bestGps.longitude.toFixed(5)} (±${bestGps.accuracy ?? 25}m, ${bestGps.locationSource}).`
       : 'Coordinates: Location unavailable (pending satellite lock).';
 
+    const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+    const effectiveAvatar = isAnonymous ? null : (citizen?.avatarUrl || savedAvatar || null);
+
     while (attempts < 3 && !insertSuccess) {
       attempts++;
       trackingCodeUsed = generateSosTrackingCode();
@@ -303,7 +326,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
           isAnonymous: isAnonymous,
           name: isAnonymous ? null : (citizen?.name || null),
           phone: isAnonymous ? null : (reporterPhone || citizen?.phone || null),
-          avatarUrl: isAnonymous ? null : (citizen?.avatarUrl || null),
+          avatarUrl: effectiveAvatar,
           ghanaCardId: isAnonymous ? null : (citizen?.ghanaCard || null),
           isEmergencyPanic: true,
           trustScore: citizen?.trustScore || 99
@@ -344,6 +367,8 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       setSuccessfulPings(1);
       setFailedPings(0);
       setSosActive(true);
+      await AsyncStorage.setItem('@active_sos_tracking_code', trackingCodeUsed).catch(() => {});
+      await AsyncStorage.setItem('@active_sos_incident_id', incidentId).catch(() => {});
       safeHaptics.success();
       announceAccessibility('Emergency SOS distress beacon transmitted. Location sent to Police Command.');
 
@@ -451,9 +476,9 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     setHoldProgress(0);
   };
 
-  const handleCancelSos = () => {
-    const trackingCodeToCancel = activeTrackingCode;
-    const incidentIdToCancel = activeIncidentId;
+  const handleCancelSos = async () => {
+    const trackingCodeToCancel = activeTrackingCode || (await AsyncStorage.getItem('@active_sos_tracking_code').catch(() => null));
+    const incidentIdToCancel = activeIncidentId || (await AsyncStorage.getItem('@active_sos_incident_id').catch(() => null));
 
     if (sosWatcherRef.current) {
       try {
@@ -469,40 +494,44 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     safeHaptics.warning();
     announceAccessibility('Emergency distress beacon stopped on device.');
 
+    await AsyncStorage.removeItem('@active_sos_tracking_code').catch(() => {});
+    await AsyncStorage.removeItem('@active_sos_incident_id').catch(() => {});
+
     // Notify backend/database that the live distress beacon has stopped
-    (async () => {
-      try {
-        const updatePayload = {
-          title: '🛑 EMERGENCY SOS BEACON (STAND DOWN / CANCELLED)',
-          location_source: 'LAST_KNOWN',
-          updated_at: new Date().toISOString()
-        };
+    try {
+      const updatePayload = {
+        title: '🛑 EMERGENCY SOS BEACON (STAND DOWN / CANCELLED)',
+        location_source: 'LAST_KNOWN',
+        status: 'RESOLVED',
+        updated_at: new Date().toISOString()
+      };
 
-        if (trackingCodeToCancel) {
-          const { error } = await supabase
-            .from('incidents')
-            .update(updatePayload)
-            .eq('tracking_code', trackingCodeToCancel);
+      if (trackingCodeToCancel) {
+        const { error } = await supabase
+          .from('incidents')
+          .update(updatePayload)
+          .eq('tracking_code', trackingCodeToCancel);
 
-          if (error && __DEV__) {
-            console.warn('[SOS Cancel Notice] Update incident error:', error.message);
-          }
-        } else if (incidentIdToCancel) {
-          const { error } = await supabase
-            .from('incidents')
-            .update(updatePayload)
-            .eq('id', incidentIdToCancel);
-
-          if (error && __DEV__) {
-            console.warn('[SOS Cancel Notice] Update incident error:', error.message);
-          }
-        }
-      } catch (err: any) {
-        if (__DEV__) {
-          console.warn('[SOS Cancel Exception]', err?.message);
+        if (error && __DEV__) {
+          console.warn('[SOS Cancel Notice] Update incident by tracking_code error:', error.message);
         }
       }
-    })();
+
+      if (incidentIdToCancel) {
+        const { error } = await supabase
+          .from('incidents')
+          .update(updatePayload)
+          .eq('id', incidentIdToCancel);
+
+        if (error && __DEV__) {
+          console.warn('[SOS Cancel Notice] Update incident by ID error:', error.message);
+        }
+      }
+    } catch (err: any) {
+      if (__DEV__) {
+        console.warn('[SOS Cancel Exception]', err?.message);
+      }
+    }
 
     Alert.alert(
       'Distress Beacon Stopped',

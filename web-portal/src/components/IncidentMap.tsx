@@ -443,15 +443,26 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
     visibleIncidents.forEach(inc => {
       const livePing = latestPings?.[inc.id];
-      const effectiveCoords: [number, number] | null = livePing ? [livePing.lat, livePing.lng] : inc.coordinates;
+      const isTerminated = inc.status === 'RESOLVED' || inc.status === 'DISMISSED' || inc.locationSource === 'LAST_KNOWN' || inc.title.includes('STAND DOWN') || inc.title.includes('CANCELLED');
+      const pingAgeSec = livePing
+        ? Math.max(0, Math.floor((Date.now() - new Date(livePing.created_at).getTime()) / 1000))
+        : 999999;
+      const isLivePingActive = Boolean(livePing) && pingAgeSec <= 120 && !isTerminated;
+
+      const incidentElapsedSec = inc.updatedAt
+        ? Math.max(0, Math.floor((Date.now() - new Date(inc.updatedAt).getTime()) / 1000))
+        : (inc.gpsFixAgeSeconds ?? 999999);
+      const isIncidentLive = inc.locationSource === 'LIVE' && incidentElapsedSec <= 90 && !isTerminated;
+
+      const effectiveCoords: [number, number] | null = isLivePingActive && livePing ? [livePing.lat, livePing.lng] : inc.coordinates;
       
       // Do NOT plot pins if coordinates are null/unavailable
       if (!effectiveCoords || effectiveCoords[0] == null || effectiveCoords[1] == null) {
         return;
       }
 
-      const isSos = Boolean(livePing) || (inc.category === 'CRIMINAL_OFFENSE' && inc.title.includes('SOS'));
-      const isResolved = inc.status === 'RESOLVED' || inc.status === 'DISMISSED';
+      const isSos = (isLivePingActive || (inc.category === 'CRIMINAL_OFFENSE' && inc.title.includes('SOS'))) && !isTerminated;
+      const isResolved = isTerminated;
 
       let pinColor = '#3b82f6';
       let iconEmoji = '🚨';
@@ -466,13 +477,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       const isSelected = selectedIncident?.id === inc.id;
       const isUrgent = !isResolved && (isSos || inc.severity === 'RED' || inc.severity === 'HIGH' || inc.severity === 'CRITICAL');
 
-      // Draw glowing accuracy circle if live GPS ping is active
-      if (livePing && !isResolved) {
+      // Draw glowing accuracy circle ONLY IF live GPS ping is actively fresh and not terminated
+      if (isLivePingActive && !isResolved) {
         L.circle(effectiveCoords, {
           color: '#ef4444',
           fillColor: '#ef4444',
           fillOpacity: 0.18,
-          radius: livePing.accuracy || 15,
+          radius: livePing?.accuracy || 15,
           weight: 2,
           dashArray: '4, 6'
         }).addTo(markersGroup);
@@ -520,14 +531,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       const googleSatUrl = `https://www.google.com/maps?q=${effectiveCoords[0]},${effectiveCoords[1]}&ll=${effectiveCoords[0]},${effectiveCoords[1]}&z=20&t=k`;
 
       let sourceBadgeHtml = '';
-      if (livePing) {
+      if (isLivePingActive || isIncidentLive) {
         sourceBadgeHtml = `<span style="background: #15803d; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟢 GPS LIVE</span>`;
-      } else if (inc.locationSource === 'LIVE') {
-        sourceBadgeHtml = `<span style="background: #15803d; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟢 GPS LIVE</span>`;
-      } else if (inc.locationSource === 'LAST_KNOWN') {
-        const ageMin = inc.gpsFixAgeSeconds != null ? Math.max(1, Math.round(inc.gpsFixAgeSeconds / 60)) : null;
-        const ageLabel = ageMin != null ? `${ageMin}m old` : 'stale';
-        sourceBadgeHtml = `<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟡 LAST KNOWN (${ageLabel})</span>`;
+      } else if (isTerminated) {
+        sourceBadgeHtml = `<span style="background: #334155; color: #cbd5e1; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🛑 STAND DOWN</span>`;
+      } else if (inc.locationSource === 'LAST_KNOWN' || inc.locationSource === 'LIVE') {
+        const ageMin = Math.max(1, Math.round(incidentElapsedSec / 60));
+        sourceBadgeHtml = `<span style="background: #b45309; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">🟡 LAST KNOWN (${ageMin}m old)</span>`;
       } else if (inc.locationSource === 'MANUAL') {
         sourceBadgeHtml = `<span style="background: #475569; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px;">⚪ MANUAL</span>`;
       } else if (inc.locationSource === 'UNAVAILABLE') {
@@ -538,12 +548,19 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
       marker.bindPopup(`
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; color: #0f172a; min-width: 250px; padding: 6px;">
-          ${livePing ? `
+          ${isLivePingActive && livePing ? `
             <div style="background: #dc2626; color: white; padding: 2px 7px; border-radius: 4px; font-weight: 900; font-size: 10px; display: inline-block; margin-bottom: 5px; letter-spacing: 0.5px;">
               🚨 LIVE SOS DISTRESS BEACON ACTIVE
             </div>
             <p style="margin: 0 0 4px 0; color: #dc2626; font-family: monospace; font-weight: bold; font-size: 11px;">
               GPS: ${livePing.lat.toFixed(5)}° N, ${livePing.lng.toFixed(5)}° W (±${livePing.accuracy}m)
+            </p>
+          ` : isTerminated ? `
+            <div style="background: #334155; color: white; padding: 2px 7px; border-radius: 4px; font-weight: 900; font-size: 10px; display: inline-block; margin-bottom: 5px; letter-spacing: 0.5px;">
+              🛑 SOS BEACON TERMINATED (STAND DOWN)
+            </div>
+            <p style="margin: 0 0 4px 0; color: #64748b; font-family: monospace; font-weight: bold; font-size: 10.5px;">
+              GPS: ${effectiveCoords[0].toFixed(5)}° N, ${effectiveCoords[1].toFixed(5)}° W
             </p>
           ` : `
             <p style="margin: 0 0 4px 0; color: #0284c7; font-family: monospace; font-weight: bold; font-size: 10.5px;">
@@ -556,6 +573,14 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           </div>
           <h4 style="margin: 7px 0 4px 0; font-weight: 800; font-size: 13px; line-height: 1.3;">${inc.title}</h4>
           <p style="margin: 0; color: #475569; font-size: 11px;">${inc.locationName}</p>
+          <div style="margin-top: 4px; font-size: 10px; color: #64748b; font-family: monospace;">
+            🕒 Reported: ${new Date(inc.createdAt).toLocaleString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
           <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
             ${sourceBadgeHtml}
             <span style="color: #059669; font-weight: 700; font-size: 10px; background: #ecfdf5; padding: 1px 5px; border-radius: 4px;">Act 772 Sealed</span>

@@ -527,6 +527,13 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     ) : null}
                   </View>
 
+                  {/* Timestamp & Expiry Row */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 6 }}>
+                    <Text style={{ fontSize: 11, color: tokens.colors.text.secondary, fontFamily: 'PlusJakartaSans_500Medium' }}>
+                      🕒 Issued: {new Date(alertItem.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {new Date(alertItem.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+
                   {/* Broadcast Area */}
                   {alertItem.last_seen_location ? (
                     <View style={styles.broadcastGpsBox}>
@@ -584,6 +591,9 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   {/* Title & Description */}
                   <View style={{ gap: 4 }}>
                     <Text style={styles.civicTitle}>{bulletin.title}</Text>
+                    <Text style={{ fontSize: 11, color: tokens.colors.text.secondary, fontFamily: 'PlusJakartaSans_500Medium', marginTop: -2, marginBottom: 2 }}>
+                      🕒 {new Date(bulletin.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {new Date(bulletin.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
                     <Text style={styles.civicDescription}>{bulletin.description}</Text>
                   </View>
 

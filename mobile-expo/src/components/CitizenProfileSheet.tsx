@@ -63,11 +63,16 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             const result = await ImagePicker.launchCameraAsync({
               allowsEditing: true,
               aspect: [1, 1],
-              quality: 0.6
+              quality: 0.5,
+              base64: true
             });
-            if (!result.canceled && result.assets[0]?.uri) {
-              const photoUri = result.assets[0].uri;
-              onUpdateAvatar?.(photoUri);
+            if (!result.canceled && result.assets[0]) {
+              const asset = result.assets[0];
+              const avatarData = asset.base64
+                ? `data:image/jpeg;base64,${asset.base64}`
+                : asset.uri;
+              await AsyncStorage.setItem('@citizen_avatar_data', avatarData).catch(() => {});
+              onUpdateAvatar?.(avatarData);
             }
           }
         },
@@ -82,11 +87,16 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             const result = await ImagePicker.launchImageLibraryAsync({
               allowsEditing: true,
               aspect: [1, 1],
-              quality: 0.6
+              quality: 0.5,
+              base64: true
             });
-            if (!result.canceled && result.assets[0]?.uri) {
-              const photoUri = result.assets[0].uri;
-              onUpdateAvatar?.(photoUri);
+            if (!result.canceled && result.assets[0]) {
+              const asset = result.assets[0];
+              const avatarData = asset.base64
+                ? `data:image/jpeg;base64,${asset.base64}`
+                : asset.uri;
+              await AsyncStorage.setItem('@citizen_avatar_data', avatarData).catch(() => {});
+              onUpdateAvatar?.(avatarData);
             }
           }
         }
