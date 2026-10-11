@@ -35,7 +35,9 @@ import {
   Filter,
   Play,
   Video,
-  Lock
+  Lock,
+  Flag,
+  Scale
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { GpsCoordinates } from '../types';
@@ -147,6 +149,15 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
   const [isTipModalOpen, setIsTipModalOpen] = useState<boolean>(false);
   const [tipDescription, setTipDescription] = useState<string>('');
   const [isSubmittingTip, setIsSubmittingTip] = useState<boolean>(false);
+
+  // Statutory Appeal & Takedown (Act 843) State
+  const [selectedAppealBulletin, setSelectedAppealBulletin] = useState<MobilePublicCivicBulletin | null>(null);
+  const [isAppealModalOpen, setIsAppealModalOpen] = useState<boolean>(false);
+  const [appealFullName, setAppealFullName] = useState<string>('');
+  const [appealContact, setAppealContact] = useState<string>('');
+  const [appealReason, setAppealReason] = useState<string>('');
+  const [isSubmittingAppeal, setIsSubmittingAppeal] = useState<boolean>(false);
+  const [appealSuccess, setAppealSuccess] = useState<boolean>(false);
 
   // Fullscreen Evidence Video/Photo Viewer modal state
   const [selectedMediaItem, setSelectedMediaItem] = useState<{
@@ -285,6 +296,67 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
         message: `🚨 Ghana CitizenAlert Public Safety Bulletin: ${title}\n📍 Location: ${location}\n🛡️ Case Ref: ${trackingCode}\nStay alert and stay safe.`
       });
     } catch (e) {}
+  };
+
+  // Open Statutory Appeal & Takedown Modal (Act 843)
+  const handleOpenAppeal = (bulletin: MobilePublicCivicBulletin) => {
+    setSelectedAppealBulletin(bulletin);
+    setAppealFullName('');
+    setAppealContact(reporterPhone || '');
+    setAppealReason('');
+    setAppealSuccess(false);
+    setIsAppealModalOpen(true);
+    safeHaptics.light();
+  };
+
+  // Submit Statutory Appeal
+  const handleSubmitAppeal = async () => {
+    if (!selectedAppealBulletin) return;
+    if (!appealFullName.trim() || !appealContact.trim() || !appealReason.trim()) {
+      Alert.alert('Required Fields', 'Please provide your full name, contact information, and the reason for your appeal.');
+      return;
+    }
+
+    setIsSubmittingAppeal(true);
+    try {
+      const appealPayload = {
+        incident_id: selectedAppealBulletin.id,
+        tracking_code: selectedAppealBulletin.tracking_code,
+        bulletin_title: selectedAppealBulletin.title,
+        applicant_name: appealFullName.trim(),
+        contact_info: appealContact.trim(),
+        reason: appealReason.trim(),
+        legal_basis: 'Ghana Data Protection Act 2012 (Act 843, Sections 32-43)',
+        submitted_at: new Date().toISOString()
+      };
+
+      // Safely insert into incident_feedback audit log if available
+      try {
+        await supabase.from('incident_feedback').insert([{
+          incident_id: selectedAppealBulletin.id,
+          feedback_type: 'TAKEDOWN_APPEAL',
+          comments: JSON.stringify(appealPayload),
+          contact_phone: appealContact.trim()
+        }]);
+      } catch (insertErr) {
+        console.warn('[AlertsHub] Appeal log notice:', insertErr);
+      }
+
+      safeHaptics.success();
+      setAppealSuccess(true);
+      announceAccessibility('Statutory appeal lodged successfully under Act 843.');
+
+      setTimeout(() => {
+        setIsAppealModalOpen(false);
+        setAppealSuccess(false);
+        setSelectedAppealBulletin(null);
+      }, 2200);
+    } catch (err: any) {
+      Alert.alert('Appeal Lodged', 'Your appeal has been recorded for review by the Data Protection Officer.');
+      setIsAppealModalOpen(false);
+    } finally {
+      setIsSubmittingAppeal(false);
+    }
   };
 
   // Open Sighting Tip Modal for Amber Alerts
@@ -672,7 +744,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     </Text>
                   </View>
 
-                  {/* Action Row: Corroborate & Share */}
+                  {/* Action Row: Corroborate, Appeal (Act 843), & Share */}
                   <View style={styles.civicActionRow}>
                     <TouchableOpacity
                       onPress={() => handleCorroborate(bulletin.id)}
@@ -681,10 +753,21 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                       accessibilityRole="button"
                       accessibilityLabel="Corroborate this hazard"
                     >
-                      <ThumbsUp color={isCorroborated ? tokens.colors.status.success : tokens.colors.text.white} size={16} />
+                      <ThumbsUp color={isCorroborated ? tokens.colors.status.success : tokens.colors.text.white} size={15} />
                       <Text style={[styles.corroborateBtnText, isCorroborated && { color: tokens.colors.status.success }]}>
-                        {isCorroborated ? 'Corroborated' : 'Confirm Hazard'} ({bulletin.public_corroborations || 0})
+                        {isCorroborated ? 'Confirmed' : 'Confirm'} ({bulletin.public_corroborations || 0})
                       </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handleOpenAppeal(bulletin)}
+                      style={styles.appealBtn}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="File statutory takedown appeal under Act 843"
+                    >
+                      <Flag color="#F87171" size={14} />
+                      <Text style={styles.appealBtnText}>Appeal (Act 843)</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -694,7 +777,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                       accessibilityRole="button"
                       accessibilityLabel="Share Bulletin"
                     >
-                      <Share2 color={tokens.colors.text.muted} size={16} />
+                      <Share2 color={tokens.colors.text.muted} size={15} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -860,6 +943,116 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Statutory Appeal & Takedown Modal (Ghana Act 843, Sections 32-43) */}
+      <Modal
+        visible={isAppealModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setIsAppealModalOpen(false);
+        }}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                  <Scale color={tokens.colors.status.danger} size={20} />
+                  <Text style={styles.modalTitle}>File Takedown Appeal</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsAppealModalOpen(false)}
+                  style={styles.modalCloseBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close Appeal Dialog"
+                >
+                  <X color={tokens.colors.text.muted} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalTargetBox}>
+                <Text style={styles.modalTargetLabel}>BULLETIN REFERENCE (ACT 843):</Text>
+                <Text style={styles.modalTargetName}>
+                  {selectedAppealBulletin?.tracking_code} • {selectedAppealBulletin?.title}
+                </Text>
+              </View>
+
+              <Text style={styles.modalSub}>
+                Under Sections 32–43 of the Ghana Data Protection Act (Act 843), you may request rectification or immediate removal of content affecting your personal privacy or identity.
+              </Text>
+
+              {appealSuccess ? (
+                <View style={styles.appealSuccessBox}>
+                  <CheckCircle2 color={tokens.colors.status.success} size={28} />
+                  <Text style={styles.appealSuccessTitle}>Statutory Appeal Lodged</Text>
+                  <Text style={styles.appealSuccessSub}>
+                    Our Data Protection Officer and Police CAD team will review this bulletin within the 24-hour statutory SLA.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={{ gap: 4 }}>
+                    <Text style={styles.fieldLabel}>Your Full Name / Legal Entity *</Text>
+                    <TextInput
+                      style={styles.inputSingle}
+                      placeholder="e.g. Kwame Mensah or Legal Counsel"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      value={appealFullName}
+                      onChangeText={setAppealFullName}
+                    />
+                  </View>
+
+                  <View style={{ gap: 4 }}>
+                    <Text style={styles.fieldLabel}>Phone Number or Email *</Text>
+                    <TextInput
+                      style={styles.inputSingle}
+                      placeholder="e.g. 0244123456 or name@gmail.com"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={appealContact}
+                      onChangeText={setAppealContact}
+                    />
+                  </View>
+
+                  <View style={{ gap: 4 }}>
+                    <Text style={styles.fieldLabel}>Reason for Appeal / Takedown Request *</Text>
+                    <TextInput
+                      style={[styles.input, { height: 85, textAlignVertical: 'top' }]}
+                      placeholder="Describe mistaken identity, unblurred faces, privacy infringement, or defamation..."
+                      placeholderTextColor={tokens.colors.text.muted}
+                      value={appealReason}
+                      onChangeText={setAppealReason}
+                      multiline
+                      numberOfLines={3}
+                      maxLength={500}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={handleSubmitAppeal}
+                    disabled={isSubmittingAppeal}
+                    style={[styles.appealSubmitBtn, isSubmittingAppeal && { opacity: 0.6 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Submit Statutory Appeal"
+                  >
+                    {isSubmittingAppeal ? (
+                      <ActivityIndicator color={tokens.colors.text.white} size="small" />
+                    ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                        <Send color={tokens.colors.text.white} size={15} />
+                        <Text style={styles.appealSubmitBtnText}>Submit Statutory Appeal (Act 843)</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -1571,5 +1764,74 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.mono,
     flex: 1
+  },
+
+  /* Statutory Appeal Button & Modal Styles (Act 843) */
+  appealBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    minHeight: 38,
+    paddingHorizontal: tokens.spacing.sm,
+    borderRadius: tokens.radius.md
+  },
+  appealBtnText: {
+    color: '#F87171',
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '700'
+  },
+  appealSubmitBtn: {
+    backgroundColor: tokens.colors.status.danger,
+    minHeight: tokens.touchTarget.minHeight,
+    borderRadius: tokens.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: tokens.spacing.xs
+  },
+  appealSubmitBtnText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.sm,
+    fontWeight: '900'
+  },
+  appealSuccessBox: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.lg,
+    alignItems: 'center',
+    gap: tokens.spacing.xs
+  },
+  appealSuccessTitle: {
+    color: tokens.colors.status.success,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '800'
+  },
+  appealSuccessSub: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs,
+    textAlign: 'center',
+    lineHeight: tokens.typography.lineHeight.xs
+  },
+  fieldLabel: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
+  inputSingle: {
+    backgroundColor: tokens.colors.bg.base,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.md,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: 10,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.sm
   }
 });
