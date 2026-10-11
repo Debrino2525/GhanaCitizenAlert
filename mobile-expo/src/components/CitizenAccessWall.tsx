@@ -35,6 +35,7 @@ import {
   UserPlus
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
+import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
@@ -154,6 +155,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       });
 
       if (error) {
+        if (error.message?.includes('Signups not allowed') || (error as any).code === 'signup_disabled') {
+          throw new Error('New citizen registrations are disabled on this Supabase project ("signup_disabled"). In your Supabase Dashboard, go to Authentication -> Providers -> Email and turn on "Allow new users to sign up".');
+        }
         throw error;
       }
 
@@ -206,15 +210,50 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     onAuthenticated(authenticatedCitizen);
   };
 
-  // 3. In-App Single Sign-On (Google & Apple) with Supabase OAuth & WebBrowser
+  // 3. In-App Single Sign-On (Google & Apple) with Native Fallback & Supabase OAuth
   const handleOAuth = async (provider: 'google' | 'apple') => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
+      // Step A: Attempt Native Google Sign-In if available on this device binary
+      if (provider === 'google' && isNativeGoogleAuthAvailable && GoogleSignin) {
+        try {
+          await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+          const signInResult = await GoogleSignin.signIn();
+          const idToken = signInResult.data?.idToken || signInResult.idToken;
+
+          if (idToken) {
+            const { data: sessionData, error: tokenErr } = await supabase.auth.signInWithIdToken({
+              provider: 'google',
+              token: idToken
+            });
+
+            if (tokenErr) {
+              if (tokenErr.message?.includes('Signups not allowed') || (tokenErr as any).code === 'signup_disabled') {
+                throw new Error('New citizen registrations are disabled on this Supabase project ("signup_disabled"). In your Supabase Dashboard, go to Authentication -> Providers -> Email and turn on "Allow new users to sign up".');
+              }
+              throw tokenErr;
+            }
+
+            if (sessionData?.user) {
+              await buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, 'GOOGLE');
+              return;
+            }
+          }
+        } catch (nativeErr: any) {
+          if (nativeErr.code === statusCodes?.SIGN_IN_CANCELLED) {
+            // Citizen intentionally dismissed the Google account picker
+            setIsLoading(false);
+            return;
+          }
+          console.warn('[Native Google Sign-In] Fallback to WebBrowser OAuth:', nativeErr.message);
+        }
+      }
+
+      // Step B: WebBrowser OAuth (Supports Expo Go, Web, and universal deep links)
       const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'citizenalert',
-        path: 'auth/callback'
+        preferLocalhost: false
       });
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -225,31 +264,59 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('Signups not allowed') || (error as any).code === 'signup_disabled') {
+          throw new Error('New citizen registrations are disabled on this Supabase project ("signup_disabled"). In your Supabase Dashboard, go to Authentication -> Providers -> Email and turn on "Allow new users to sign up".');
+        }
+        throw error;
+      }
       if (!data?.url) throw new Error(`No authentication URL was returned by ${provider === 'apple' ? 'Apple' : 'Google'}.`);
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
+      // Check if the redirect returned an error or tokens
       if (result.type === 'success' && result.url) {
         const parsedUrl = Linking.parse(result.url);
 
+        // Check for OAuth error in query params or hash fragment
+        let oauthError = (parsedUrl.queryParams?.error_description as string) || (parsedUrl.queryParams?.error as string) || '';
+        let hashParams: URLSearchParams | null = null;
+        if (result.url.includes('#')) {
+          const hashPart = result.url.split('#')[1];
+          hashParams = new URLSearchParams(hashPart);
+          oauthError = oauthError || hashParams.get('error_description') || hashParams.get('error') || '';
+        }
+
+        if (oauthError) {
+          const decoded = decodeURIComponent(oauthError.replace(/\+/g, ' '));
+          if (decoded.includes('Signups not allowed') || decoded.includes('signup_disabled')) {
+            throw new Error('New citizen registrations are disabled on this Supabase project ("signup_disabled"). In your Supabase Dashboard, go to Authentication -> Providers -> Email and turn on "Allow new users to sign up".');
+          }
+          throw new Error(decoded);
+        }
+
+        // Check for PKCE Authorization Code
         if (parsedUrl.queryParams?.code) {
           const { data: sessionData, error: sessionErr } = await supabase.auth.exchangeCodeForSession(
             parsedUrl.queryParams.code as string
           );
-          if (sessionErr) throw sessionErr;
+          if (sessionErr) {
+            if (sessionErr.message?.includes('Signups not allowed') || (sessionErr as any).code === 'signup_disabled') {
+              throw new Error('New citizen registrations are disabled on this Supabase project ("signup_disabled"). In your Supabase Dashboard, go to Authentication -> Providers -> Email and turn on "Allow new users to sign up".');
+            }
+            throw sessionErr;
+          }
           if (sessionData?.user) {
-            buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
+            await buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
             return;
           }
         }
 
+        // Check for Implicit Token Flow (hash fragment or query params)
         let accessToken = (parsedUrl.queryParams?.access_token as string) || '';
         let refreshToken = (parsedUrl.queryParams?.refresh_token as string) || '';
 
-        if (!accessToken && result.url.includes('#')) {
-          const hashPart = result.url.split('#')[1];
-          const hashParams = new URLSearchParams(hashPart);
+        if (!accessToken && hashParams) {
           accessToken = hashParams.get('access_token') || '';
           refreshToken = hashParams.get('refresh_token') || '';
         }
@@ -261,16 +328,17 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           });
           if (setSessionErr) throw setSessionErr;
           if (sessionData?.user) {
-            buildAndSetCitizenUser(sessionData.user, accessToken, provider === 'apple' ? 'APPLE' : 'GOOGLE');
+            await buildAndSetCitizenUser(sessionData.user, accessToken, provider === 'apple' ? 'APPLE' : 'GOOGLE');
             return;
           }
         }
+      }
 
-        const { data: activeSession } = await supabase.auth.getSession();
-        if (activeSession?.session?.user) {
-          buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
-          return;
-        }
+      // Step C: Fallback check if active session was established in background
+      const { data: activeSession } = await supabase.auth.getSession();
+      if (activeSession?.session?.user) {
+        await buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
+        return;
       }
     } catch (err: any) {
       setErrorMessage(err.message || `${provider === 'apple' ? 'Apple' : 'Google'} Sign-In encountered an error. Please try again.`);
