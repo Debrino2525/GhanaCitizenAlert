@@ -402,6 +402,7 @@ function MainApp() {
                 region={gps.region}
                 isAnonymous={draft.isAnonymous}
                 reporterPhone={draft.reporterPhone}
+                citizen={citizen}
               />
             )}
           </ScrollView>
@@ -416,6 +417,9 @@ function MainApp() {
         onClose={() => setIsCitizenProfileOpen(false)}
         onToggleAnonymous={draft.setIsAnonymous}
         onSignOut={handleSignOut}
+        onUpdateAvatar={(newAvatarUrl) => {
+          setCitizen((prev) => ({ ...prev, avatarUrl: newAvatarUrl }));
+        }}
       />
     </View>
   );

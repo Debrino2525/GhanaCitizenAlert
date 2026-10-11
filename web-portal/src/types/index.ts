@@ -76,6 +76,7 @@ export interface IncidentReport {
     name?: string;
     phone?: string;
     ghanaCardId?: string;
+    avatarUrl?: string;
     trustScore: number;
   };
   assignedAgency: AgencyType;

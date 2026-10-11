@@ -684,9 +684,18 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-ghana-gold border border-slate-800">
-                      {inc.trackingCode}
-                    </span>
+                    <div className="flex items-center space-x-2 min-w-0">
+                      {inc.reporter?.avatarUrl && !inc.reporter?.isAnonymous ? (
+                        <img
+                          src={inc.reporter.avatarUrl}
+                          alt="Citizen"
+                          className="w-5 h-5 rounded-full object-cover border border-slate-700 shrink-0"
+                        />
+                      ) : null}
+                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-ghana-gold border border-slate-800">
+                        {inc.trackingCode}
+                      </span>
+                    </div>
                     <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded shrink-0 ${
                       inc.severity === 'RED'
                         ? 'bg-red-900/60 text-red-300 border border-red-800'
@@ -802,13 +811,27 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     : 'bg-slate-900 border-slate-700'
                 }`}>
                   <div className="flex items-center space-x-3.5 min-w-0">
-                    <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-lg ${
-                      isPingActive
-                        ? 'bg-red-600/20 border-red-500/50 text-red-400'
-                        : 'bg-slate-800 border-slate-700 text-slate-400'
-                    }`}>
-                      <Radio className={`w-6 h-6 ${isPingActive ? 'animate-ping' : ''}`} />
-                    </div>
+                    {/* Small Round Citizen Face Identification Avatar */}
+                    {selectedIncident.reporter?.avatarUrl && !selectedIncident.reporter?.isAnonymous ? (
+                      <div className="relative shrink-0">
+                        <img
+                          src={selectedIncident.reporter.avatarUrl}
+                          alt="Citizen Face"
+                          className="w-12 h-12 rounded-full border-2 border-red-500 object-cover shadow-lg"
+                        />
+                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-red-600 border border-slate-900 flex items-center justify-center text-[10px]">
+                          🚨
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-lg ${
+                        isPingActive
+                          ? 'bg-red-600/20 border-red-500/50 text-red-400'
+                          : 'bg-slate-800 border-slate-700 text-slate-400'
+                      }`}>
+                        <Radio className={`w-6 h-6 ${isPingActive ? 'animate-ping' : ''}`} />
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded shadow-md ${
@@ -818,6 +841,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         }`}>
                           {isPingActive ? '🚨 LIVE SOS DISTRESS BEACON' : '🛑 SOS BEACON TERMINATED'}
                         </span>
+                        {selectedIncident.reporter?.name && !selectedIncident.reporter?.isAnonymous && (
+                          <span className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                            👤 {selectedIncident.reporter.name}
+                          </span>
+                        )}
                         <span className={`text-xs font-mono font-bold flex items-center space-x-1 ${
                           isPingActive ? 'text-red-300' : 'text-slate-400'
                         }`}>
@@ -1268,13 +1296,31 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block text-[10px] font-bold">REPORTER IDENTITY</span>
-                  <span className="text-white font-bold mt-0.5 block">
-                    {selectedIncident.reporter.isAnonymous ? '🛡️ Whistleblower (Act 720)' : '👤 Verified Citizen'}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
+                  <div className="flex items-center space-x-2 mb-1">
+                    {selectedIncident.reporter?.avatarUrl && !selectedIncident.reporter?.isAnonymous ? (
+                      <img
+                        src={selectedIncident.reporter.avatarUrl}
+                        alt="Citizen"
+                        className="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0"
+                      />
+                    ) : null}
+                    <div>
+                      <span className="text-slate-500 block text-[10px] font-bold">REPORTER IDENTITY</span>
+                      <span className="text-white font-bold text-xs">
+                        {selectedIncident.reporter.isAnonymous
+                          ? '🛡️ Whistleblower (Act 720)'
+                          : selectedIncident.reporter.name || '👤 Verified Citizen'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 block">
                     {selectedIncident.reporter.phone || 'Protected identity'}
                   </span>
+                  {selectedIncident.reporter?.ghanaCardId && !selectedIncident.reporter?.isAnonymous && (
+                    <span className="text-[9px] text-amber-400 font-mono block mt-0.5">
+                      🇬🇭 {selectedIncident.reporter.ghanaCardId}
+                    </span>
+                  )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">

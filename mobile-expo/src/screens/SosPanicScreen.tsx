@@ -31,6 +31,8 @@ import { safeHaptics, announceAccessibility } from '../utils/haptics';
 
 export const SOS_HOLD_MS = 1500; // Hold duration in milliseconds
 
+import { CitizenUser } from '../components/CitizenAccessWall';
+
 interface SosPanicScreenProps {
   coords: GpsCoordinates | null;
   gpsAccuracy: number | null;
@@ -41,6 +43,7 @@ interface SosPanicScreenProps {
   region: string;
   isAnonymous: boolean;
   reporterPhone: string;
+  citizen?: CitizenUser;
 }
 
 function generateSosTrackingCode(): string {
@@ -149,7 +152,8 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   landmark,
   region,
   isAnonymous,
-  reporterPhone
+  reporterPhone,
+  citizen
 }) => {
   const [sosActive, setSosActive] = useState(false);
   const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
@@ -297,9 +301,12 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         is_anonymous: isAnonymous,
         reporter_data: {
           isAnonymous: isAnonymous,
-          phone: isAnonymous ? null : (reporterPhone || null),
+          name: isAnonymous ? null : (citizen?.name || null),
+          phone: isAnonymous ? null : (reporterPhone || citizen?.phone || null),
+          avatarUrl: isAnonymous ? null : (citizen?.avatarUrl || null),
+          ghanaCardId: isAnonymous ? null : (citizen?.ghanaCard || null),
           isEmergencyPanic: true,
-          trustScore: 99
+          trustScore: citizen?.trustScore || 99
         },
         assigned_agency: 'GPS_CID',
         status: 'RECEIVED_PENDING_TRIAGE',
