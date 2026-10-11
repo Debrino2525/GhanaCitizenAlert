@@ -93,6 +93,16 @@ const EvidenceVideoPlayer: React.FC<EvidenceVideoPlayerProps> = memo(({ uri }) =
     p.play();
   });
 
+  useEffect(() => {
+    return () => {
+      try {
+        player.pause();
+      } catch {
+        // Player already released
+      }
+    };
+  }, [player]);
+
   return (
     <View style={styles.nativeVideoContainer}>
       <VideoView

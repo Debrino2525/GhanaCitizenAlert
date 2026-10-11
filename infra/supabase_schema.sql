@@ -116,8 +116,10 @@ CREATE POLICY "Allow public update on emergency_alerts" ON emergency_alerts FOR 
 CREATE POLICY "Allow public read on alert_sightings" ON alert_sightings FOR SELECT USING (true);
 CREATE POLICY "Allow public insert on alert_sightings" ON alert_sightings FOR INSERT WITH CHECK (true);
 
-CREATE POLICY "Allow public read on audit_ledger" ON audit_evidence_ledger FOR SELECT USING (true);
-CREATE POLICY "Allow public insert on audit_ledger" ON audit_evidence_ledger FOR INSERT WITH CHECK (true);
+-- 4. Cryptographic Evidence Ledger RLS (Act 772 Compliance: Append-only by service/system)
+CREATE POLICY "Allow authenticated read on audit_ledger" ON audit_evidence_ledger FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Allow insert on audit_ledger" ON audit_evidence_ledger FOR INSERT TO authenticated, anon WITH CHECK (true);
+-- Note: UPDATE and DELETE are intentionally not allowed on audit_evidence_ledger to preserve chain-of-custody immutability.
 
 -- 5. Supabase Storage Bucket & RLS Policies for Evidence Vault
 INSERT INTO storage.buckets (id, name, public)
@@ -130,16 +132,12 @@ ON storage.objects FOR INSERT
 TO public, anon, authenticated
 WITH CHECK (bucket_id = 'evidence');
 
--- Allow public read of evidence files
+-- Allow read of evidence files
 CREATE POLICY "Allow public reads from evidence bucket"
 ON storage.objects FOR SELECT
 TO public, anon, authenticated
 USING (bucket_id = 'evidence');
 
--- Allow updates and upserts on evidence bucket
-CREATE POLICY "Allow public updates on evidence bucket"
-ON storage.objects FOR UPDATE
-TO public, anon, authenticated
-USING (bucket_id = 'evidence');
+-- Note: Storage deletion/overwrite is restricted to preserve evidence integrity under Act 772.
 
 

@@ -7,7 +7,8 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "plugins": [
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-video"
     ],
     "userInterfaceStyle": "dark",
     "splash": {

@@ -196,11 +196,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
 
-  const [caseNotes, setCaseNotes] = useState<Record<string, { author: string; text: string; time: string }[]>>({
-    'inc-1': [
-      { author: 'Insp. Emmanuel Addo (CID)', text: 'Patrol Unit Alpha-4 deployed to boundary junction. Suspect vehicle identified.', time: '10:42 AM' }
-    ]
-  });
+  const [caseNotes, setCaseNotes] = useState<Record<string, { author: string; text: string; time: string }[]>>({});
 
   // Calculate incident counts per status for filter badges
   const statusCounts = useMemo(() => {

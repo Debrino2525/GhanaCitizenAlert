@@ -3,6 +3,16 @@
  * Renders an isolated, pristine document with official Ghana Police Service letterhead,
  * completely avoiding browser modal backdrop / overflow print preview hangs.
  */
+
+function escapeHtml(str: any): string {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 export function printHtmlDocument(title: string, bodyHtml: string) {
   // Create an isolated hidden iframe for printing
   let iframe = document.getElementById('print-iframe') as HTMLIFrameElement | null;
@@ -224,36 +234,36 @@ export function buildPoliceBriefHtml(brief: any): string {
       </div>
       <div style="text-align: right; font-family: monospace; font-size: 11px;">
         <div style="font-weight: 800; color: #0f172a;">DOSSIER REF</div>
-        <div style="color: #b45309; font-weight: 800; font-size: 13px;">${brief.dossierNumber || 'N/A'}</div>
+        <div style="color: #b45309; font-weight: 800; font-size: 13px;">${escapeHtml(brief.dossierNumber) || 'N/A'}</div>
       </div>
     </div>
 
     <div class="meta-grid">
       <div class="meta-item">
         <label>Incident Tracking Code</label>
-        <span>${brief.incidentTrackingCode || 'N/A'}</span>
+        <span>${escapeHtml(brief.incidentTrackingCode) || 'N/A'}</span>
       </div>
       <div class="meta-item">
         <label>Incident Sector</label>
-        <span>${brief.geospatialAssessment?.locationName || 'Location pending'}</span>
+        <span>${escapeHtml(brief.geospatialAssessment?.locationName) || 'Location pending'}</span>
       </div>
       <div class="meta-item">
         <label>Generated Timestamp</label>
-        <span>${new Date(brief.generatedAt || Date.now()).toLocaleString()}</span>
+        <span>${escapeHtml(new Date(brief.generatedAt || Date.now()).toLocaleString())}</span>
       </div>
     </div>
 
     <div class="section">
       <div class="section-title">1. Official CID Executive Summary</div>
       <div class="box">
-        ${brief.executiveSummary || 'No summary available.'}
+        ${escapeHtml(brief.executiveSummary) || 'No summary available.'}
       </div>
     </div>
 
     <div class="section">
       <div class="section-title">2. Statutory Jurisdiction & Prosecution Basis</div>
       <div class="box">
-        ${(brief.legalFramework || []).map((l: string) => `<div style="padding: 2px 0;">⚖️ <strong>${l}</strong></div>`).join('')}
+        ${(brief.legalFramework || []).map((l: string) => `<div style="padding: 2px 0;">⚖️ <strong>${escapeHtml(l)}</strong></div>`).join('')}
       </div>
     </div>
 
@@ -261,14 +271,14 @@ export function buildPoliceBriefHtml(brief: any): string {
       <div class="section-title">3. Geospatial & Forensic Telemetry</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
         <div class="box">
-          <strong>Location:</strong> ${brief.geospatialAssessment?.locationName || 'N/A'}<br/>
-          <strong>Coordinates:</strong> ${brief.geospatialAssessment?.coordinates || 'N/A'}<br/>
-          <strong>Tactical Sector:</strong> ${brief.geospatialAssessment?.tacticalSector || 'Accra Command'}
+          <strong>Location:</strong> ${escapeHtml(brief.geospatialAssessment?.locationName) || 'N/A'}<br/>
+          <strong>Coordinates:</strong> ${escapeHtml(brief.geospatialAssessment?.coordinates) || 'N/A'}<br/>
+          <strong>Tactical Sector:</strong> ${escapeHtml(brief.geospatialAssessment?.tacticalSector) || 'Accra Command'}
         </div>
         <div class="box">
-          <strong>Evidence Assets:</strong> ${brief.forensicEvidenceAudit?.evidenceCount || 1} Sealed File(s)<br/>
+          <strong>Evidence Assets:</strong> ${escapeHtml(brief.forensicEvidenceAudit?.evidenceCount) || 1} Sealed File(s)<br/>
           <strong>Integrity Status:</strong> <span style="color: #16a34a; font-weight: bold;">VERIFIED TAMPER-PROOF</span><br/>
-          <strong>SHA-256 Digest:</strong> <span style="font-family: monospace; font-size: 9.5px;">${brief.forensicEvidenceAudit?.sha256Seal || 'N/A'}</span>
+          <strong>SHA-256 Digest:</strong> <span style="font-family: monospace; font-size: 9.5px;">${escapeHtml(brief.forensicEvidenceAudit?.sha256Seal) || 'N/A'}</span>
         </div>
       </div>
     </div>
@@ -279,7 +289,7 @@ export function buildPoliceBriefHtml(brief: any): string {
         ${(brief.investigativeChecklist || []).map((step: string) => `
           <div class="checklist-item">
             <div class="checkbox"></div>
-            <div>${step}</div>
+            <div>${escapeHtml(step)}</div>
           </div>
         `).join('')}
       </div>
@@ -307,22 +317,22 @@ export function buildCourtCertificateHtml(certificate: any): string {
       </div>
       <div style="text-align: right; font-family: monospace; font-size: 11px;">
         <div style="font-weight: 800; color: #0f172a;">CERTIFICATE ID</div>
-        <div style="color: #b45309; font-weight: 800; font-size: 13px;">${certificate.certificateId || 'N/A'}</div>
+        <div style="color: #b45309; font-weight: 800; font-size: 13px;">${escapeHtml(certificate.certificateId) || 'N/A'}</div>
       </div>
     </div>
 
     <div class="meta-grid">
       <div class="meta-item">
         <label>Case Tracking Code</label>
-        <span>${certificate.trackingCode || 'N/A'}</span>
+        <span>${escapeHtml(certificate.trackingCode) || 'N/A'}</span>
       </div>
       <div class="meta-item">
         <label>Incident Location</label>
-        <span>${certificate.locationName || 'Location pending'}${certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}°, ${certificate.coordinates[1].toFixed(4)}°)` : ''}</span>
+        <span>${escapeHtml(certificate.locationName) || 'Location pending'}${certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}°, ${certificate.coordinates[1].toFixed(4)}°)` : ''}</span>
       </div>
       <div class="meta-item">
         <label>Date Sealed (UTC)</label>
-        <span>${new Date().toLocaleString()}</span>
+        <span>${escapeHtml(new Date().toLocaleString())}</span>
       </div>
     </div>
 
@@ -331,9 +341,9 @@ export function buildCourtCertificateHtml(certificate: any): string {
       <div class="box">
         ${(certificate.mediaItems || []).map((item: any, idx: number) => `
           <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
-            <strong>Attachment #${idx + 1} (${item.type || 'VIDEO'}):</strong><br/>
+            <strong>Attachment #${idx + 1} (${escapeHtml(item.type) || 'VIDEO'}):</strong><br/>
             <div style="font-family: monospace; font-size: 10px; background: #ffffff; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 4px; margin-top: 3px; word-break: break-all;">
-              SHA-256 HASH: ${item.sha256Hash || 'N/A'}
+              SHA-256 HASH: ${escapeHtml(item.sha256Hash) || 'N/A'}
             </div>
           </div>
         `).join('')}
@@ -342,7 +352,7 @@ export function buildCourtCertificateHtml(certificate: any): string {
 
     <div class="statutory-seal">
       <strong>⚖️ Statutory Evidentiary Certificate:</strong><br/>
-      ${certificate.statutoryNotice || 'This certificate constitutes primary electronic evidence in compliance with Section 7 of the Electronic Transactions Act (Act 772). All media hashes are verifiable against the immutable cryptographic ledger.'}
+      ${escapeHtml(certificate.statutoryNotice) || 'This certificate constitutes primary electronic evidence in compliance with Section 7 of the Electronic Transactions Act (Act 772). All media hashes are verifiable against the immutable cryptographic ledger.'}
     </div>
   `;
 }
