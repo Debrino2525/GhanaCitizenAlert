@@ -712,7 +712,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   
                   {latestPings[inc.id] && (() => {
                     const pingAgeSec = Math.max(0, Math.floor((Date.now() - new Date(latestPings[inc.id].created_at).getTime()) / 1000));
-                    const isPingActive = pingAgeSec <= 120; // Active within 2 minutes
+                    const isTerminatedByIncident = inc.locationSource === 'LAST_KNOWN' || inc.title.includes('STAND DOWN') || inc.title.includes('CANCELLED');
+                    const isPingActive = pingAgeSec <= 120 && !isTerminatedByIncident; // Active within 2 minutes AND not canceled
 
                     return (
                       <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono my-2 shadow-inner ${
@@ -802,7 +803,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             {/* CARD 0: LIVE SOS BEACON TRACKING BANNER (If Active Pings Exist) */}
             {latestPings[selectedIncident.id] && (() => {
               const pingAgeSec = Math.max(0, Math.floor((Date.now() - new Date(latestPings[selectedIncident.id].created_at).getTime()) / 1000));
-              const isPingActive = pingAgeSec <= 120; // Active within 2 minutes
+              const isTerminatedByIncident = selectedIncident.locationSource === 'LAST_KNOWN' || selectedIncident.title.includes('STAND DOWN') || selectedIncident.title.includes('CANCELLED');
+              const isPingActive = pingAgeSec <= 120 && !isTerminatedByIncident; // Active within 2 minutes AND not canceled
 
               return (
                 <div className={`border-2 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4 ${
@@ -817,10 +819,14 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         <img
                           src={selectedIncident.reporter.avatarUrl}
                           alt="Citizen Face"
-                          className="w-12 h-12 rounded-full border-2 border-red-500 object-cover shadow-lg"
+                          className={`w-12 h-12 rounded-full border-2 object-cover shadow-lg ${
+                            isPingActive ? 'border-red-500' : 'border-slate-600 grayscale'
+                          }`}
                         />
-                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-red-600 border border-slate-900 flex items-center justify-center text-[10px]">
-                          🚨
+                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border border-slate-900 flex items-center justify-center text-[10px] ${
+                          isPingActive ? 'bg-red-600' : 'bg-slate-700'
+                        }`}>
+                          {isPingActive ? '🚨' : '🛑'}
                         </div>
                       </div>
                     ) : (
@@ -839,7 +845,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                             ? 'bg-red-600 text-white'
                             : 'bg-slate-800 text-slate-300 border border-slate-700'
                         }`}>
-                          {isPingActive ? '🚨 LIVE SOS DISTRESS BEACON' : '🛑 SOS BEACON TERMINATED'}
+                          {isPingActive ? '🚨 LIVE SOS DISTRESS BEACON' : '🛑 SOS BEACON TERMINATED (STAND DOWN)'}
                         </span>
                         {selectedIncident.reporter?.name && !selectedIncident.reporter?.isAnonymous && (
                           <span className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">

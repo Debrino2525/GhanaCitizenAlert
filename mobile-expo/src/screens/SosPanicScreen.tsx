@@ -472,29 +472,29 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     // Notify backend/database that the live distress beacon has stopped
     (async () => {
       try {
+        const updatePayload = {
+          title: '🛑 EMERGENCY SOS BEACON (STAND DOWN / CANCELLED)',
+          location_source: 'LAST_KNOWN',
+          updated_at: new Date().toISOString()
+        };
+
         if (trackingCodeToCancel) {
           const { error } = await supabase
             .from('incidents')
-            .update({
-              location_source: 'LAST_KNOWN',
-              updated_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('tracking_code', trackingCodeToCancel);
 
           if (error && __DEV__) {
-            console.warn('[SOS Cancel Notice] Update incident location_source error:', error.message);
+            console.warn('[SOS Cancel Notice] Update incident error:', error.message);
           }
         } else if (incidentIdToCancel) {
           const { error } = await supabase
             .from('incidents')
-            .update({
-              location_source: 'LAST_KNOWN',
-              updated_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('id', incidentIdToCancel);
 
           if (error && __DEV__) {
-            console.warn('[SOS Cancel Notice] Update incident location_source error:', error.message);
+            console.warn('[SOS Cancel Notice] Update incident error:', error.message);
           }
         }
       } catch (err: any) {
