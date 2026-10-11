@@ -52,6 +52,8 @@ export interface CitizenUser {
   isVerified: boolean;
   loginMethod: 'GOOGLE' | 'APPLE' | 'EMAIL' | 'PHONE' | 'ANONYMOUS';
   accessToken?: string;
+  emergencyTelecomConsent?: boolean;
+  emergencyConsentAt?: string;
 }
 
 interface CitizenAccessWallProps {
@@ -71,6 +73,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [ghanaCard, setGhanaCard] = useState('');
+  const [emergencyTelecomConsent, setEmergencyTelecomConsent] = useState(true);
 
   // 1. Supabase Citizen Sign In (Email / Password)
   const handleSignIn = async () => {
@@ -108,7 +111,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
         isVerified: Boolean(userMeta.is_verified || false),
         loginMethod: 'EMAIL',
-        accessToken: data.session?.access_token
+        accessToken: data.session?.access_token,
+        emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+        emergencyConsentAt: userMeta.emergency_consent_at || undefined
       };
 
       onAuthenticated(authenticatedCitizen);
@@ -149,7 +154,10 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
             ghana_card: ghanaCard.trim().toUpperCase(),
             trust_score: 70,
             is_verified: false,
-            role: 'citizen'
+            role: 'citizen',
+            emergency_telecom_consent: emergencyTelecomConsent,
+            emergency_consent_at: new Date().toISOString(),
+            emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
           }
         }
       });
@@ -176,12 +184,14 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         trustScore: 70,
         isVerified: false,
         loginMethod: 'EMAIL',
-        accessToken: data.session?.access_token
+        accessToken: data.session?.access_token,
+        emergencyTelecomConsent: emergencyTelecomConsent,
+        emergencyConsentAt: new Date().toISOString()
       };
 
       Alert.alert(
         '🇬🇭 Citizen Account Provisioned',
-        `Account provisioned for ${fullName.trim()}. Please verify your email if required.`
+        `Account provisioned for ${fullName.trim()}. Your phone number is registered for life-saving emergency dispatch under Act 843.`
       );
       onAuthenticated(registeredCitizen);
     } catch (err: any) {
@@ -205,7 +215,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
       isVerified: Boolean(userMeta.is_verified || false),
       loginMethod: provider,
-      accessToken: accessToken
+      accessToken: accessToken,
+      emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+      emergencyConsentAt: userMeta.emergency_consent_at || undefined
     };
     onAuthenticated(authenticatedCitizen);
   };
@@ -654,6 +666,41 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                   </View>
                 </View>
 
+                {/* Act 843 Emergency SOS & Carrier Triangulation Consent Card */}
+                <TouchableOpacity
+                  style={[styles.consentCard, emergencyTelecomConsent && styles.consentCardActive]}
+                  activeOpacity={0.85}
+                  onPress={() => setEmergencyTelecomConsent(!emergencyTelecomConsent)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: emergencyTelecomConsent }}
+                  accessibilityLabel="Consent to emergency dispatch and carrier location sharing under Act 843"
+                >
+                  <View style={styles.consentHeaderRow}>
+                    <View style={[styles.checkboxBox, emergencyTelecomConsent && styles.checkboxBoxChecked]}>
+                      {emergencyTelecomConsent && (
+                        <CheckCircle2 color={tokens.colors.brand.gold} size={18} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <ShieldCheck color={tokens.colors.brand.gold} size={15} />
+                        <Text style={styles.consentTitle}>
+                          Act 843 Emergency Dispatch Consent
+                        </Text>
+                      </View>
+                      <Text style={styles.consentDescription}>
+                        I agree that when I activate an SOS emergency beacon, my registered phone number can be transmitted to Police Command/112 and used to request network cell-tower location from my carrier (MTN/Telecel/AT).
+                      </Text>
+                      <View style={styles.legalBasisRow}>
+                        <Scale color={tokens.colors.police.badge} size={12} />
+                        <Text style={styles.legalBasisText}>
+                          Data Protection Act, 2012 (Act 843 Sec 20) • Lawful Emergency Telemetry
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   onPress={handleRegister}
                   disabled={isLoading}
@@ -1075,5 +1122,59 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.fontSize.xxs,
     textAlign: 'center',
     lineHeight: tokens.typography.lineHeight.xxs
+  },
+  consentCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.md,
+    marginTop: tokens.spacing.sm,
+    marginBottom: tokens.spacing.xs
+  },
+  consentCardActive: {
+    borderColor: 'rgba(250, 204, 21, 0.4)',
+    backgroundColor: 'rgba(250, 204, 21, 0.04)'
+  },
+  consentHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: tokens.spacing.sm
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: tokens.colors.text.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2
+  },
+  checkboxBoxChecked: {
+    borderColor: tokens.colors.brand.gold,
+    backgroundColor: 'rgba(250, 204, 21, 0.15)'
+  },
+  consentTitle: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '700'
+  },
+  consentDescription: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xxs,
+    lineHeight: tokens.typography.lineHeight.xs,
+    marginTop: 4
+  },
+  legalBasisRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6
+  },
+  legalBasisText: {
+    color: tokens.colors.police.badge,
+    fontSize: 9,
+    fontWeight: '600'
   }
 });

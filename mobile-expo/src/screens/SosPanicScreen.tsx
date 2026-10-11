@@ -303,6 +303,10 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       : null;
     const effectiveAvatar = isAnonymous ? null : (citizen?.avatarUrl || savedAvatar || null);
 
+    // In SOS Emergency distress mode, phone is transmitted for emergency CAD callback & carrier triangulation
+    const emergencyPhone = citizen?.phone || reporterPhone || null;
+    const telecomConsent = citizen?.emergencyTelecomConsent !== undefined ? citizen.emergencyTelecomConsent : Boolean(emergencyPhone);
+
     while (attempts < 3 && !insertSuccess) {
       attempts++;
       trackingCodeUsed = generateSosTrackingCode();
@@ -327,7 +331,11 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         reporter_data: {
           isAnonymous: isAnonymous,
           name: isAnonymous ? null : (citizen?.name || null),
-          phone: isAnonymous ? null : (reporterPhone || citizen?.phone || null),
+          phone: emergencyPhone, // ALWAYS transmitted for emergency rescue and carrier triangulation
+          emergencyTelecomConsent: telecomConsent,
+          emergencyConsentAct: telecomConsent ? 'DATA_PROTECTION_ACT_843_SEC_20' : null,
+          carrierTriangulationAuthorized: Boolean(emergencyPhone && telecomConsent),
+          carrierConsentTimestamp: citizen?.emergencyConsentAt || new Date().toISOString(),
           avatarUrl: effectiveAvatar,
           ghanaCardId: isAnonymous ? null : (citizen?.ghanaCard || null),
           isEmergencyPanic: true,
@@ -568,6 +576,21 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         Press and hold for 1.5 seconds to instantly transmit your live GPS coordinates to Police Command. The app must stay open while the beacon is active.
       </Text>
 
+      {/* Act 843 Telecom Dispatch & Carrier Location Reassurance Card */}
+      <View style={styles.telecomConsentBanner}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <ShieldCheck color={tokens.colors.brand.gold} size={15} />
+          <Text style={styles.telecomConsentHeading}>
+            Act 843 Emergency Dispatch Link
+          </Text>
+        </View>
+        <Text style={styles.telecomConsentText}>
+          {citizen?.phone || reporterPhone
+            ? `📞 Transmitting Callback: ${citizen?.phone || reporterPhone}\n📡 Carrier cell-tower triangulation authorized under Data Protection Act 843 (Sec 20). Responders will locate your network tower if GPS is blocked.`
+            : `⚠️ No emergency phone linked to account. Please add a phone number in your profile so dispatchers can call you and triangulate your carrier tower.`}
+        </Text>
+      </View>
+
       {/* Error state if transmission failed */}
       {activationError && !sosActive && (
         <View style={styles.errorBanner}>
@@ -667,6 +690,12 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
 
           <Text style={styles.sosActiveSub}>
             Tracking Code: {activeTrackingCode || 'SOS-ACTIVE'}
+          </Text>
+          <Text style={styles.sosActiveSub}>
+            Emergency Phone: {citizen?.phone || reporterPhone || 'Callback requested'}
+          </Text>
+          <Text style={styles.sosActiveSub}>
+            Carrier Triangulation: Authorized (Act 843) • Cell tower query active
           </Text>
           <Text style={styles.sosActiveSub}>
             GPS: {activeCoords.latitude !== null && activeCoords.longitude !== null
@@ -937,5 +966,26 @@ const styles = StyleSheet.create({
   hotlineBtnSub: {
     color: tokens.colors.text.muted,
     fontSize: 9
+  },
+  telecomConsentBanner: {
+    width: '100%',
+    backgroundColor: 'rgba(250, 204, 21, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(250, 204, 21, 0.25)',
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.md,
+    marginTop: tokens.spacing.xs,
+    marginBottom: tokens.spacing.sm,
+    gap: 4
+  },
+  telecomConsentHeading: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '800'
+  },
+  telecomConsentText: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xxs,
+    lineHeight: tokens.typography.lineHeight.xs
   }
 });

@@ -278,8 +278,18 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 
             {citizen.phone ? (
               <View style={styles.infoRow}>
-                <Phone color={tokens.colors.text.muted} size={14} />
+                <Phone color={tokens.colors.brand.gold} size={14} />
                 <Text style={styles.infoText}>{citizen.phone}</Text>
+                <View style={styles.act843MiniBadge}>
+                  <Text style={styles.act843MiniBadgeText}>Act 843 SOS Linked</Text>
+                </View>
+              </View>
+            ) : !citizen.phone && citizen.loginMethod !== 'ANONYMOUS' ? (
+              <View style={styles.infoRow}>
+                <Phone color={tokens.colors.status.warning} size={14} />
+                <Text style={[styles.infoText, { color: tokens.colors.status.warning }]}>
+                  No phone linked for SOS (Act 843)
+                </Text>
               </View>
             ) : null}
 
@@ -652,5 +662,19 @@ const styles = StyleSheet.create({
     color: tokens.colors.status.danger,
     fontSize: tokens.typography.fontSize.xs,
     fontWeight: 'bold'
+  },
+  act843MiniBadge: {
+    backgroundColor: 'rgba(250, 204, 21, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(250, 204, 21, 0.3)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 'auto'
+  },
+  act843MiniBadgeText: {
+    color: tokens.colors.brand.gold,
+    fontSize: 9,
+    fontWeight: '700'
   }
 });

@@ -155,7 +155,9 @@ function MainApp() {
             trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
             isVerified: Boolean(userMeta.is_verified || false),
             loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
-            accessToken: session.access_token
+            accessToken: session.access_token,
+            emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+            emergencyConsentAt: userMeta.emergency_consent_at || undefined
           });
           setIsAuthenticated(true);
           draft.setIsAnonymous(false);
@@ -184,7 +186,9 @@ function MainApp() {
           trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
           isVerified: Boolean(userMeta.is_verified || false),
           loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
-          accessToken: session.access_token
+          accessToken: session.access_token,
+          emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+          emergencyConsentAt: userMeta.emergency_consent_at || undefined
         });
         setIsAuthenticated(true);
         draft.setIsAnonymous(false);

@@ -27,7 +27,8 @@ import {
   Activity,
   UploadCloud,
   RotateCcw,
-  Clock
+  Clock,
+  PhoneCall
 } from 'lucide-react';
 import { generateCourtCertificate, CourtCertificate } from '../services/evidenceVault';
 import { supabase } from '../services/supabaseClient';
@@ -1348,9 +1349,27 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       </span>
                     </div>
                   </div>
-                  <span className="text-[10px] text-slate-400 block">
-                    {selectedIncident.reporter.phone || 'Protected identity'}
-                  </span>
+                  {selectedIncident.reporter?.phone ? (
+                    <div className="mt-1 flex items-center justify-between">
+                      <a
+                        href={`tel:${selectedIncident.reporter.phone}`}
+                        className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-bold hover:underline"
+                        title="Click to dial reporter directly via CAD"
+                      >
+                        <PhoneCall className="w-3 h-3 text-emerald-400" />
+                        {selectedIncident.reporter.phone}
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 block">
+                      {selectedIncident.reporter.isAnonymous ? 'Protected identity (Act 720)' : 'No phone linked'}
+                    </span>
+                  )}
+                  {selectedIncident.reporter?.carrierTriangulationAuthorized && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[9px] font-semibold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded px-1.5 py-0.5">
+                      <span>📡 Carrier Triangulation Authorized (Act 843 Sec 20)</span>
+                    </div>
+                  )}
                   {selectedIncident.reporter?.ghanaCardId && !selectedIncident.reporter?.isAnonymous && (
                     <span className="text-[9px] text-amber-400 font-mono block mt-0.5">
                       🇬🇭 {selectedIncident.reporter.ghanaCardId}

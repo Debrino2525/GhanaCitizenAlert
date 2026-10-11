@@ -78,6 +78,10 @@ export interface IncidentReport {
     ghanaCardId?: string;
     avatarUrl?: string;
     trustScore: number;
+    carrierTriangulationAuthorized?: boolean;
+    emergencyTelecomConsent?: boolean;
+    emergencyConsentAct?: string;
+    carrierConsentTimestamp?: string;
   };
   assignedAgency: AgencyType;
   secondaryAgencies?: AgencyType[];
