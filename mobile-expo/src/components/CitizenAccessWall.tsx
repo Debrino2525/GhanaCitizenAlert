@@ -79,10 +79,15 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [ghanaCard, setGhanaCard] = useState('');
   const [emergencyTelecomConsent, setEmergencyTelecomConsent] = useState(true);
 
-  // Forgot Password & Reset states
+  // Forgot Password & In-App OTP Reset states
   const [isForgotPasswordModalOpen, setIsForgotPasswordModalOpen] = useState(false);
+  const [resetStep, setResetStep] = useState<'REQUEST' | 'VERIFY'>('REQUEST');
   const [resetEmail, setResetEmail] = useState('');
+  const [resetOtpCode, setResetOtpCode] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
 
@@ -305,7 +310,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     onAuthenticated(authenticatedCitizen);
   };
 
-  // Password Reset Dispatch Handler
+  // Password Reset Dispatch Handler (Sends 6-digit recovery code)
   const handleRequestPasswordReset = async () => {
     if (!resetEmail.trim()) {
       setResetErrorMessage('Please enter your registered citizen email address.');
@@ -317,21 +322,93 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     setResetSuccessMessage(null);
 
     try {
-      const redirectUrl = AuthSession.makeRedirectUri({
-        preferLocalhost: false
-      });
-
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), {
-        redirectTo: redirectUrl
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase());
 
       if (error) throw error;
 
-      setResetSuccessMessage('Secure password reset link dispatched! Please check your email inbox and spam folder.');
+      setResetSuccessMessage('Recovery code dispatched! Please check your email inbox.');
+      setResetStep('VERIFY');
     } catch (err: any) {
-      setResetErrorMessage(err.message || 'Failed to dispatch password reset email. Please verify the address.');
+      setResetErrorMessage(err.message || 'Failed to dispatch recovery code. Please verify the email address.');
     } finally {
       setIsSendingReset(false);
+    }
+  };
+
+  // In-App OTP Verification & Password Reset Handler
+  const handleVerifyOtpAndSavePassword = async () => {
+    setResetErrorMessage(null);
+
+    const token = resetOtpCode.trim();
+    if (!token) {
+      setResetErrorMessage('Please enter the 6-digit recovery code from your email.');
+      return;
+    }
+
+    if (!resetNewPassword || resetNewPassword.length < 6) {
+      setResetErrorMessage('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetErrorMessage('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      let verifyData: any;
+      let verifyError: any;
+
+      // Handle token hash (if user pasted the long token from link) or standard 6-digit code
+      if (token.length > 10) {
+        const res = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'recovery'
+        });
+        verifyData = res.data;
+        verifyError = res.error;
+      } else {
+        const res = await supabase.auth.verifyOtp({
+          email: resetEmail.trim().toLowerCase(),
+          token: token,
+          type: 'recovery'
+        });
+        verifyData = res.data;
+        verifyError = res.error;
+      }
+
+      if (verifyError) {
+        throw verifyError;
+      }
+
+      const { data: updateData, error: updateError } = await supabase.auth.updateUser({
+        password: resetNewPassword
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      Alert.alert(
+        '✅ Password Updated',
+        'Your password has been successfully reset. You are now securely logged into Citizen Vault.'
+      );
+
+      setIsForgotPasswordModalOpen(false);
+      setResetOtpCode('');
+      setResetNewPassword('');
+      setResetConfirmPassword('');
+      setResetStep('REQUEST');
+
+      const user = updateData.user || verifyData?.user;
+      if (user) {
+        await buildAndSetCitizenUser(user, verifyData?.session?.access_token, 'EMAIL');
+      }
+    } catch (err: any) {
+      setResetErrorMessage(err.message || 'Verification failed. The code may be invalid or expired.');
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -995,12 +1072,17 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         onClose={() => setIsPrivacyModalOpen(false)}
       />
 
-      {/* 1. Forgot Password Modal */}
+      {/* 1. In-App Password Recovery Modal (6-Digit OTP) */}
       <Modal
         visible={isForgotPasswordModalOpen}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setIsForgotPasswordModalOpen(false)}
+        onRequestClose={() => {
+          setIsForgotPasswordModalOpen(false);
+          setResetStep('REQUEST');
+          setResetErrorMessage(null);
+          setResetSuccessMessage(null);
+        }}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1010,10 +1092,17 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
             <View style={styles.modalHeaderRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
                 <KeyRound color={tokens.colors.brand.gold} size={20} />
-                <Text style={styles.modalSheetTitle}>Reset Citizen Password</Text>
+                <Text style={styles.modalSheetTitle}>
+                  {resetStep === 'REQUEST' ? 'Reset Citizen Password' : 'Enter Code & New Password'}
+                </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setIsForgotPasswordModalOpen(false)}
+                onPress={() => {
+                  setIsForgotPasswordModalOpen(false);
+                  setResetStep('REQUEST');
+                  setResetErrorMessage(null);
+                  setResetSuccessMessage(null);
+                }}
                 style={styles.modalCloseIconBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Close reset password dialog"
@@ -1023,7 +1112,9 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
             </View>
 
             <Text style={styles.modalSheetSubtitle}>
-              Enter your registered email address. We will dispatch a cryptographic recovery link to reset your account password.
+              {resetStep === 'REQUEST'
+                ? 'Enter your registered email address. We will dispatch a 6-digit recovery code to reset your account password.'
+                : `Enter the verification code sent to ${resetEmail || 'your email'} and set your new secure password.`}
             </Text>
 
             {resetSuccessMessage && (
@@ -1040,38 +1131,133 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
               </View>
             )}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Registered Email Address</Text>
-              <View style={styles.inputWrapper}>
-                <Mail color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.inputWithIcon}
-                  placeholder="e.g. kwame.mensah@gmail.com"
-                  placeholderTextColor={tokens.colors.text.muted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={resetEmail}
-                  onChangeText={setResetEmail}
-                  returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
-                />
-              </View>
-            </View>
+            {resetStep === 'REQUEST' ? (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Registered Email Address</Text>
+                  <View style={styles.inputWrapper}>
+                    <Mail color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. kwame.mensah@gmail.com"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={resetEmail}
+                      onChangeText={setResetEmail}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                  </View>
+                </View>
 
-            <TouchableOpacity
-              onPress={handleRequestPasswordReset}
-              disabled={isSendingReset}
-              style={styles.primaryBtn}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Dispatch recovery email"
-            >
-              {isSendingReset ? (
-                <ActivityIndicator color={tokens.colors.bg.base} size="small" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Dispatch Recovery Link</Text>
-              )}
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleRequestPasswordReset}
+                  disabled={isSendingReset}
+                  style={styles.primaryBtn}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dispatch recovery email"
+                >
+                  {isSendingReset ? (
+                    <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Send Recovery Code</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setResetStep('VERIFY');
+                    setResetErrorMessage(null);
+                  }}
+                  style={{ alignItems: 'center', marginTop: tokens.spacing.xs }}
+                >
+                  <Text style={{ color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.xs, fontWeight: '600' }}>
+                    Already have a recovery code? Enter Code & New Password →
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>6-Digit Verification Code *</Text>
+                  <View style={styles.inputWrapper}>
+                    <KeyRound color={tokens.colors.brand.gold} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="e.g. 123456 (or paste code)"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      keyboardType="default"
+                      autoCapitalize="none"
+                      value={resetOtpCode}
+                      onChangeText={setResetOtpCode}
+                      returnKeyType="next"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>New Password *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Lock color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="Min 6 characters"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      secureTextEntry
+                      value={resetNewPassword}
+                      onChangeText={setResetNewPassword}
+                      returnKeyType="next"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Confirm New Password *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Lock color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="Re-type new password"
+                      placeholderTextColor={tokens.colors.text.muted}
+                      secureTextEntry
+                      value={resetConfirmPassword}
+                      onChangeText={setResetConfirmPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleVerifyOtpAndSavePassword}
+                  disabled={isResettingPassword}
+                  style={styles.primaryBtn}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Verify Code & Reset Password"
+                >
+                  {isResettingPassword ? (
+                    <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Verify Code & Update Password</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setResetStep('REQUEST');
+                    setResetErrorMessage(null);
+                  }}
+                  style={{ alignItems: 'center', marginTop: tokens.spacing.xs }}
+                >
+                  <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, fontWeight: '600' }}>
+                    ← Back / Request a new code
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
