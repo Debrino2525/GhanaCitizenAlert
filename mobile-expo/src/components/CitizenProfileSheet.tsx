@@ -71,7 +71,9 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               const avatarData = asset.base64
                 ? `data:image/jpeg;base64,${asset.base64}`
                 : asset.uri;
-              await AsyncStorage.setItem('@citizen_avatar_data', avatarData).catch(() => {});
+              if (citizen.id) {
+                await AsyncStorage.setItem(`@citizen_avatar_${citizen.id}`, avatarData).catch(() => {});
+              }
               onUpdateAvatar?.(avatarData);
             }
           }
@@ -95,7 +97,9 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               const avatarData = asset.base64
                 ? `data:image/jpeg;base64,${asset.base64}`
                 : asset.uri;
-              await AsyncStorage.setItem('@citizen_avatar_data', avatarData).catch(() => {});
+              if (citizen.id) {
+                await AsyncStorage.setItem(`@citizen_avatar_${citizen.id}`, avatarData).catch(() => {});
+              }
               onUpdateAvatar?.(avatarData);
             }
           }

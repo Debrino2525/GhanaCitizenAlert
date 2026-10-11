@@ -136,11 +136,14 @@ function MainApp() {
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+        // Clean up legacy unscoped avatar key
+        await AsyncStorage.removeItem('@citizen_avatar_data').catch(() => {});
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const user = session.user;
           const userMeta = user.user_metadata || {};
+          const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
           const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
           setCitizen({
             id: user.id,
@@ -157,8 +160,6 @@ function MainApp() {
           setIsAuthenticated(true);
           draft.setIsAnonymous(false);
           draft.setReporterPhone(userMeta.phone || '');
-        } else if (savedAvatar) {
-          setCitizen((prev) => ({ ...prev, avatarUrl: savedAvatar }));
         }
       } catch (err) {
         console.warn('[Session Restore] Error:', err);
@@ -167,11 +168,11 @@ function MainApp() {
 
     restoreSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         const user = session.user;
         const userMeta = user.user_metadata || {};
-        const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+        const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
         const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
         setCitizen({
           id: user.id,
@@ -188,6 +189,20 @@ function MainApp() {
         setIsAuthenticated(true);
         draft.setIsAnonymous(false);
         draft.setReporterPhone(userMeta.phone || '');
+      } else if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+        draft.setIsAnonymous(false);
+        setCitizen({
+          id: '',
+          name: '',
+          email: '',
+          phone: '',
+          ghanaCard: '',
+          avatarUrl: undefined,
+          trustScore: 70,
+          isVerified: false,
+          loginMethod: 'EMAIL',
+        });
       }
     });
 
@@ -216,6 +231,17 @@ function MainApp() {
   const handleSignOut = useCallback(() => {
     setIsAuthenticated(false);
     draft.setIsAnonymous(false);
+    setCitizen({
+      id: '',
+      name: '',
+      email: '',
+      phone: '',
+      ghanaCard: '',
+      avatarUrl: undefined,
+      trustScore: 70,
+      isVerified: false,
+      loginMethod: 'EMAIL',
+    });
   }, [draft.setIsAnonymous]);
 
   const t = GHANAIAN_LANGUAGES[lang] || GHANAIAN_LANGUAGES.en;
@@ -436,7 +462,9 @@ function MainApp() {
         onUpdateAvatar={async (newAvatarUrl) => {
           setCitizen((prev) => ({ ...prev, avatarUrl: newAvatarUrl }));
           try {
-            await AsyncStorage.setItem('@citizen_avatar_data', newAvatarUrl);
+            if (citizen.id) {
+              await AsyncStorage.setItem(`@citizen_avatar_${citizen.id}`, newAvatarUrl);
+            }
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
               await supabase.auth.updateUser({

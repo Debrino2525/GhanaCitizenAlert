@@ -298,7 +298,9 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       ? `Coordinates: ${bestGps.latitude.toFixed(5)}, ${bestGps.longitude.toFixed(5)} (±${bestGps.accuracy ?? 25}m, ${bestGps.locationSource}).`
       : 'Coordinates: Location unavailable (pending satellite lock).';
 
-    const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+    const savedAvatar = citizen?.id
+      ? await AsyncStorage.getItem(`@citizen_avatar_${citizen.id}`).catch(() => null)
+      : null;
     const effectiveAvatar = isAnonymous ? null : (citizen?.avatarUrl || savedAvatar || null);
 
     while (attempts < 3 && !insertSuccess) {

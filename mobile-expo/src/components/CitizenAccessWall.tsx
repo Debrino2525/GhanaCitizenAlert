@@ -97,7 +97,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
       const user = data.user;
       const userMeta = user.user_metadata || {};
-      const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+      const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
       const authenticatedCitizen: CitizenUser = {
         id: user.id,
         name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
@@ -194,7 +194,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const buildAndSetCitizenUser = async (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' = 'GOOGLE') => {
     const userMeta = user.user_metadata || {};
     const defaultName = provider === 'APPLE' ? 'Apple Citizen' : 'Google Citizen';
-    const savedAvatar = await AsyncStorage.getItem('@citizen_avatar_data').catch(() => null);
+    const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
     const authenticatedCitizen: CitizenUser = {
       id: user.id,
       name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
