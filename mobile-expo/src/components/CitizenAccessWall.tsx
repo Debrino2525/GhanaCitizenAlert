@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,8 @@ import {
   Platform,
   StatusBar,
   Keyboard,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
@@ -32,7 +33,10 @@ import {
   CheckCircle2,
   AlertCircle,
   LogIn,
-  UserPlus
+  UserPlus,
+  X,
+  ArrowLeft,
+  Check
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable } from '../lib/googleAuth';
@@ -75,6 +79,47 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [ghanaCard, setGhanaCard] = useState('');
   const [emergencyTelecomConsent, setEmergencyTelecomConsent] = useState(true);
 
+  // Forgot Password & Reset states
+  const [isForgotPasswordModalOpen, setIsForgotPasswordModalOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
+
+  const [isSetNewPasswordModalOpen, setIsSetNewPasswordModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
+
+  // Listen for Supabase password recovery triggers & deep links
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsSetNewPasswordModalOpen(true);
+      }
+    });
+
+    const handleUrl = (event: { url: string }) => {
+      if (event.url.includes('type=recovery') || event.url.includes('reset-password')) {
+        setIsSetNewPasswordModalOpen(true);
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url && (url.includes('type=recovery') || url.includes('reset-password'))) {
+        setIsSetNewPasswordModalOpen(true);
+      }
+    });
+
+    const sub = Linking.addEventListener('url', handleUrl);
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+      sub.remove();
+    };
+  }, []);
+
   // 1. Supabase Citizen Sign In (Email / Password)
   const handleSignIn = async () => {
     setErrorMessage(null);
@@ -100,19 +145,30 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
       const user = data.user;
       const userMeta = user.user_metadata || {};
+      const normalizedEmail = (user.email || email).trim().toLowerCase();
+      let effectivePhone = userMeta.phone || '';
+
+      // Cross-provider phone persistence
+      if (!effectivePhone && normalizedEmail) {
+        const cachedPhone = await AsyncStorage.getItem(`@citizen_phone_${normalizedEmail}`).catch(() => null);
+        if (cachedPhone) effectivePhone = cachedPhone;
+      } else if (effectivePhone && normalizedEmail) {
+        await AsyncStorage.setItem(`@citizen_phone_${normalizedEmail}`, effectivePhone).catch(() => {});
+      }
+
       const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
       const authenticatedCitizen: CitizenUser = {
         id: user.id,
         name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
         email: user.email || email.trim().toLowerCase(),
-        phone: userMeta.phone || '',
+        phone: effectivePhone,
         ghanaCard: userMeta.ghana_card || '',
         avatarUrl: savedAvatar || userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
         trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
         isVerified: Boolean(userMeta.is_verified || false),
         loginMethod: 'EMAIL',
         accessToken: data.session?.access_token,
-        emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+        emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(effectivePhone),
         emergencyConsentAt: userMeta.emergency_consent_at || undefined
       };
 
@@ -173,6 +229,11 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         throw new Error('Registration failed.');
       }
 
+      // Cache phone locally by email for cross-provider Google/Apple sign-in restoration
+      if (email.trim() && phone.trim()) {
+        await AsyncStorage.setItem(`@citizen_phone_${email.trim().toLowerCase()}`, phone.trim()).catch(() => {});
+      }
+
       const user = data.user;
       const userMeta = user.user_metadata || {};
       const registeredCitizen: CitizenUser = {
@@ -201,25 +262,116 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     }
   };
 
-  const buildAndSetCitizenUser = async (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' = 'GOOGLE') => {
+  const buildAndSetCitizenUser = async (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' | 'EMAIL' = 'GOOGLE') => {
     const userMeta = user.user_metadata || {};
-    const defaultName = provider === 'APPLE' ? 'Apple Citizen' : 'Google Citizen';
+    const defaultName = provider === 'APPLE' ? 'Apple Citizen' : provider === 'EMAIL' ? 'Ghana Citizen' : 'Google Citizen';
+    const normalizedEmail = (user.email || '').trim().toLowerCase();
     const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
+
+    // Cross-provider phone synchronization (e.g. registered with email, now logging in with Google)
+    let effectivePhone = userMeta.phone || '';
+    if (!effectivePhone && normalizedEmail) {
+      const cachedPhone = await AsyncStorage.getItem(`@citizen_phone_${normalizedEmail}`).catch(() => null);
+      if (cachedPhone) {
+        effectivePhone = cachedPhone;
+        // Sync to Supabase user metadata for this OAuth identity
+        await supabase.auth.updateUser({
+          data: {
+            phone: cachedPhone,
+            emergency_telecom_consent: true,
+            emergency_consent_at: new Date().toISOString(),
+            emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
+          }
+        }).catch(() => {});
+      }
+    } else if (effectivePhone && normalizedEmail) {
+      await AsyncStorage.setItem(`@citizen_phone_${normalizedEmail}`, effectivePhone).catch(() => {});
+    }
+
     const authenticatedCitizen: CitizenUser = {
       id: user.id,
       name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
       email: user.email || '',
-      phone: userMeta.phone || '',
+      phone: effectivePhone,
       ghanaCard: userMeta.ghana_card || '',
       avatarUrl: savedAvatar || userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
       trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
       isVerified: Boolean(userMeta.is_verified || false),
       loginMethod: provider,
       accessToken: accessToken,
-      emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+      emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(effectivePhone),
       emergencyConsentAt: userMeta.emergency_consent_at || undefined
     };
     onAuthenticated(authenticatedCitizen);
+  };
+
+  // Password Reset Dispatch Handler
+  const handleRequestPasswordReset = async () => {
+    if (!resetEmail.trim()) {
+      setResetErrorMessage('Please enter your registered citizen email address.');
+      return;
+    }
+
+    setIsSendingReset(true);
+    setResetErrorMessage(null);
+    setResetSuccessMessage(null);
+
+    try {
+      const redirectUrl = AuthSession.makeRedirectUri({
+        preferLocalhost: false
+      });
+
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), {
+        redirectTo: redirectUrl
+      });
+
+      if (error) throw error;
+
+      setResetSuccessMessage('Secure password reset link dispatched! Please check your email inbox and spam folder.');
+    } catch (err: any) {
+      setResetErrorMessage(err.message || 'Failed to dispatch password reset email. Please verify the address.');
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
+  // Set New Password Handler
+  const handleSaveNewPassword = async () => {
+    setNewPasswordError(null);
+    if (!newPassword || newPassword.length < 6) {
+      setNewPasswordError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setNewPasswordError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        '✅ Password Updated',
+        'Your password has been successfully reset. You are now securely logged into Citizen Vault.'
+      );
+      setIsSetNewPasswordModalOpen(false);
+      setNewPassword('');
+      setConfirmNewPassword('');
+
+      if (data.user) {
+        await buildAndSetCitizenUser(data.user, undefined, 'EMAIL');
+      }
+    } catch (err: any) {
+      setNewPasswordError(err.message || 'Failed to update password. Please request a new link.');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   // 3. In-App Single Sign-On (Google & Apple) with Native Fallback & Supabase OAuth
@@ -531,6 +683,23 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
                   </View>
                 </View>
 
+                {/* Forgot Password Link */}
+                <View style={styles.forgotPasswordContainer}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setResetEmail(email.trim());
+                      setResetErrorMessage(null);
+                      setResetSuccessMessage(null);
+                      setIsForgotPasswordModalOpen(true);
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Forgot Password"
+                  >
+                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
                   onPress={handleSignIn}
                   disabled={isLoading}
@@ -825,6 +994,177 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         visible={isPrivacyModalOpen}
         onClose={() => setIsPrivacyModalOpen(false)}
       />
+
+      {/* 1. Forgot Password Modal */}
+      <Modal
+        visible={isForgotPasswordModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsForgotPasswordModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <View style={styles.modalContentCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                <KeyRound color={tokens.colors.brand.gold} size={20} />
+                <Text style={styles.modalSheetTitle}>Reset Citizen Password</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsForgotPasswordModalOpen(false)}
+                style={styles.modalCloseIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close reset password dialog"
+              >
+                <X color={tokens.colors.text.secondary} size={18} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSheetSubtitle}>
+              Enter your registered email address. We will dispatch a cryptographic recovery link to reset your account password.
+            </Text>
+
+            {resetSuccessMessage && (
+              <View style={styles.modalSuccessBox}>
+                <CheckCircle2 color={tokens.colors.status.success} size={16} />
+                <Text style={styles.modalSuccessText}>{resetSuccessMessage}</Text>
+              </View>
+            )}
+
+            {resetErrorMessage && (
+              <View style={styles.modalErrorBox}>
+                <AlertCircle color={tokens.colors.status.danger} size={16} />
+                <Text style={styles.modalErrorText}>{resetErrorMessage}</Text>
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Registered Email Address</Text>
+              <View style={styles.inputWrapper}>
+                <Mail color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.inputWithIcon}
+                  placeholder="e.g. kwame.mensah@gmail.com"
+                  placeholderTextColor={tokens.colors.text.muted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={resetEmail}
+                  onChangeText={setResetEmail}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleRequestPasswordReset}
+              disabled={isSendingReset}
+              style={styles.primaryBtn}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Dispatch recovery email"
+            >
+              {isSendingReset ? (
+                <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+              ) : (
+                <Text style={styles.primaryBtnText}>Dispatch Recovery Link</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 2. Set New Password Modal (Deep Link / Recovery Session) */}
+      <Modal
+        visible={isSetNewPasswordModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsSetNewPasswordModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <View style={styles.modalContentCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
+                <Lock color={tokens.colors.brand.gold} size={20} />
+                <Text style={styles.modalSheetTitle}>Set New Password</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsSetNewPasswordModalOpen(false)}
+                style={styles.modalCloseIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close set new password dialog"
+              >
+                <X color={tokens.colors.text.secondary} size={18} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSheetSubtitle}>
+              Please choose a new secure password for your CitizenAlert account (minimum 6 characters).
+            </Text>
+
+            {newPasswordError && (
+              <View style={styles.modalErrorBox}>
+                <AlertCircle color={tokens.colors.status.danger} size={16} />
+                <Text style={styles.modalErrorText}>{newPasswordError}</Text>
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>New Password *</Text>
+              <View style={styles.inputWrapper}>
+                <KeyRound color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.inputWithIcon}
+                  placeholder="Min 6 characters"
+                  placeholderTextColor={tokens.colors.text.muted}
+                  secureTextEntry
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Confirm New Password *</Text>
+              <View style={styles.inputWrapper}>
+                <KeyRound color={tokens.colors.text.muted} size={18} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.inputWithIcon}
+                  placeholder="Re-type new password"
+                  placeholderTextColor={tokens.colors.text.muted}
+                  secureTextEntry
+                  value={confirmNewPassword}
+                  onChangeText={setConfirmNewPassword}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSaveNewPassword}
+              disabled={isUpdatingPassword}
+              style={styles.primaryBtn}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Update Password & Sign In"
+            >
+              {isUpdatingPassword ? (
+                <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+              ) : (
+                <Text style={styles.primaryBtnText}>Update Password & Sign In</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1175,6 +1515,83 @@ const styles = StyleSheet.create({
   legalBasisText: {
     color: tokens.colors.police.badge,
     fontSize: 9,
+    fontWeight: '600'
+  },
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
+    marginTop: 6,
+    marginBottom: tokens.spacing.sm
+  },
+  forgotPasswordText: {
+    color: tokens.colors.brand.gold,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '600'
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end'
+  },
+  modalContentCard: {
+    backgroundColor: tokens.colors.bg.surface,
+    borderTopLeftRadius: tokens.radius.xl,
+    borderTopRightRadius: tokens.radius.xl,
+    padding: tokens.spacing.lg,
+    paddingBottom: Platform.OS === 'ios' ? 40 : tokens.spacing.xl,
+    borderWidth: 1,
+    borderColor: tokens.colors.border.subtle,
+    gap: tokens.spacing.md
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  modalSheetTitle: {
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.md,
+    fontWeight: '800'
+  },
+  modalCloseIconBtn: {
+    padding: 6,
+    borderRadius: tokens.radius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)'
+  },
+  modalSheetSubtitle: {
+    color: tokens.colors.text.secondary,
+    fontSize: tokens.typography.fontSize.xs,
+    lineHeight: tokens.typography.lineHeight.xs
+  },
+  modalSuccessBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderWidth: 1,
+    borderColor: tokens.colors.status.success,
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.sm
+  },
+  modalSuccessText: {
+    color: tokens.colors.status.success,
+    fontSize: tokens.typography.fontSize.xs,
+    flex: 1,
+    fontWeight: '600'
+  },
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: tokens.colors.status.danger,
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.sm
+  },
+  modalErrorText: {
+    color: tokens.colors.status.danger,
+    fontSize: tokens.typography.fontSize.xs,
+    flex: 1,
     fontWeight: '600'
   }
 });

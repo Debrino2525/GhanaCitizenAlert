@@ -1,5 +1,15 @@
 import React, { memo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Modal,
+  Alert,
+  TextInput,
+  ActivityIndicator,
+  Image
+} from 'react-native';
 import {
   ShieldCheck,
   Mail,
@@ -13,7 +23,9 @@ import {
   Trash2,
   ExternalLink,
   Camera,
-  User as UserIcon
+  User as UserIcon,
+  Edit3,
+  Plus
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,7 +34,6 @@ import { supabase } from '../lib/supabase';
 import { GoogleSignin } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
-import { Image } from 'react-native';
 
 interface CitizenProfileSheetProps {
   isOpen: boolean;
@@ -32,6 +43,7 @@ interface CitizenProfileSheetProps {
   onToggleAnonymous: (anonymous: boolean) => void;
   onSignOut: () => void;
   onUpdateAvatar?: (avatarUrl: string) => void;
+  onUpdatePhone?: (phone: string) => void;
 }
 
 export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
@@ -41,10 +53,14 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   onClose,
   onToggleAnonymous,
   onSignOut,
-  onUpdateAvatar
+  onUpdateAvatar,
+  onUpdatePhone
 }) => {
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [inputPhone, setInputPhone] = useState(citizen.phone || '');
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
 
   const handlePickAvatar = async () => {
     Alert.alert(
@@ -136,6 +152,38 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 
   const handleOpenPrivacyPolicy = () => {
     setIsPrivacyModalOpen(true);
+  };
+
+  const handleSavePhone = async () => {
+    if (!inputPhone.trim()) {
+      Alert.alert('Phone Required', 'Please enter a valid Ghana phone number (e.g. 0244 123 456).');
+      return;
+    }
+    setIsSavingPhone(true);
+    try {
+      const cleanPhone = inputPhone.trim();
+      if (citizen.email) {
+        await AsyncStorage.setItem(`@citizen_phone_${citizen.email.toLowerCase()}`, cleanPhone).catch(() => {});
+      }
+      await supabase.auth.updateUser({
+        data: {
+          phone: cleanPhone,
+          emergency_telecom_consent: true,
+          emergency_consent_at: new Date().toISOString(),
+          emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
+        }
+      });
+      onUpdatePhone?.(cleanPhone);
+      setIsEditingPhone(false);
+      Alert.alert(
+        '✅ Phone Linked',
+        `Phone number ${cleanPhone} is now registered for emergency SOS dispatch and carrier triangulation under Act 843.`
+      );
+    } catch (err: any) {
+      Alert.alert('Save Error', err.message || 'Failed to save phone number.');
+    } finally {
+      setIsSavingPhone(false);
+    }
   };
 
   const handleDeleteAccountPress = () => {
@@ -276,21 +324,82 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               <Text style={styles.infoText}>{citizen.email}</Text>
             </View>
 
-            {citizen.phone ? (
+            {isEditingPhone ? (
+              <View style={styles.phoneEditContainer}>
+                <View style={styles.phoneInputWrapper}>
+                  <Phone color={tokens.colors.brand.gold} size={14} style={{ marginRight: 6 }} />
+                  <TextInput
+                    style={styles.phoneTextInput}
+                    placeholder="e.g. 0244 123 456"
+                    placeholderTextColor={tokens.colors.text.muted}
+                    keyboardType="phone-pad"
+                    value={inputPhone}
+                    onChangeText={setInputPhone}
+                    autoFocus
+                  />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+                  <TouchableOpacity
+                    onPress={() => setIsEditingPhone(false)}
+                    style={styles.phoneCancelBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel phone edit"
+                  >
+                    <Text style={styles.phoneCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSavePhone}
+                    disabled={isSavingPhone}
+                    style={styles.phoneSaveBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save phone number"
+                  >
+                    {isSavingPhone ? (
+                      <ActivityIndicator color={tokens.colors.bg.base} size="small" />
+                    ) : (
+                      <Text style={styles.phoneSaveBtnText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : citizen.phone ? (
               <View style={styles.infoRow}>
                 <Phone color={tokens.colors.brand.gold} size={14} />
                 <Text style={styles.infoText}>{citizen.phone}</Text>
                 <View style={styles.act843MiniBadge}>
                   <Text style={styles.act843MiniBadgeText}>Act 843 SOS Linked</Text>
                 </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setInputPhone(citizen.phone || '');
+                    setIsEditingPhone(true);
+                  }}
+                  style={styles.phoneEditTouchBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit phone number"
+                >
+                  <Edit3 color={tokens.colors.text.muted} size={13} />
+                </TouchableOpacity>
               </View>
             ) : !citizen.phone && citizen.loginMethod !== 'ANONYMOUS' ? (
-              <View style={styles.infoRow}>
-                <Phone color={tokens.colors.status.warning} size={14} />
-                <Text style={[styles.infoText, { color: tokens.colors.status.warning }]}>
-                  No phone linked for SOS (Act 843)
-                </Text>
-              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setInputPhone('');
+                  setIsEditingPhone(true);
+                }}
+                style={styles.addPhoneAlertBanner}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Add phone number for SOS"
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <Phone color={tokens.colors.status.warning} size={14} />
+                  <Text style={styles.addPhoneAlertBannerText}>
+                    + Link Phone for SOS & Carrier Triangulation (Act 843)
+                  </Text>
+                </View>
+                <Plus color={tokens.colors.status.warning} size={14} />
+              </TouchableOpacity>
             ) : null}
 
             {citizen.ghanaCard ? (
@@ -675,6 +784,72 @@ const styles = StyleSheet.create({
   act843MiniBadgeText: {
     color: tokens.colors.brand.gold,
     fontSize: 9,
+    fontWeight: '700'
+  },
+  phoneEditTouchBtn: {
+    padding: 4,
+    borderRadius: 4,
+    marginLeft: 6
+  },
+  phoneEditContainer: {
+    backgroundColor: tokens.colors.bg.surface,
+    borderWidth: 1,
+    borderColor: tokens.colors.brand.gold,
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.sm,
+    marginVertical: 4
+  },
+  phoneInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.bg.base,
+    borderRadius: tokens.radius.sm,
+    paddingHorizontal: tokens.spacing.sm,
+    height: 40
+  },
+  phoneTextInput: {
+    flex: 1,
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.xs,
+    fontWeight: '600'
+  },
+  phoneCancelBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)'
+  },
+  phoneCancelBtnText: {
+    color: tokens.colors.text.muted,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '600'
+  },
+  phoneSaveBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.brand.gold,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  phoneSaveBtnText: {
+    color: tokens.colors.bg.base,
+    fontSize: tokens.typography.fontSize.xxs,
+    fontWeight: '700'
+  },
+  addPhoneAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.sm,
+    marginVertical: 4
+  },
+  addPhoneAlertBannerText: {
+    color: tokens.colors.status.warning,
+    fontSize: tokens.typography.fontSize.xxs,
     fontWeight: '700'
   }
 });

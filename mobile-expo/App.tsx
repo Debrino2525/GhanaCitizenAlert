@@ -143,25 +143,46 @@ function MainApp() {
         if (session?.user) {
           const user = session.user;
           const userMeta = user.user_metadata || {};
+          const normalizedEmail = (user.email || '').trim().toLowerCase();
+          let effectivePhone = userMeta.phone || '';
+
+          // Cross-provider phone persistence (restore phone if missing on Google login)
+          if (!effectivePhone && normalizedEmail) {
+            const cachedPhone = await AsyncStorage.getItem(`@citizen_phone_${normalizedEmail}`).catch(() => null);
+            if (cachedPhone) {
+              effectivePhone = cachedPhone;
+              supabase.auth.updateUser({
+                data: {
+                  phone: cachedPhone,
+                  emergency_telecom_consent: true,
+                  emergency_consent_at: new Date().toISOString(),
+                  emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
+                }
+              }).catch(() => {});
+            }
+          } else if (effectivePhone && normalizedEmail) {
+            await AsyncStorage.setItem(`@citizen_phone_${normalizedEmail}`, effectivePhone).catch(() => {});
+          }
+
           const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
           const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
           setCitizen({
             id: user.id,
             name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
             email: user.email || '',
-            phone: userMeta.phone || '',
+            phone: effectivePhone,
             ghanaCard: userMeta.ghana_card || '',
             avatarUrl: effectiveAvatar,
             trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
             isVerified: Boolean(userMeta.is_verified || false),
             loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
             accessToken: session.access_token,
-            emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+            emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(effectivePhone),
             emergencyConsentAt: userMeta.emergency_consent_at || undefined
           });
           setIsAuthenticated(true);
           draft.setIsAnonymous(false);
-          draft.setReporterPhone(userMeta.phone || '');
+          draft.setReporterPhone(effectivePhone);
         }
       } catch (err) {
         console.warn('[Session Restore] Error:', err);
@@ -174,25 +195,46 @@ function MainApp() {
       if (session?.user) {
         const user = session.user;
         const userMeta = user.user_metadata || {};
+        const normalizedEmail = (user.email || '').trim().toLowerCase();
+        let effectivePhone = userMeta.phone || '';
+
+        // Cross-provider phone persistence
+        if (!effectivePhone && normalizedEmail) {
+          const cachedPhone = await AsyncStorage.getItem(`@citizen_phone_${normalizedEmail}`).catch(() => null);
+          if (cachedPhone) {
+            effectivePhone = cachedPhone;
+            supabase.auth.updateUser({
+              data: {
+                phone: cachedPhone,
+                emergency_telecom_consent: true,
+                emergency_consent_at: new Date().toISOString(),
+                emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
+              }
+            }).catch(() => {});
+          }
+        } else if (effectivePhone && normalizedEmail) {
+          await AsyncStorage.setItem(`@citizen_phone_${normalizedEmail}`, effectivePhone).catch(() => {});
+        }
+
         const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
         const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
         setCitizen({
           id: user.id,
           name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
           email: user.email || '',
-          phone: userMeta.phone || '',
+          phone: effectivePhone,
           ghanaCard: userMeta.ghana_card || '',
           avatarUrl: effectiveAvatar,
           trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
           isVerified: Boolean(userMeta.is_verified || false),
           loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
           accessToken: session.access_token,
-          emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(userMeta.phone),
+          emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(effectivePhone),
           emergencyConsentAt: userMeta.emergency_consent_at || undefined
         });
         setIsAuthenticated(true);
         draft.setIsAnonymous(false);
-        draft.setReporterPhone(userMeta.phone || '');
+        draft.setReporterPhone(effectivePhone);
       } else if (event === 'SIGNED_OUT') {
         setIsAuthenticated(false);
         draft.setIsAnonymous(false);
@@ -477,6 +519,13 @@ function MainApp() {
             }
           } catch (e) {
             console.warn('[Avatar Save Error]', e);
+          }
+        }}
+        onUpdatePhone={async (newPhone) => {
+          setCitizen((prev) => ({ ...prev, phone: newPhone }));
+          draft.setReporterPhone(newPhone);
+          if (citizen.email) {
+            await AsyncStorage.setItem(`@citizen_phone_${citizen.email.toLowerCase()}`, newPhone).catch(() => {});
           }
         }}
       />
