@@ -36,6 +36,7 @@ export type BasemapStyle =
   | 'google-satellite'
   | 'google-hybrid'
   | 'google-terrain'
+  | 'esri-satellite'
   | 'mapbox-dark'
   | 'osm';
 
@@ -82,52 +83,63 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   const [showResolved, setShowResolved] = useState<boolean>(false);
 
   const getTileConfig = useCallback((style: BasemapStyle): TileConfig => {
-    // If Mapbox token is unavailable, gracefully fallback all styles to OpenStreetMap
-    if (!MAPBOX_TOKEN && style !== 'osm') {
-      return {
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        subdomains: ['a', 'b', 'c'],
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; Ghana Police CAD',
-        maxZoom: 19,
-        maxNativeZoom: 19
-      };
-    }
-
     switch (style) {
-      case 'google-streets':
+      case 'google-hybrid':
         return {
-          url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; GhanaPost GPS',
+          url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+          subdomains: ['0', '1', '2', '3'],
+          attribution: '&copy; Google Maps Satellite &copy; Maxar &copy; Ghana Police CAD',
           maxZoom: 20,
-          maxNativeZoom: 20
+          maxNativeZoom: 19
         };
       case 'google-satellite':
         return {
-          url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; Maxar &copy; CNES/Airbus &copy; Ghana Police CAD',
+          url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+          subdomains: ['0', '1', '2', '3'],
+          attribution: '&copy; Google Maps Satellite &copy; Maxar &copy; Ghana Police CAD',
           maxZoom: 20,
-          maxNativeZoom: 20
+          maxNativeZoom: 19
         };
-      case 'google-hybrid':
+      case 'google-streets':
         return {
-          url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; Maxar &copy; Ghana Police CAD',
+          url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+          subdomains: ['0', '1', '2', '3'],
+          attribution: '&copy; Google Maps &copy; GhanaPost GPS &copy; Ghana Police CAD',
           maxZoom: 20,
-          maxNativeZoom: 20
+          maxNativeZoom: 19
         };
       case 'google-terrain':
         return {
-          url: `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; Ghana Police CAD',
+          url: 'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+          subdomains: ['0', '1', '2', '3'],
+          attribution: '&copy; Google Maps Terrain &copy; Ghana Police CAD',
           maxZoom: 20,
-          maxNativeZoom: 20
+          maxNativeZoom: 19
+        };
+      case 'esri-satellite':
+        return {
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          attribution: '&copy; Esri &copy; Maxar &copy; Earthstar Geographics &copy; Ghana Police CAD',
+          maxZoom: 20,
+          maxNativeZoom: 18
         };
       case 'mapbox-dark':
+        if (MAPBOX_TOKEN) {
+          return {
+            url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`,
+            attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; OpenStreetMap &copy; Ghana Police CAD',
+            tileSize: 512,
+            zoomOffset: -1,
+            maxZoom: 20,
+            maxNativeZoom: 19
+          };
+        }
         return {
-          url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; Ghana Police CAD',
+          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          subdomains: ['a', 'b', 'c', 'd'],
+          attribution: '&copy; CARTO &copy; OpenStreetMap &copy; Ghana Police CAD',
           maxZoom: 20,
-          maxNativeZoom: 20
+          maxNativeZoom: 19
         };
       case 'osm':
       default:
@@ -264,9 +276,10 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
   }, [currentStyle, getTileConfig]);
 
   const layerOptions: { id: BasemapStyle; label: string; badge: string }[] = [
-    { id: 'google-hybrid', label: 'Hybrid Satellite', badge: 'HD' },
-    { id: 'google-satellite', label: 'Pure Satellite', badge: 'SAT' },
-    { id: 'google-streets', label: 'Standard Streets', badge: 'MAP' },
+    { id: 'google-hybrid', label: 'Google Hybrid (HD)', badge: 'HD' },
+    { id: 'google-satellite', label: 'Google Satellite', badge: 'SAT' },
+    { id: 'esri-satellite', label: 'Esri World Clarity', badge: 'ESRI' },
+    { id: 'google-streets', label: 'Google Streets', badge: 'MAP' },
     { id: 'google-terrain', label: 'Topography', badge: 'TER' },
     { id: 'mapbox-dark', label: 'Night Ops (Dark)', badge: 'TAC' },
     { id: 'osm', label: 'OpenStreetMap', badge: 'OSM' }
