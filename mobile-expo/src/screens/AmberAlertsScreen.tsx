@@ -330,16 +330,27 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
         submitted_at: new Date().toISOString()
       };
 
-      // Safely insert into incident_feedback audit log if available
-      try {
-        await supabase.from('incident_feedback').insert([{
-          incident_id: selectedAppealBulletin.id,
-          feedback_type: 'TAKEDOWN_APPEAL',
-          comments: JSON.stringify(appealPayload),
-          contact_phone: appealContact.trim()
-        }]);
-      } catch (insertErr) {
-        console.warn('[AlertsHub] Appeal log notice:', insertErr);
+      // Insert into statutory_appeals table (Act 843)
+      const { error: appealErr } = await supabase.from('statutory_appeals').insert([{
+        incident_id: selectedAppealBulletin.id,
+        tracking_code: selectedAppealBulletin.tracking_code,
+        bulletin_title: selectedAppealBulletin.title,
+        applicant_name: appealFullName.trim(),
+        contact_info: appealContact.trim(),
+        reason: appealReason.trim(),
+        status: 'PENDING_REVIEW'
+      }]);
+
+      if (appealErr) {
+        console.warn('[AlertsHub] statutory_appeals insert notice:', appealErr.message);
+        try {
+          await supabase.from('incident_feedback').insert([{
+            incident_id: selectedAppealBulletin.id,
+            feedback_type: 'TAKEDOWN_APPEAL',
+            comments: JSON.stringify(appealPayload),
+            contact_phone: appealContact.trim()
+          }]);
+        } catch {}
       }
 
       safeHaptics.success();

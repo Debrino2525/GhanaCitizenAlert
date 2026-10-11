@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS emergency_alerts (
     subject_age INT,
     subject_photo_url TEXT,
     last_seen_location TEXT NOT NULL,
-    ghanapost_code VARCHAR(20) NOT NULL,
+    ghanapost_code VARCHAR(20) DEFAULT '',
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     radius_km NUMERIC(5, 2) NOT NULL DEFAULT 35.0,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS alert_sightings (
     alert_id UUID REFERENCES emergency_alerts(id) ON DELETE CASCADE,
     timestamp TIMESTAMPTZ DEFAULT NOW(),
     location_name VARCHAR(255) NOT NULL,
-    ghanapost_code VARCHAR(20) NOT NULL,
+    ghanapost_code VARCHAR(20) DEFAULT '',
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     comment TEXT NOT NULL,
@@ -138,6 +138,44 @@ ON storage.objects FOR SELECT
 TO public, anon, authenticated
 USING (bucket_id = 'evidence');
 
--- Note: Storage deletion/overwrite is restricted to preserve evidence integrity under Act 772.
+-- 6. Supabase Storage Bucket for Amber Alert Photos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('alert-photos', 'alert-photos', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+CREATE POLICY "Allow public uploads to alert-photos bucket"
+ON storage.objects FOR INSERT
+TO public, anon, authenticated
+WITH CHECK (bucket_id = 'alert-photos');
+
+CREATE POLICY "Allow public reads from alert-photos bucket"
+ON storage.objects FOR SELECT
+TO public, anon, authenticated
+USING (bucket_id = 'alert-photos');
+
+-- 7. Statutory Appeals & Takedowns Table (Ghana Data Protection Act 2012, Act 843, Sections 32-43)
+CREATE TABLE IF NOT EXISTS statutory_appeals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
+    tracking_code VARCHAR(32) NOT NULL,
+    bulletin_title TEXT,
+    applicant_name VARCHAR(255) NOT NULL,
+    contact_info VARCHAR(255) NOT NULL,
+    reason TEXT NOT NULL,
+    legal_basis VARCHAR(150) DEFAULT 'Ghana Data Protection Act 2012 (Act 843, Sections 32-43)',
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW' CHECK (status IN ('PENDING_REVIEW', 'GRANTED', 'REJECTED')),
+    dpo_notes TEXT,
+    resolved_by VARCHAR(150),
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable Realtime & RLS on statutory_appeals
+ALTER PUBLICATION supabase_realtime ADD TABLE statutory_appeals;
+ALTER TABLE statutory_appeals ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public insert on statutory_appeals" ON statutory_appeals FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public read on statutory_appeals" ON statutory_appeals FOR SELECT USING (true);
+CREATE POLICY "Allow public update on statutory_appeals" ON statutory_appeals FOR UPDATE USING (true);
 
 

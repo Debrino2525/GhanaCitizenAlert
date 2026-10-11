@@ -287,7 +287,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
         subject_age: subjectAge ? parseInt(subjectAge, 10) : null,
         subject_photo_url: photoPublicUrl || null,
         last_seen_location: lastSeenLocation.trim(),
-        ghanapost_code: null, // Empty until real GhanaPost API exists
+        ghanapost_code: '', // Defaults to empty string until GhanaPost API is populated
         latitude: lat,
         longitude: lng,
         radius_km: parseFloat(radiusKm) || 35.0,

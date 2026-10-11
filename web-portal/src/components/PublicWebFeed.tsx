@@ -32,6 +32,7 @@ export const PublicWebFeed: React.FC = () => {
   const [appealContact, setAppealContact] = useState('');
   const [appealReason, setAppealReason] = useState('');
   const [appealSubmitted, setAppealSubmitted] = useState(false);
+  const [isSubmittingAppeal, setIsSubmittingAppeal] = useState(false);
 
   // Fetch verified public safety bulletins from the public_feed_incidents view or direct published incidents
   const fetchPublicFeed = async () => {
@@ -127,15 +128,33 @@ export const PublicWebFeed: React.FC = () => {
     setShowAppealModal(true);
   };
 
-  const handleSubmitAppeal = (e: React.FormEvent) => {
+  const handleSubmitAppeal = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAppealSubmitted(true);
-    setTimeout(() => {
-      setShowAppealModal(false);
-      setAppealName('');
-      setAppealContact('');
-      setAppealReason('');
-    }, 2000);
+    if (!appealIncident) return;
+    setIsSubmittingAppeal(true);
+
+    try {
+      await supabase.from('statutory_appeals').insert([{
+        incident_id: appealIncident.id,
+        tracking_code: appealIncident.tracking_code,
+        bulletin_title: appealIncident.title,
+        applicant_name: appealName.trim(),
+        contact_info: appealContact.trim(),
+        reason: appealReason.trim(),
+        status: 'PENDING_REVIEW'
+      }]);
+    } catch (err) {
+      console.warn('Statutory appeal submission notice:', err);
+    } finally {
+      setIsSubmittingAppeal(false);
+      setAppealSubmitted(true);
+      setTimeout(() => {
+        setShowAppealModal(false);
+        setAppealName('');
+        setAppealContact('');
+        setAppealReason('');
+      }, 2500);
+    }
   };
 
   return (
