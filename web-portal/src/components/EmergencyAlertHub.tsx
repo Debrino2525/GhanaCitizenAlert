@@ -109,11 +109,15 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
       });
 
       setAlerts(formatted);
-      if (formatted.length > 0 && !selectedAlert) {
-        setSelectedAlert(formatted[0]);
-      } else if (selectedAlert) {
-        const updated = formatted.find(a => a.id === selectedAlert.id);
-        if (updated) setSelectedAlert(updated);
+      if (formatted.length > 0) {
+        if (!selectedAlert || !formatted.some(a => a.id === selectedAlert.id)) {
+          setSelectedAlert(formatted[0]);
+        } else {
+          const updated = formatted.find(a => a.id === selectedAlert.id);
+          if (updated) setSelectedAlert(updated);
+        }
+      } else {
+        setSelectedAlert(null);
       }
     } catch (err: any) {
       console.warn('Error fetching emergency alerts:', err);

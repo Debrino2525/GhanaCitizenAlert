@@ -174,6 +174,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             }
           });
           setLatestPings(map);
+        } else {
+          setLatestPings({});
         }
       } catch (err) {
         console.warn('Error fetching sos_pings:', err);
@@ -184,12 +186,16 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
     const channel = supabase
       .channel('realtime_sos_pings')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sos_pings' }, (payload) => {
-        const p: SosPing = payload.new as SosPing;
-        setLatestPings(prev => ({
-          ...prev,
-          [p.incident_id]: p
-        }));
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sos_pings' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const p: SosPing = payload.new as SosPing;
+          setLatestPings(prev => ({
+            ...prev,
+            [p.incident_id]: p
+          }));
+        } else if (payload.eventType === 'DELETE') {
+          fetchPings();
+        }
       })
       .subscribe();
 

@@ -326,6 +326,9 @@ export const App: React.FC = () => {
           });
           setIncidents(formatted);
           setSelectedIncident(formatted[0]);
+        } else {
+          setIncidents([]);
+          setSelectedIncident(null);
         }
       } catch (err) {
         console.error('Error fetching live incidents:', err);
@@ -347,6 +350,8 @@ export const App: React.FC = () => {
             }
           });
           setLatestPings(map);
+        } else {
+          setLatestPings({});
         }
       } catch (err) {
         console.warn('Error fetching initial sos_pings:', err);
@@ -360,6 +365,17 @@ export const App: React.FC = () => {
     const channel = supabase
       .channel('realtime_incidents')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const oldId = (payload.old as any)?.id;
+          if (oldId) {
+            setIncidents(prev => prev.filter(i => i.id !== oldId));
+            setSelectedIncident(prev => (prev?.id === oldId ? null : prev));
+          } else {
+            fetchSupabaseData();
+          }
+          return;
+        }
+
         const r: any = payload.new;
         if (!r || !r.id) return;
 
@@ -426,12 +442,16 @@ export const App: React.FC = () => {
     // Subscribe to Realtime SOS pings stream for live moving beacon tracking
     const sosChannel = supabase
       .channel('realtime_sos_pings_global')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sos_pings' }, (payload) => {
-        const p: SosPing = payload.new as SosPing;
-        setLatestPings(prev => ({
-          ...prev,
-          [p.incident_id]: p
-        }));
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sos_pings' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const p: SosPing = payload.new as SosPing;
+          setLatestPings(prev => ({
+            ...prev,
+            [p.incident_id]: p
+          }));
+        } else if (payload.eventType === 'DELETE') {
+          fetchPings();
+        }
       })
       .subscribe();
 
