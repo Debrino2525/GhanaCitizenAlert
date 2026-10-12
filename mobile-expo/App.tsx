@@ -9,7 +9,8 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -356,7 +357,13 @@ function MainApp() {
           accessibilityLabel="Open Citizen Profile"
         >
           <View style={styles.citizenAvatar}>
-            {citizen.loginMethod === 'ANONYMOUS' ? (
+            {citizen.avatarUrl && citizen.loginMethod !== 'ANONYMOUS' ? (
+              <Image
+                source={{ uri: citizen.avatarUrl }}
+                style={styles.citizenAvatarImage}
+                resizeMode="cover"
+              />
+            ) : citizen.loginMethod === 'ANONYMOUS' ? (
               <Shield color={tokens.colors.brand.gold} size={16} />
             ) : (
               <UserCheck color={tokens.colors.police.badge} size={16} />
@@ -625,7 +632,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: tokens.colors.border.medium
+    borderColor: tokens.colors.border.medium,
+    overflow: 'hidden'
+  },
+  citizenAvatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16
   },
   citizenNameText: {
     color: tokens.colors.text.white,
