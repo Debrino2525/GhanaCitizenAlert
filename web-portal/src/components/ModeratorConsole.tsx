@@ -178,6 +178,18 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
           updated_at: new Date().toISOString()
         }).eq('id', appeal.incident_id);
       }
+      if (appeal.tracking_code) {
+        await supabase.from('incidents').update({
+          is_public_published: false,
+          is_public_eligible: false,
+          updated_at: new Date().toISOString()
+        }).eq('tracking_code', appeal.tracking_code);
+      }
+      if (appeal.incident_id) {
+        await supabase.from('emergency_alerts').update({
+          is_active: false
+        }).eq('id', appeal.incident_id);
+      }
 
       // 2. Update appeal record in Supabase
       const { error } = await supabase.from('statutory_appeals').update({

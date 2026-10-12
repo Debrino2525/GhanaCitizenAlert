@@ -39,6 +39,18 @@ export const PublicWebFeed: React.FC = () => {
     setLoading(true);
     setErrorMsg(null);
     try {
+      // 0. Fetch active granted statutory appeals under Act 843 to guarantee client-side retraction
+      const { data: grantedAppeals } = await supabase
+        .from('statutory_appeals')
+        .select('incident_id, tracking_code')
+        .eq('status', 'GRANTED');
+
+      const grantedIdSet = new Set<string>();
+      (grantedAppeals || []).forEach((g: any) => {
+        if (g.incident_id) grantedIdSet.add(g.incident_id);
+        if (g.tracking_code) grantedIdSet.add(g.tracking_code);
+      });
+
       // 1. Attempt to query public_feed_incidents view
       const { data, error } = await supabase
         .from('public_feed_incidents')
@@ -46,7 +58,8 @@ export const PublicWebFeed: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (!error && data && data.length > 0) {
-        setIncidents(data);
+        const filtered = data.filter((d: any) => !grantedIdSet.has(d.id) && !grantedIdSet.has(d.tracking_code));
+        setIncidents(filtered);
         return;
       }
 
@@ -61,27 +74,29 @@ export const PublicWebFeed: React.FC = () => {
         throw rawError || error;
       }
 
-      const mapped: PublicFeedIncident[] = (rawData || []).map((r: any) => {
-        const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
-        return {
-          id: r.id,
-          tracking_code: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
-          category: r.category || 'CIVIC_ALERT',
-          title: r.title,
-          description: r.description,
-          location_name: r.location_name || 'Location pending',
-          region: r.region || 'National',
-          latitude: hasValidCoords ? r.latitude : null,
-          longitude: hasValidCoords ? r.longitude : null,
-          location_source: r.location_source || null,
-          gps_fix_age_s: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
-          severity: r.severity || 'NORMAL',
-          status: r.status || 'RECEIVED_PENDING_TRIAGE',
-          public_corroborations: r.public_corroborations || 0,
-          created_at: r.created_at,
-          updated_at: r.updated_at
-        };
-      });
+      const mapped: PublicFeedIncident[] = (rawData || [])
+        .filter((r: any) => !grantedIdSet.has(r.id) && !grantedIdSet.has(r.tracking_code))
+        .map((r: any) => {
+          const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
+          return {
+            id: r.id,
+            tracking_code: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
+            category: r.category || 'CIVIC_ALERT',
+            title: r.title,
+            description: r.description,
+            location_name: r.location_name || 'Location pending',
+            region: r.region || 'National',
+            latitude: hasValidCoords ? r.latitude : null,
+            longitude: hasValidCoords ? r.longitude : null,
+            location_source: r.location_source || null,
+            gps_fix_age_s: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
+            severity: r.severity || 'NORMAL',
+            status: r.status || 'RECEIVED_PENDING_TRIAGE',
+            public_corroborations: r.public_corroborations || 0,
+            created_at: r.created_at,
+            updated_at: r.updated_at
+          };
+        });
 
       setIncidents(mapped);
     } catch (err: any) {
@@ -95,10 +110,13 @@ export const PublicWebFeed: React.FC = () => {
   useEffect(() => {
     fetchPublicFeed();
 
-    // Subscribe to realtime changes on incidents table
+    // Subscribe to realtime changes on incidents and statutory appeals table
     const channel = supabase
       .channel('realtime_public_feed_broadcast')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
+        fetchPublicFeed();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'statutory_appeals' }, () => {
         fetchPublicFeed();
       })
       .subscribe();

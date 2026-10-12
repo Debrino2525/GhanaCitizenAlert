@@ -204,10 +204,22 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
     };
   }, []);
 
-  // Fetch both Emergency Alerts and Published Public Incidents
+  // Fetch both Emergency Alerts and Published Public Incidents (filtered against Act 843 takedowns)
   const fetchAllBulletins = useCallback(async () => {
     try {
       const nowIso = new Date().toISOString();
+
+      // Fetch active granted takedowns to guarantee instantaneous client-side filter under Act 843
+      const { data: grantedAppeals } = await supabase
+        .from('statutory_appeals')
+        .select('incident_id, tracking_code')
+        .eq('status', 'GRANTED');
+
+      const grantedIdSet = new Set<string>();
+      (grantedAppeals || []).forEach((g: any) => {
+        if (g.incident_id) grantedIdSet.add(g.incident_id);
+        if (g.tracking_code) grantedIdSet.add(g.tracking_code);
+      });
 
       // 1. Fetch Emergency & Amber Alerts
       const { data: amberData, error: amberErr } = await supabase
@@ -220,7 +232,10 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
       if (amberErr) {
         console.warn('[AlertsHub] Emergency alerts query notice:', amberErr.message);
       } else {
-        setEmergencyAlerts((amberData as MobileEmergencyAlert[]) || []);
+        const filteredAmber = ((amberData as MobileEmergencyAlert[]) || []).filter(
+          a => !grantedIdSet.has(a.id)
+        );
+        setEmergencyAlerts(filteredAmber);
       }
 
       // 2. Fetch Officer-Published Civic Bulletins (with verified video/photo media payload)
@@ -233,7 +248,10 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
       if (civicErr) {
         console.warn('[AlertsHub] Public civic bulletins query notice:', civicErr.message);
       } else {
-        setCivicBulletins((civicData as MobilePublicCivicBulletin[]) || []);
+        const filteredCivic = ((civicData as MobilePublicCivicBulletin[]) || []).filter(
+          c => !grantedIdSet.has(c.id) && !grantedIdSet.has(c.tracking_code)
+        );
+        setCivicBulletins(filteredCivic);
       }
     } catch (err) {
       console.warn('[AlertsHub] Network fetch exception:', err);
@@ -246,13 +264,16 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
   useEffect(() => {
     fetchAllBulletins();
 
-    // Subscribe to realtime updates on both tables
+    // Subscribe to realtime updates on alerts, incidents, and statutory appeals
     const amberChannel = supabase
       .channel('mobile_emergency_alerts_feed')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_alerts' }, () => {
         fetchAllBulletins();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
+        fetchAllBulletins();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'statutory_appeals' }, () => {
         fetchAllBulletins();
       })
       .subscribe();
