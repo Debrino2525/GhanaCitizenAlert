@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CitizenAlert Ghana",
-    "slug": "ghana-citizen-alert",
+    "slug": "ghanacitizenalert",
     "scheme": "citizenalert",
     "version": "1.0.0",
     "orientation": "portrait",
