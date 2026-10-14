@@ -39,7 +39,7 @@ import {
   Check
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
-import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable } from '../lib/googleAuth';
+import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable, ensureGoogleSigninConfigured } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
@@ -460,6 +460,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       // Step A: Attempt Native Google Sign-In if available on this device binary
       if (provider === 'google' && isNativeGoogleAuthAvailable && GoogleSignin) {
         try {
+          ensureGoogleSigninConfigured();
           await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
           const signInResult = await GoogleSignin.signIn();
           const idToken = signInResult.data?.idToken || signInResult.idToken;
