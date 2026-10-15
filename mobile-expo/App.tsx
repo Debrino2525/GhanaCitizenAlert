@@ -540,10 +540,66 @@ function MainApp() {
   );
 }
 
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[CRITICAL APP RUNTIME ERROR]', error, errorInfo);
+  }
+
+  handleRestart = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#070B13', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Shield color="#F59E0B" size={48} style={{ marginBottom: 16 }} />
+          <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+            CitizenAlert Ghana
+          </Text>
+          <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 18 }}>
+            A temporary startup interruption occurred. Tap below to reload the secure session.
+          </Text>
+          <TouchableOpacity
+            onPress={this.handleRestart}
+            style={{
+              backgroundColor: '#0D6A38',
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: 8,
+              minWidth: 160,
+              alignItems: 'center'
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>Reload Application</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <MainApp />
+      <AppErrorBoundary>
+        <MainApp />
+      </AppErrorBoundary>
     </SafeAreaProvider>
   );
 }

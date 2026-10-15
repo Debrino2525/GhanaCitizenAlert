@@ -6,8 +6,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
     "plugins": [
-      "@react-native-google-signin/google-signin",
       "expo-video"
     ],
     "userInterfaceStyle": "dark",
@@ -24,7 +28,7 @@
       "package": "gh.gov.safety.citizenalert",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#070B13"
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
         "CAMERA",

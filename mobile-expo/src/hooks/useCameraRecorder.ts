@@ -38,6 +38,16 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'VIDEO' | 'IMAGE'>('VIDEO');
 
+  const checkPermissionsSilently = useCallback(async () => {
+    try {
+      const cam = await Camera.getCameraPermissionsAsync();
+      const mic = await Camera.getMicrophonePermissionsAsync();
+      setHasCameraPermission(cam.status === 'granted' && mic.status === 'granted');
+    } catch {
+      setHasCameraPermission(false);
+    }
+  }, []);
+
   const requestPermissions = useCallback(async () => {
     try {
       const cam = await Camera.requestCameraPermissionsAsync();
@@ -49,8 +59,8 @@ export const useCameraRecorder = ({ onMediaAttached }: UseCameraRecorderProps): 
   }, []);
 
   useEffect(() => {
-    requestPermissions();
-  }, [requestPermissions]);
+    checkPermissionsSilently();
+  }, [checkPermissionsSilently]);
 
   const handleClearMedia = useCallback(() => {
     setRecordedUri(null);
