@@ -136,7 +136,7 @@ export const useIncidentDraft = ({
     }
 
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Photo library permission is required to save evidence locally.');
         return false;

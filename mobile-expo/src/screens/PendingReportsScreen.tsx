@@ -121,7 +121,7 @@ export const PendingReportsScreen: React.FC<PendingReportsScreenProps> = ({
     }
 
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Photo library permission required to save video.');
         return;
