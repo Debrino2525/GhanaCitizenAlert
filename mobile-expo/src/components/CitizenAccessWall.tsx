@@ -456,6 +456,8 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     setIsLoading(true);
     setErrorMessage(null);
 
+    let lastNativeError: string | null = null;
+
     try {
       // Step A: Attempt Native Google Sign-In if available on this device binary
       if (provider === 'google' && isNativeGoogleAuthAvailable && GoogleSignin) {
@@ -482,6 +484,8 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
               await buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, 'GOOGLE');
               return;
             }
+          } else {
+            lastNativeError = 'Google Play Services did not return an ID token.';
           }
         } catch (nativeErr: any) {
           if (nativeErr.code === statusCodes?.SIGN_IN_CANCELLED) {
@@ -489,6 +493,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
             setIsLoading(false);
             return;
           }
+          lastNativeError = nativeErr.message || String(nativeErr);
           console.warn('[Native Google Sign-In] Fallback to WebBrowser OAuth:', nativeErr.message);
         }
       }
@@ -581,6 +586,10 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       if (activeSession?.session?.user) {
         await buildAndSetCitizenUser(activeSession.session.user, activeSession.session.access_token, provider === 'apple' ? 'APPLE' : 'GOOGLE');
         return;
+      }
+
+      if (lastNativeError) {
+        setErrorMessage(`Google Sign-In: ${lastNativeError}`);
       }
     } catch (err: any) {
       setErrorMessage(err.message || `${provider === 'apple' ? 'Apple' : 'Google'} Sign-In encountered an error. Please try again.`);
