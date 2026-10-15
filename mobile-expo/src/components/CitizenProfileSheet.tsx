@@ -28,6 +28,7 @@ import {
   Plus
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadAndSyncCitizenAvatar } from '../services/avatarService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CitizenUser } from './CitizenAccessWall';
 import { supabase } from '../lib/supabase';
@@ -84,13 +85,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             });
             if (!result.canceled && result.assets[0]) {
               const asset = result.assets[0];
-              const avatarData = asset.base64
-                ? `data:image/jpeg;base64,${asset.base64}`
-                : asset.uri;
-              if (citizen.id) {
-                await AsyncStorage.setItem(`@citizen_avatar_${citizen.id}`, avatarData).catch(() => {});
-              }
-              onUpdateAvatar?.(avatarData);
+              const syncedUrl = await uploadAndSyncCitizenAvatar(citizen.id, asset.base64, asset.uri);
+              onUpdateAvatar?.(syncedUrl);
             }
           }
         },
@@ -110,13 +106,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             });
             if (!result.canceled && result.assets[0]) {
               const asset = result.assets[0];
-              const avatarData = asset.base64
-                ? `data:image/jpeg;base64,${asset.base64}`
-                : asset.uri;
-              if (citizen.id) {
-                await AsyncStorage.setItem(`@citizen_avatar_${citizen.id}`, avatarData).catch(() => {});
-              }
-              onUpdateAvatar?.(avatarData);
+              const syncedUrl = await uploadAndSyncCitizenAvatar(citizen.id, asset.base64, asset.uri);
+              onUpdateAvatar?.(syncedUrl);
             }
           }
         }

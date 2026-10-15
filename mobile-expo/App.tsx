@@ -49,6 +49,7 @@ import { SosPanicScreen } from './src/screens/SosPanicScreen';
 import { PendingReportsScreen } from './src/screens/PendingReportsScreen';
 import { getPendingReports, initAutoSyncNetworkListener } from './src/services/pendingReportsQueue';
 import { verifyKnownSha256Vector } from './src/utils/fileHashing';
+import { resolveEffectiveAvatar } from './src/services/avatarService';
 import { tokens } from './src/theme/tokens';
 
 function MainApp() {
@@ -166,7 +167,10 @@ function MainApp() {
           }
 
           const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
-          const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
+          const effectiveAvatar = resolveEffectiveAvatar(userMeta, savedAvatar);
+          if (userMeta.custom_avatar_url && userMeta.custom_avatar_url !== savedAvatar) {
+            AsyncStorage.setItem(`@citizen_avatar_${user.id}`, userMeta.custom_avatar_url).catch(() => {});
+          }
           setCitizen({
             id: user.id,
             name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
@@ -218,7 +222,10 @@ function MainApp() {
         }
 
         const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
-        const effectiveAvatar = savedAvatar || userMeta.avatar_url || userMeta.picture || undefined;
+        const effectiveAvatar = resolveEffectiveAvatar(userMeta, savedAvatar);
+        if (userMeta.custom_avatar_url && userMeta.custom_avatar_url !== savedAvatar) {
+          AsyncStorage.setItem(`@citizen_avatar_${user.id}`, userMeta.custom_avatar_url).catch(() => {});
+        }
         setCitizen({
           id: user.id,
           name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || 'Ghana Citizen',
@@ -521,7 +528,10 @@ function MainApp() {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
               await supabase.auth.updateUser({
-                data: { avatar_url: newAvatarUrl }
+                data: {
+                  custom_avatar_url: newAvatarUrl,
+                  avatar_url: newAvatarUrl
+                }
               }).catch(() => {});
             }
           } catch (e) {

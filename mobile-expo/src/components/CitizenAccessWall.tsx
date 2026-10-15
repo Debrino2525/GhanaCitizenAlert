@@ -42,6 +42,7 @@ import { supabase } from '../lib/supabase';
 import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable, ensureGoogleSigninConfigured } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
+import { resolveEffectiveAvatar } from '../services/avatarService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -272,6 +273,10 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     const defaultName = provider === 'APPLE' ? 'Apple Citizen' : provider === 'EMAIL' ? 'Ghana Citizen' : 'Google Citizen';
     const normalizedEmail = (user.email || '').trim().toLowerCase();
     const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
+    const effectiveAvatar = resolveEffectiveAvatar(userMeta, savedAvatar);
+    if (userMeta.custom_avatar_url && userMeta.custom_avatar_url !== savedAvatar) {
+      AsyncStorage.setItem(`@citizen_avatar_${user.id}`, userMeta.custom_avatar_url).catch(() => {});
+    }
 
     // Cross-provider phone synchronization (e.g. registered with email, now logging in with Google)
     let effectivePhone = userMeta.phone || '';
@@ -299,7 +304,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       email: user.email || '',
       phone: effectivePhone,
       ghanaCard: userMeta.ghana_card || '',
-      avatarUrl: savedAvatar || userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
+      avatarUrl: effectiveAvatar,
       trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
       isVerified: Boolean(userMeta.is_verified || false),
       loginMethod: provider,
