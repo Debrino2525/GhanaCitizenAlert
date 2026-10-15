@@ -339,7 +339,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
           avatarUrl: effectiveAvatar,
           ghanaCardId: isAnonymous ? null : (citizen?.ghanaCard || null),
           isEmergencyPanic: true,
-          trustScore: citizen?.trustScore || 99
+          trustScore: citizen?.trustScore ?? 0
         },
         assigned_agency: 'GPS_CID',
         status: 'RECEIVED_PENDING_TRIAGE',

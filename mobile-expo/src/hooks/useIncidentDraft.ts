@@ -18,6 +18,7 @@ import { uploadEvidenceStreaming, cleanupCachedEvidence, UploadEvidenceResult, f
 import { savePendingReport, removePendingReport, updatePendingReportStatus } from '../services/pendingReportsQueue';
 import { computeFileSha256 } from '../utils/fileHashing';
 import { getRealFileSizeBytes, formatBytesToMB } from '../utils/fileSize';
+import { awardPostSubmissionTrustBonus } from '../services/trustScoreService';
 
 export interface UseIncidentDraftProps {
   citizen: CitizenUser;
@@ -28,6 +29,7 @@ export interface UseIncidentDraftProps {
   gpsFixTimestamp?: number | null;
   locationName: string;
   region: string;
+  onTrustScoreUpdated?: (newScore: number) => void;
 }
 
 export interface UseIncidentDraftResult {
@@ -65,7 +67,8 @@ export const useIncidentDraft = ({
   gpsFixAgeSeconds,
   gpsFixTimestamp,
   locationName,
-  region
+  region,
+  onTrustScoreUpdated
 }: UseIncidentDraftProps): UseIncidentDraftResult => {
   const [category, setCategory] = useState<IncidentCategory>('CRIMINAL_OFFENSE');
   const [title, setTitle] = useState('');
@@ -321,15 +324,17 @@ export const useIncidentDraft = ({
           : null,
         media: initialMediaList,
         is_anonymous: isAnonymous,
+        reporter_trust_score: isAnonymous ? 0 : (citizen.trustScore || 0),
         reporter_data: isAnonymous
-          ? { isAnonymous: true, trustScore: 85, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
+          ? { isAnonymous: true, trustScore: 0, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
           : {
+              userId: citizen.id,
               isAnonymous: false,
               name: citizen.name,
               email: citizen.email,
               phone: reporterPhone || citizen.phone || null,
               landmarkNote: landmark.trim(),
-              trustScore: citizen.trustScore || 95,
+              trustScore: citizen.trustScore || 0,
               isGoogleVerified: citizen.loginMethod === 'GOOGLE',
               loginMethod: citizen.loginMethod
             },
@@ -441,6 +446,19 @@ export const useIncidentDraft = ({
       }
 
       // STEP B: REPORT INSERTED SUCCESSFULLY!
+      let trustBonusMessage = '';
+      if (!isAnonymous && citizen.id && citizen.id !== 'cit-guest' && !citizen.id.startsWith('anon-')) {
+        try {
+          const trustRes = await awardPostSubmissionTrustBonus(citizen.id, citizen.trustScore);
+          if (trustRes.bonusEarned) {
+            onTrustScoreUpdated?.(trustRes.newScore);
+            trustBonusMessage = `\n\n${trustRes.message}`;
+          }
+        } catch (tErr) {
+          console.warn('[TrustBonus] Failed to award post bonus:', tErr);
+        }
+      }
+
       // If no media attached, we are 100% done!
       if (!hasRecordedMedia || !permanentUri) {
         setIsSubmitting(false);
@@ -452,7 +470,7 @@ export const useIncidentDraft = ({
 
         Alert.alert(
           '✅ Report Transmitted & Live',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nYour incident has been received by Police Command.`,
+          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nYour incident has been received by Police Command.${trustBonusMessage}`,
           [{ text: 'OK' }]
         );
 
@@ -534,7 +552,7 @@ export const useIncidentDraft = ({
 
         Alert.alert(
           '✅ Report Delivered • Video Queued in Background',
-          `Tracking Code: ${trackingCode}\n\nYour written report was successfully received by Police Command.\n\nThe video evidence is safely preserved on your device and will continue uploading in the background.`,
+          `Tracking Code: ${trackingCode}\n\nYour written report was successfully received by Police Command.\n\nThe video evidence is safely preserved on your device and will continue uploading in the background.${trustBonusMessage}`,
           [{ text: 'OK' }]
         );
 
@@ -629,7 +647,7 @@ export const useIncidentDraft = ({
 
         Alert.alert(
           '✅ Report & Evidence Sealed',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.`,
+          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.${trustBonusMessage}`,
           [{ text: 'OK' }]
         );
       }

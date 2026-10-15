@@ -311,7 +311,7 @@ export const App: React.FC = () => {
               gpsFixAgeSeconds: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
               gpsAccuracyM: typeof r.gps_accuracy_m === 'number' ? r.gps_accuracy_m : null,
               media: parsedMedia,
-              reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: r.reporter_trust_score || 85 },
+              reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: typeof r.reporter_trust_score === 'number' ? r.reporter_trust_score : 0 },
               assignedAgency: r.assigned_agency || 'GPS_CID',
               secondaryAgencies: r.secondary_agencies || [],
               status: r.status || 'RECEIVED_PENDING_TRIAGE',
@@ -416,7 +416,7 @@ export const App: React.FC = () => {
           gpsFixAgeSeconds: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
           gpsAccuracyM: typeof r.gps_accuracy_m === 'number' ? r.gps_accuracy_m : null,
           media: parsedMedia,
-          reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: r.reporter_trust_score || 85 },
+          reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: typeof r.reporter_trust_score === 'number' ? r.reporter_trust_score : 0 },
           assignedAgency: r.assigned_agency || 'GPS_CID',
           secondaryAgencies: r.secondary_agencies || [],
           status: r.status || 'RECEIVED_PENDING_TRIAGE',
@@ -469,6 +469,47 @@ export const App: React.FC = () => {
     setAuthErrorMsg(null);
   };
 
+  const adjustReporterTrust = async (incidentId: string, delta: number) => {
+    const inc = incidents.find(i => i.id === incidentId);
+    if (!inc || !inc.reporter || inc.reporter.isAnonymous) return;
+    
+    const currentTrust = typeof inc.reporter.trustScore === 'number' ? inc.reporter.trustScore : 0;
+    const newTrust = Math.min(100, Math.max(0, currentTrust + delta));
+    const reporterUserId = (inc.reporter as any).userId;
+
+    const updatedReporter = { ...inc.reporter, trustScore: newTrust };
+
+    setIncidents(prev => prev.map(item => {
+      if (item.id === incidentId) {
+        return { ...item, reporter: updatedReporter };
+      }
+      return item;
+    }));
+
+    if (selectedIncident?.id === incidentId) {
+      setSelectedIncident(prev => prev ? { ...prev, reporter: updatedReporter } : null);
+    }
+
+    try {
+      await supabase.from('incidents').update({
+        reporter_trust_score: newTrust,
+        reporter_data: updatedReporter,
+        updated_at: new Date().toISOString()
+      }).eq('id', incidentId);
+
+      if (reporterUserId) {
+        try {
+          await supabase.rpc('adjust_citizen_trust_score', {
+            target_user_id: reporterUserId,
+            delta_score: delta
+          });
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('[adjustReporterTrust] Error:', e);
+    }
+  };
+
   const handleUpdateStatus = async (incidentId: string, newStatus: IncidentStatus) => {
     setIncidents(prev => prev.map(inc => {
       if (inc.id === incidentId) {
@@ -481,6 +522,9 @@ export const App: React.FC = () => {
 
     try {
       await supabase.from('incidents').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', incidentId);
+      if (newStatus === 'DISMISSED') {
+        await adjustReporterTrust(incidentId, -5);
+      }
     } catch (e) {}
   };
 
@@ -515,6 +559,7 @@ export const App: React.FC = () => {
         is_public_eligible: true, 
         updated_at: new Date().toISOString() 
       }).eq('id', incidentId);
+      await adjustReporterTrust(incidentId, 5);
     } catch (e) {
       console.warn('Supabase publish update error:', e);
     }
@@ -536,6 +581,7 @@ export const App: React.FC = () => {
         is_public_eligible: false, 
         updated_at: new Date().toISOString() 
       }).eq('id', incidentId);
+      await adjustReporterTrust(incidentId, -5);
     } catch (e) {
       console.warn('Supabase reject update error:', e);
     }

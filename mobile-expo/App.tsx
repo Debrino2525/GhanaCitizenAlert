@@ -72,7 +72,7 @@ function MainApp() {
     id: 'cit-guest',
     name: 'Ghana Citizen',
     email: 'citizen@ghana.gov.gh',
-    trustScore: 90,
+    trustScore: 0,
     isVerified: false,
     loginMethod: 'EMAIL'
   });
@@ -97,6 +97,11 @@ function MainApp() {
     };
   }, [refreshPendingCount]);
 
+  // Handle live civic trust score update
+  const handleTrustScoreUpdated = useCallback((newScore: number) => {
+    setCitizen(prev => ({ ...prev, trustScore: newScore }));
+  }, []);
+
   // GPS Location Hook
   const gps = useGpsLocation();
 
@@ -109,7 +114,8 @@ function MainApp() {
     gpsFixAgeSeconds: gps.gpsFixAgeSeconds,
     gpsFixTimestamp: gps.gpsFixTimestamp,
     locationName: gps.locationName,
-    region: gps.region
+    region: gps.region,
+    onTrustScoreUpdated: handleTrustScoreUpdated
   });
 
   // Camera & Video Recorder Hook
@@ -178,7 +184,7 @@ function MainApp() {
             phone: effectivePhone,
             ghanaCard: userMeta.ghana_card || '',
             avatarUrl: effectiveAvatar,
-            trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+            trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 0,
             isVerified: Boolean(userMeta.is_verified || false),
             loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
             accessToken: session.access_token,
@@ -233,7 +239,7 @@ function MainApp() {
           phone: effectivePhone,
           ghanaCard: userMeta.ghana_card || '',
           avatarUrl: effectiveAvatar,
-          trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 70,
+          trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 0,
           isVerified: Boolean(userMeta.is_verified || false),
           loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
           accessToken: session.access_token,
@@ -253,7 +259,7 @@ function MainApp() {
           phone: '',
           ghanaCard: '',
           avatarUrl: undefined,
-          trustScore: 70,
+          trustScore: 0,
           isVerified: false,
           loginMethod: 'EMAIL',
         });
@@ -292,7 +298,7 @@ function MainApp() {
       phone: '',
       ghanaCard: '',
       avatarUrl: undefined,
-      trustScore: 70,
+      trustScore: 0,
       isVerified: false,
       loginMethod: 'EMAIL',
     });
@@ -390,6 +396,8 @@ function MainApp() {
                 ? `Google Verified • ${citizen.trustScore}% Trust`
                 : citizen.loginMethod === 'PHONE'
                 ? `Phone Verified • ${citizen.trustScore}% Trust`
+                : citizen.loginMethod === 'EMAIL'
+                ? `Citizen Verified • ${citizen.trustScore}% Trust`
                 : 'Whistleblower Act 720 Immunity Active'}
             </Text>
           </View>

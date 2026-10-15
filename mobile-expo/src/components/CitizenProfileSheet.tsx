@@ -269,7 +269,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               <View style={[styles.trustBarFill, { width: `${citizen.trustScore}%` }]} />
             </View>
             <Text style={styles.trustExplainer}>
-              Higher trust ratings provide expedited investigation priority with Ghana Police CID.
+              Civic Trust starts at 0%. Earn +5% once every 24h by submitting reports, and an additional +5% when verified & published by authorities. Reports rejected as false lose 5%.
             </Text>
           </View>
 

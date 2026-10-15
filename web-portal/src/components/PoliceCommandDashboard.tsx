@@ -1386,9 +1386,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                   <span className="text-slate-500 block text-[10px] font-bold">CIVIC TRUST SCORE</span>
                   <span className="text-emerald-400 font-black text-sm mt-0.5 block">
-                    {selectedIncident.reporter.trustScore || 95}% Verified
+                    {typeof selectedIncident.reporter.trustScore === 'number' ? selectedIncident.reporter.trustScore : 0}% Civic Trust
                   </span>
-                  <span className="text-[10px] text-slate-400">Ghana Card GPS Verified</span>
+                  <span className="text-[10px] text-slate-400">
+                    {(selectedIncident.reporter as any)?.isGoogleVerified ? 'Google Identity Verified' : 'Registered Citizen'}
+                  </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 col-span-2 sm:col-span-1">

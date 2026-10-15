@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     media JSONB DEFAULT '[]'::jsonb,
     is_anonymous BOOLEAN DEFAULT FALSE,
     reporter_data JSONB,
-    reporter_trust_score INT DEFAULT 80,
+    reporter_trust_score INT DEFAULT 0,
     assigned_agency VARCHAR(50) NOT NULL DEFAULT 'GPS_CID',
     secondary_agencies JSONB DEFAULT '[]'::jsonb,
     status VARCHAR(50) NOT NULL DEFAULT 'RECEIVED_PENDING_TRIAGE',
@@ -177,5 +177,43 @@ ALTER TABLE statutory_appeals ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public insert on statutory_appeals" ON statutory_appeals FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public read on statutory_appeals" ON statutory_appeals FOR SELECT USING (true);
 CREATE POLICY "Allow public update on statutory_appeals" ON statutory_appeals FOR UPDATE USING (true);
+
+-- =============================================================
+-- 8. Civic Trust Scoring Engine (0 - 100%)
+-- Rules:
+--  - Starts at 0%.
+--  - +5% per 24h window for posting reports.
+--  - +5% upon official verification & public publishing.
+--  - -5% upon rejection / false report dismissal (clamped at 0%).
+-- =============================================================
+
+CREATE OR REPLACE FUNCTION adjust_citizen_trust_score(target_user_id UUID, delta_score INT)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    current_trust INT;
+    new_trust INT;
+    raw_meta JSONB;
+BEGIN
+    SELECT raw_user_meta_data INTO raw_meta FROM auth.users WHERE id = target_user_id;
+    IF raw_meta IS NULL THEN
+        RETURN 0;
+    END IF;
+
+    current_trust := COALESCE((raw_meta->>'trust_score')::INT, 0);
+    new_trust := GREATEST(0, LEAST(100, current_trust + delta_score));
+    
+    UPDATE auth.users 
+    SET raw_user_meta_data = raw_meta || jsonb_build_object('trust_score', new_trust)
+    WHERE id = target_user_id;
+
+    RETURN new_trust;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION adjust_citizen_trust_score(UUID, INT) TO anon, authenticated, service_role;
+
 
 

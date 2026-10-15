@@ -198,15 +198,16 @@ export async function processPendingReport(
           : null,
         media: initialMediaList,
         is_anonymous: report.isAnonymous,
+        reporter_trust_score: report.isAnonymous ? 0 : (report.reporterTrustScore ?? 0),
         reporter_data: report.isAnonymous
-          ? { isAnonymous: true, trustScore: 85, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
+          ? { isAnonymous: true, trustScore: 0, reporterType: 'ANONYMOUS_WHISTLEBLOWER' }
           : {
               isAnonymous: false,
               name: report.reporterName || 'Citizen Reporter',
               email: report.reporterEmail || '',
               phone: report.reporterPhone || null,
               landmarkNote: report.landmark,
-              trustScore: report.reporterTrustScore || 95,
+              trustScore: report.reporterTrustScore ?? 0,
               isGoogleVerified: report.reporterLoginMethod === 'GOOGLE',
               loginMethod: report.reporterLoginMethod || 'GOOGLE'
             },
