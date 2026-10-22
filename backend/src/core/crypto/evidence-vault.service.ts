@@ -19,10 +19,14 @@ export class EvidenceVaultService {
 
   constructor(secretKeyHex?: string) {
     // 256-bit key for AES-256-GCM Field-Level Encryption
-    if (secretKeyHex) {
-      this.hsmSecretKey = Buffer.from(secretKeyHex, 'hex');
+    const envKey = secretKeyHex || process.env.HSM_SECRET_KEY;
+    if (envKey) {
+      this.hsmSecretKey = Buffer.from(envKey, 'hex');
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('[FATAL_SECURITY] HSM_SECRET_KEY environment variable is required in production environment.');
     } else {
-      this.hsmSecretKey = crypto.scryptSync('CITIZEN_ALERT_GHANA_MASTER_KEY_2026', 'salt_ghana_sec', 32);
+      // Development/testing fallback only
+      this.hsmSecretKey = crypto.scryptSync('CITIZEN_ALERT_GHANA_DEV_FALLBACK_KEY', 'salt_ghana_sec', 32);
     }
   }
 

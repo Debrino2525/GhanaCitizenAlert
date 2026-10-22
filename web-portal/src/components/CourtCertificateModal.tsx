@@ -1,6 +1,7 @@
 import React from 'react';
-import { Shield, FileCheck, Copy, Download, Check, X, Lock, MapPin, Hash } from 'lucide-react';
+import { Shield, FileCheck, Copy, Download, Check, X, Lock, MapPin, Hash, Printer } from 'lucide-react';
 import { CourtCertificate } from '../services/evidenceVault';
+import { printHtmlDocument, buildCourtCertificateHtml } from '../utils/printDocument';
 
 interface CourtCertificateModalProps {
   certificate: CourtCertificate | null;
@@ -22,8 +23,8 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative text-slate-100 p-6 md:p-8">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin shadow-2xl relative text-slate-100 p-6 md:p-8">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
@@ -53,15 +54,27 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
               <span className="font-bold text-white">{certificate.trackingCode}</span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">GHANAPOST GPS</span>
-              <span className="font-bold text-amber-400">{certificate.ghanaPostCode}</span>
+              <span className="text-slate-500 block text-[11px]">INCIDENT LOCATION</span>
+              <span className="font-bold text-amber-400 truncate block">
+                {certificate.locationName || 'Location pending'}
+                {certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}° N, ${certificate.coordinates[1].toFixed(4)}° W)` : ' (GPS unavailable)'}
+              </span>
             </div>
           </div>
 
           <div className="space-y-2">
             {certificate.mediaItems.map((item, idx) => (
               <div key={idx} className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-xs font-bold text-blue-300">Attachment #{idx + 1} ({item.type})</span>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-bold text-blue-300">Attachment #{idx + 1} ({item.type})</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    item.isVerifiedHex
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  }`}>
+                    {item.isVerifiedHex ? 'SHA-256 Validated' : 'Unverified Hash'}
+                  </span>
+                </div>
                 <p className="font-mono text-[11px] text-slate-400 break-all bg-slate-900 p-2 rounded mt-1">
                   SHA-256: {item.sha256Hash}
                 </p>
@@ -84,10 +97,14 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
             <span>{copied ? 'Copied' : 'Copy Evidence Signature'}</span>
           </button>
           <button
-            onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-2"
+            onClick={() => {
+              if (certificate) {
+                printHtmlDocument('Evidence Vault Certificate - ' + certificate.trackingCode, buildCourtCertificateHtml(certificate));
+              }
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-2 shadow-lg shadow-amber-500/20"
           >
-            <Download className="w-4 h-4" />
+            <Printer className="w-4 h-4" />
             <span>Export Official Court Dossier</span>
           </button>
         </div>
