@@ -8,9 +8,10 @@ interface TabBarProps {
   activeTab: TabType;
   onSelectTab: (tab: TabType) => void;
   pendingCount?: number;
+  isSosActive?: boolean;
 }
 
-export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pendingCount = 0 }) => {
+export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pendingCount = 0, isSosActive = false }) => {
   return (
     <View style={styles.tabBar}>
       <TouchableOpacity
@@ -54,16 +55,28 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pen
           Keyboard.dismiss();
           onSelectTab('SOS');
         }}
-        style={[styles.tabItem, activeTab === 'SOS' && styles.tabItemActiveSos]}
+        style={[
+          styles.tabItem,
+          activeTab === 'SOS' && styles.tabItemActiveSos,
+          isSosActive && activeTab !== 'SOS' && styles.tabItemSosBroadcasting
+        ]}
         accessibilityRole="tab"
         accessibilityLabel="Emergency SOS Panic Beacon"
       >
-        <Radio
-          color={activeTab === 'SOS' ? tokens.colors.text.white : tokens.colors.text.secondary}
-          size={16}
-        />
-        <Text style={[styles.tabText, activeTab === 'SOS' && styles.tabTextActive]}>
-          SOS
+        <View style={{ position: 'relative' }}>
+          <Radio
+            color={activeTab === 'SOS' || isSosActive ? tokens.colors.text.white : tokens.colors.text.secondary}
+            size={16}
+          />
+          {isSosActive && <View style={styles.sosLiveDot} />}
+        </View>
+        <Text
+          style={[
+            styles.tabText,
+            (activeTab === 'SOS' || isSosActive) && styles.tabTextActive
+          ]}
+        >
+          SOS{isSosActive ? ' 🔴' : ''}
         </Text>
       </TouchableOpacity>
 
@@ -128,6 +141,19 @@ const styles = StyleSheet.create({
   tabItemActiveSos: {
     backgroundColor: tokens.colors.status.emergency,
     borderColor: tokens.colors.status.danger
+  },
+  tabItemSosBroadcasting: {
+    backgroundColor: '#dc2626',
+    borderColor: '#ef4444'
+  },
+  sosLiveDot: {
+    position: 'absolute',
+    top: -2,
+    right: -3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ffffff'
   },
   tabItemActiveQueue: {
     backgroundColor: tokens.colors.brand.gold,

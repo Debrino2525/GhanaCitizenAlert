@@ -102,6 +102,30 @@ function MainApp() {
     setCitizen(prev => ({ ...prev, trustScore: newScore }));
   }, []);
 
+  // SOS Persistent Beacon State (Never disconnects on tab or menu navigation)
+  const [isSosActive, setIsSosActive] = useState(false);
+  const [activeSosTrackingCode, setActiveSosTrackingCode] = useState<string | null>(null);
+  const [sosPingsCount, setSosPingsCount] = useState(0);
+
+  const handleSosStateChange = useCallback((isActive: boolean, trackingCode: string | null, pingCount: number) => {
+    setIsSosActive(isActive);
+    setActiveSosTrackingCode(trackingCode);
+    setSosPingsCount(pingCount);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedCode = await AsyncStorage.getItem('@active_sos_tracking_code');
+        if (savedCode) {
+          setIsSosActive(true);
+          setActiveSosTrackingCode(savedCode);
+          setSosPingsCount(1);
+        }
+      } catch {}
+    })();
+  }, []);
+
   // GPS Location Hook
   const gps = useGpsLocation();
 
@@ -411,112 +435,145 @@ function MainApp() {
       </View>
 
       {/* Navigation Tabs */}
-      <TabBar activeTab={activeTab} onSelectTab={setActiveTab} pendingCount={pendingCount} />
+      <TabBar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        pendingCount={pendingCount}
+        isSosActive={isSosActive}
+      />
+
+      {/* Sticky Emergency SOS Banner across all screens when active */}
+      {isSosActive && (
+        <TouchableOpacity
+          onPress={() => setActiveTab('SOS')}
+          activeOpacity={0.85}
+          style={styles.sosGlobalBanner}
+          accessibilityRole="button"
+          accessibilityLabel="Emergency SOS Distress Beacon is actively transmitting. Tap to return to SOS screen."
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            <View style={styles.sosBeaconDot} />
+            <Text style={styles.sosGlobalBannerTitle} numberOfLines={1}>
+              🚨 SOS BEACON ACTIVE: #{activeSosTrackingCode || 'TRANSMITTING'}
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.sosGlobalBannerPings}>
+              {sosPingsCount > 0 ? `${sosPingsCount} pings sent` : 'Pinging CAD...'}
+            </Text>
+            {activeTab !== 'SOS' && (
+              <View style={styles.sosReturnBadge}>
+                <Text style={styles.sosReturnBadgeText}>RETURN ➔</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {activeTab === 'QUEUE' ? (
-          <View style={styles.queueContainer}>
-            <PendingReportsScreen onQueueCountChange={setPendingCount} />
+        <View style={[styles.queueContainer, { display: activeTab === 'QUEUE' ? 'flex' : 'none' }]}>
+          <PendingReportsScreen onQueueCountChange={setPendingCount} />
+        </View>
+
+        <ScrollView
+          style={{ display: activeTab !== 'QUEUE' ? 'flex' : 'none' }}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={tokens.colors.brand.gold}
+            />
+          }
+        >
+          {/* TAB 1: 60s Evidence Capture */}
+          {activeTab === 'CAPTURE' && (
+            <EvidenceCaptureScreen
+              t={t}
+              coords={gps.coords}
+              gpsAccuracy={gps.gpsAccuracy}
+              isLocating={gps.isLocating}
+              gpsStatus={gps.gpsStatus}
+              locationSource={gps.locationSource}
+              gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
+              gpsFixTimestamp={gps.gpsFixTimestamp}
+              locationName={gps.locationName}
+              region={gps.region}
+              onRefreshGps={gps.fetchCurrentLocation}
+              onLocationNameChange={gps.setLocationName}
+              cameraRef={camera.cameraRef}
+              hasCameraPermission={camera.hasCameraPermission}
+              facing={camera.facing}
+              isRecording={camera.isRecording}
+              recordingSeconds={camera.recordingSeconds}
+              recordedDuration={camera.recordedDuration}
+              hasRecordedMedia={camera.hasRecordedMedia}
+              recordedUri={camera.recordedUri}
+              mediaType={camera.mediaType}
+              onFlipCamera={camera.toggleCameraFacing}
+              onToggleRecording={camera.handleToggleRecording}
+              onSnapPhoto={camera.handleSnapPhoto}
+              onPickFromGallery={camera.handlePickFromGallery}
+              onRetake={() => {
+                camera.handleClearMedia();
+                draft.clearAttachedMedia();
+              }}
+              onRequestCameraPermissions={camera.requestPermissions}
+              category={draft.category}
+              title={draft.title}
+              description={draft.description}
+              landmark={draft.landmark}
+              isAnonymous={draft.isAnonymous}
+              reporterPhone={draft.reporterPhone}
+              isSubmitting={draft.isSubmitting}
+              uploadProgress={draft.uploadProgress}
+              uploadStatusText={draft.uploadStatusText}
+              isUploadingMedia={draft.isUploadingMedia}
+              onCategoryChange={draft.setCategory}
+              onTitleChange={draft.setTitle}
+              onDescriptionChange={draft.setDescription}
+              onLandmarkChange={draft.setLandmark}
+              onAnonymousChange={draft.setIsAnonymous}
+              onReporterPhoneChange={draft.setReporterPhone}
+              onSaveToGallery={draft.saveEvidenceToGallery}
+              onSubmitReport={draft.handleSubmitReport}
+            />
+          )}
+
+          {/* TAB 2: Amber Alerts */}
+          {activeTab === 'ALERTS' && (
+            <AmberAlertsScreen
+              coords={gps.coords}
+              region={gps.region}
+              locationName={gps.locationName}
+              landmark={draft.landmark}
+              isAnonymous={draft.isAnonymous}
+              reporterPhone={draft.reporterPhone}
+            />
+          )}
+
+          {/* TAB 3: SOS Panic (Always mounted in React memory so CAD GPS pings and movement tracking never drop) */}
+          <View style={{ display: activeTab === 'SOS' ? 'flex' : 'none', width: '100%' }}>
+            <SosPanicScreen
+              coords={gps.coords}
+              gpsAccuracy={gps.gpsAccuracy}
+              locationSource={gps.locationSource}
+              gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
+              locationName={gps.locationName}
+              landmark={draft.landmark}
+              region={gps.region}
+              isAnonymous={draft.isAnonymous}
+              reporterPhone={draft.reporterPhone}
+              citizen={citizen}
+              onSosStateChange={handleSosStateChange}
+            />
           </View>
-        ) : (
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={tokens.colors.brand.gold}
-              />
-            }
-          >
-            {/* TAB 1: 60s Evidence Capture */}
-            {activeTab === 'CAPTURE' && (
-              <EvidenceCaptureScreen
-                t={t}
-                coords={gps.coords}
-                gpsAccuracy={gps.gpsAccuracy}
-                isLocating={gps.isLocating}
-                gpsStatus={gps.gpsStatus}
-                locationSource={gps.locationSource}
-                gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
-                gpsFixTimestamp={gps.gpsFixTimestamp}
-                locationName={gps.locationName}
-                region={gps.region}
-                onRefreshGps={gps.fetchCurrentLocation}
-                onLocationNameChange={gps.setLocationName}
-                cameraRef={camera.cameraRef}
-                hasCameraPermission={camera.hasCameraPermission}
-                facing={camera.facing}
-                isRecording={camera.isRecording}
-                recordingSeconds={camera.recordingSeconds}
-                recordedDuration={camera.recordedDuration}
-                hasRecordedMedia={camera.hasRecordedMedia}
-                recordedUri={camera.recordedUri}
-                mediaType={camera.mediaType}
-                onFlipCamera={camera.toggleCameraFacing}
-                onToggleRecording={camera.handleToggleRecording}
-                onSnapPhoto={camera.handleSnapPhoto}
-                onPickFromGallery={camera.handlePickFromGallery}
-                onRetake={() => {
-                  camera.handleClearMedia();
-                  draft.clearAttachedMedia();
-                }}
-                onRequestCameraPermissions={camera.requestPermissions}
-                category={draft.category}
-                title={draft.title}
-                description={draft.description}
-                landmark={draft.landmark}
-                isAnonymous={draft.isAnonymous}
-                reporterPhone={draft.reporterPhone}
-                isSubmitting={draft.isSubmitting}
-                uploadProgress={draft.uploadProgress}
-                uploadStatusText={draft.uploadStatusText}
-                isUploadingMedia={draft.isUploadingMedia}
-                onCategoryChange={draft.setCategory}
-                onTitleChange={draft.setTitle}
-                onDescriptionChange={draft.setDescription}
-                onLandmarkChange={draft.setLandmark}
-                onAnonymousChange={draft.setIsAnonymous}
-                onReporterPhoneChange={draft.setReporterPhone}
-                onSaveToGallery={draft.saveEvidenceToGallery}
-                onSubmitReport={draft.handleSubmitReport}
-              />
-            )}
-
-            {/* TAB 2: Amber Alerts */}
-            {activeTab === 'ALERTS' && (
-              <AmberAlertsScreen
-                coords={gps.coords}
-                region={gps.region}
-                locationName={gps.locationName}
-                landmark={draft.landmark}
-                isAnonymous={draft.isAnonymous}
-                reporterPhone={draft.reporterPhone}
-              />
-            )}
-
-            {/* TAB 3: SOS Panic */}
-            {activeTab === 'SOS' && (
-              <SosPanicScreen
-                coords={gps.coords}
-                gpsAccuracy={gps.gpsAccuracy}
-                locationSource={gps.locationSource}
-                gpsFixAgeSeconds={gps.gpsFixAgeSeconds}
-                locationName={gps.locationName}
-                landmark={draft.landmark}
-                region={gps.region}
-                isAnonymous={draft.isAnonymous}
-                reporterPhone={draft.reporterPhone}
-                citizen={citizen}
-              />
-            )}
-          </ScrollView>
-        )}
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Citizen Profile Sheet */}
@@ -747,5 +804,43 @@ const styles = StyleSheet.create({
   queueContainer: {
     flex: 1,
     padding: tokens.spacing.md
+  },
+  sosGlobalBanner: {
+    backgroundColor: '#b91c1c',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f87171'
+  },
+  sosBeaconDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#ffffff'
+  },
+  sosGlobalBannerTitle: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  sosGlobalBannerPings: {
+    color: '#fecaca',
+    fontSize: 11,
+    fontWeight: '600'
+  },
+  sosReturnBadge: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4
+  },
+  sosReturnBadgeText: {
+    color: '#b91c1c',
+    fontSize: 10,
+    fontWeight: '800'
   }
 });

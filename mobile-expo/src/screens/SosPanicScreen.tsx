@@ -45,6 +45,7 @@ interface SosPanicScreenProps {
   isAnonymous: boolean;
   reporterPhone: string;
   citizen?: CitizenUser;
+  onSosStateChange?: (isActive: boolean, trackingCode: string | null, pingCount: number) => void;
 }
 
 function generateSosTrackingCode(): string {
@@ -154,7 +155,8 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   region,
   isAnonymous,
   reporterPhone,
-  citizen
+  citizen,
+  onSosStateChange
 }) => {
   const [sosActive, setSosActive] = useState(false);
   const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
@@ -176,7 +178,75 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
   activeIncidentIdRef.current = activeIncidentId;
   const activeTrackingCodeRef = useRef<string | null>(null);
   activeTrackingCodeRef.current = activeTrackingCode;
+  const activeCoordsRef = useRef<SosResolvedLocation | null>(null);
+  activeCoordsRef.current = activeCoords;
   const sosWatcherRef = useRef<Location.LocationSubscription | null>(null);
+
+  // Dedicated movement watcher to continuously upgrade incident position in real time as user moves/drives
+  const startMovementWatcher = useCallback((trackingCode: string) => {
+    if (sosWatcherRef.current) {
+      try {
+        sosWatcherRef.current.remove();
+      } catch {}
+      sosWatcherRef.current = null;
+    }
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 2000,
+        distanceInterval: 2,
+      },
+      async (freshLoc) => {
+        const nowMs = Date.now();
+        const fixAge = Math.max(0, Math.floor((nowMs - freshLoc.timestamp) / 1000));
+        const freshAcc = typeof freshLoc.coords.accuracy === 'number'
+          ? Math.round(freshLoc.coords.accuracy * 10) / 10
+          : null;
+        const source: LocationSource = effectiveLocationSource(freshLoc.timestamp, freshAcc, nowMs);
+        const freshResolved: SosResolvedLocation = {
+          latitude: freshLoc.coords.latitude,
+          longitude: freshLoc.coords.longitude,
+          accuracy: freshAcc,
+          locationSource: source,
+          fixAgeSeconds: fixAge,
+        };
+        setActiveCoords(freshResolved);
+        activeCoordsRef.current = freshResolved;
+
+        if (__DEV__) {
+          console.log(
+            `[SOS Watcher] Fix received: source=${source}, age=${fixAge}s, coords=(${freshLoc.coords.latitude.toFixed(5)}, ${freshLoc.coords.longitude.toFixed(5)}), acc=±${freshAcc}m. Upgrading report...`
+          );
+        }
+
+        // Update the live incident location in Supabase via server RPC
+        try {
+          const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_incident_location', {
+            p_tracking_code: trackingCode,
+            p_lat: freshLoc.coords.latitude,
+            p_lng: freshLoc.coords.longitude,
+            p_accuracy: freshAcc,
+            p_source: source,
+            p_age_s: fixAge,
+          });
+
+          if (rpcErr || rpcResult === false) {
+            console.warn('[SOS Location Update Rejected/Error]', rpcErr?.message || `update_incident_location returned false for ${trackingCode}`);
+          } else {
+            if (__DEV__) {
+              console.log(`[SOS Watcher] Successfully updated ${trackingCode} via update_incident_location (source=${source}, age=${fixAge}s)`);
+            }
+          }
+        } catch (e: any) {
+          console.warn('[SOS Location Update Exception]', e?.message);
+        }
+      }
+    ).then((sub) => {
+      sosWatcherRef.current = sub;
+    }).catch((watchErr) => {
+      console.warn('[SOS Movement Watcher Error]', watchErr);
+    });
+  }, []);
 
   // Restore active SOS state from AsyncStorage across tab switches
   useEffect(() => {
@@ -189,13 +259,15 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
           setActiveTrackingCode(savedCode);
           setActiveIncidentId(savedId || null);
           setSosActive(true);
+          onSosStateChange?.(true, savedCode, 1);
+          startMovementWatcher(savedCode);
         }
       } catch {}
     })();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [startMovementWatcher, onSosStateChange]);
 
   // Pulse animation for active beacon
   useEffect(() => {
@@ -229,14 +301,15 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     let pingInterval: any;
     if (sosActive && activeIncidentId) {
       pingInterval = setInterval(async () => {
-        const fallbackGps: GpsCoordinates | null = (activeCoords && activeCoords.latitude !== null && activeCoords.longitude !== null)
-          ? { latitude: activeCoords.latitude, longitude: activeCoords.longitude }
+        const currentCoords = activeCoordsRef.current;
+        const fallbackGps: GpsCoordinates | null = (currentCoords && currentCoords.latitude !== null && currentCoords.longitude !== null)
+          ? { latitude: currentCoords.latitude, longitude: currentCoords.longitude }
           : null;
         const freshFix = await getBestAvailableLocation(
           fallbackGps,
-          activeCoords?.accuracy ?? null,
-          activeCoords?.locationSource ?? 'UNAVAILABLE',
-          activeCoords?.fixAgeSeconds ?? null
+          currentCoords?.accuracy ?? null,
+          currentCoords?.locationSource ?? 'UNAVAILABLE',
+          currentCoords?.fixAgeSeconds ?? null
         );
 
         try {
@@ -253,8 +326,13 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
             });
 
             if (!error) {
-              setSuccessfulPings((prev) => prev + 1);
+              setSuccessfulPings((prev) => {
+                const nextCount = prev + 1;
+                onSosStateChange?.(true, activeTrackingCodeRef.current, nextCount);
+                return nextCount;
+              });
               setActiveCoords(freshFix);
+              activeCoordsRef.current = freshFix;
               safeHaptics.light();
             } else {
               setFailedPings((prev) => prev + 1);
@@ -266,7 +344,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       }, 10000);
     }
     return () => clearInterval(pingInterval);
-  }, [sosActive, activeIncidentId, isAnonymous, activeCoords]);
+  }, [sosActive, activeIncidentId, isAnonymous, onSosStateChange]);
 
   const triggerSosDispatch = useCallback(async () => {
     setIsActivating(true);
@@ -374,9 +452,12 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       setActiveIncidentId(incidentId);
       setActiveTrackingCode(trackingCodeUsed);
       setActiveCoords(bestGps);
+      activeCoordsRef.current = bestGps;
       setSuccessfulPings(1);
       setFailedPings(0);
       setSosActive(true);
+      onSosStateChange?.(true, trackingCodeUsed, 1);
+      startMovementWatcher(trackingCodeUsed);
       await AsyncStorage.setItem('@active_sos_tracking_code', trackingCodeUsed).catch(() => {});
       await AsyncStorage.setItem('@active_sos_incident_id', incidentId).catch(() => {});
       safeHaptics.success();
@@ -387,73 +468,11 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
           `[SOS Dispatch] Beacon transmitted: tracking_code=${trackingCodeUsed}, source=${bestGps.locationSource}, age=${bestGps.fixAgeSeconds ?? 0}s, coords=(${bestGps.latitude ?? 'NULL'}, ${bestGps.longitude ?? 'NULL'}), accuracy=±${bestGps.accuracy ?? 'N/A'}m`
         );
       }
-
-      // Start background watcher if initial fix was not live
-      if (bestGps.locationSource !== 'LIVE') {
-        try {
-          if (sosWatcherRef.current) {
-            sosWatcherRef.current.remove();
-          }
-          sosWatcherRef.current = await Location.watchPositionAsync(
-            {
-              accuracy: Location.Accuracy.High,
-              timeInterval: 2000,
-              distanceInterval: 2,
-            },
-            async (freshLoc) => {
-              const nowMs = Date.now();
-              const fixAge = Math.max(0, Math.floor((nowMs - freshLoc.timestamp) / 1000));
-              const freshAcc = typeof freshLoc.coords.accuracy === 'number'
-                ? Math.round(freshLoc.coords.accuracy * 10) / 10
-                : null;
-              const source: LocationSource = effectiveLocationSource(freshLoc.timestamp, freshAcc, nowMs);
-              const freshResolved: SosResolvedLocation = {
-                latitude: freshLoc.coords.latitude,
-                longitude: freshLoc.coords.longitude,
-                accuracy: freshAcc,
-                locationSource: source,
-                fixAgeSeconds: fixAge,
-              };
-              setActiveCoords(freshResolved);
-
-              if (__DEV__) {
-                console.log(
-                  `[SOS Watcher] Fix received: source=${source}, age=${fixAge}s, coords=(${freshLoc.coords.latitude.toFixed(5)}, ${freshLoc.coords.longitude.toFixed(5)}), acc=±${freshAcc}m. Upgrading report...`
-                );
-              }
-
-              // Update the live incident location in Supabase via server RPC
-              try {
-                const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_incident_location', {
-                  p_tracking_code: trackingCodeUsed,
-                  p_lat: freshLoc.coords.latitude,
-                  p_lng: freshLoc.coords.longitude,
-                  p_accuracy: freshAcc,
-                  p_source: source,
-                  p_age_s: fixAge,
-                });
-
-                if (rpcErr || rpcResult === false) {
-                  console.warn('[SOS Location Update Rejected/Error]', rpcErr?.message || `update_incident_location returned false for ${trackingCodeUsed}`);
-                } else {
-                  if (__DEV__) {
-                    console.log(`[SOS Watcher] Successfully updated ${trackingCodeUsed} via update_incident_location (source=${source}, age=${fixAge}s)`);
-                  }
-                }
-              } catch (e: any) {
-                console.warn('[SOS Location Update Exception]', e?.message);
-              }
-            }
-          );
-        } catch (watchErr) {
-          console.warn('[SOS Background Watcher Error]', watchErr);
-        }
-      }
     } else {
       safeHaptics.warning();
       setActivationError(`Failed to transmit distress beacon to Police Command: ${lastError || 'Network/Server Error'}. Please use the direct emergency call buttons below.`);
     }
-  }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, landmark, locationName, region, isAnonymous, reporterPhone]);
+  }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, landmark, locationName, region, isAnonymous, reporterPhone, citizen, startMovementWatcher, onSosStateChange]);
 
   const handlePressIn = () => {
     if (sosActive || isActivating) return;
@@ -501,6 +520,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     setActiveTrackingCode(null);
     setSuccessfulPings(0);
     setFailedPings(0);
+    onSosStateChange?.(false, null, 0);
     safeHaptics.warning();
     announceAccessibility('Emergency distress beacon stopped on device.');
 
