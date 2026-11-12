@@ -66,6 +66,20 @@ interface CitizenAccessWallProps {
   onAuthenticated: (citizen: CitizenUser) => void;
 }
 
+// Set when THIS app starts a browser Google/Apple sign-in. A sign-in code or
+// tokens arriving by deep link are only accepted while it is set: otherwise
+// anyone could send a citizenalert:// link that silently signs the user into
+// the sender's account (login CSRF), and their reports would land there.
+// Kept in memory on purpose: a link that cold-starts the app is never trusted.
+const OAUTH_LINK_WINDOW_MS = 10 * 60 * 1000;
+let pendingOAuthStartedAt: number | null = null;
+
+function consumePendingOAuth(): boolean {
+  const startedAt = pendingOAuthStartedAt;
+  pendingOAuthStartedAt = null;
+  return startedAt !== null && Date.now() - startedAt < OAUTH_LINK_WINDOW_MS;
+}
+
 export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenticated }) => {
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER' | 'WHISTLEBLOWER'>('LOGIN');
   const [isLoading, setIsLoading] = useState(false);
@@ -174,6 +188,12 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
           if (!code && hashParams.get('code')) code = hashParams.get('code')!;
           if (!accessToken && hashParams.get('access_token')) accessToken = hashParams.get('access_token')!;
           if (!refreshToken && hashParams.get('refresh_token')) refreshToken = hashParams.get('refresh_token')!;
+        }
+
+        if (!code && !(accessToken && refreshToken)) return;
+        if (!consumePendingOAuth()) {
+          console.warn('[CitizenAccessWall] Ignored sign-in link: no sign-in was started from this app.');
+          return;
         }
 
         if (code) {
@@ -546,8 +566,11 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       }
 
       // Step B: WebBrowser OAuth (Supports Expo Go, Web, and universal deep links)
+      // A path keeps the address matchable by the "/**" allow-list entries
+      // (citizenalert://auth/callback, or exp://<host>/--/auth/callback in Expo Go).
       const redirectUrl = AuthSession.makeRedirectUri({
         scheme: 'citizenalert',
+        path: 'auth/callback',
         preferLocalhost: false
       });
 
@@ -567,7 +590,10 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       }
       if (!data?.url) throw new Error(`No authentication URL was returned by ${provider === 'apple' ? 'Apple' : 'Google'}.`);
 
+      pendingOAuthStartedAt = Date.now();
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      // Handled right here; only a "dismiss" may still be followed by the link.
+      if (result.type === 'success') pendingOAuthStartedAt = null;
 
       // Check if the redirect returned an error or tokens
       if (result.type === 'success' && result.url) {

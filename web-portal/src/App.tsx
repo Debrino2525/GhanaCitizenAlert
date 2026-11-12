@@ -31,7 +31,7 @@ export const App: React.FC = () => {
   // Authentication State
   const [authSession, setAuthSession] = useState<Session | null>(null);
   const [currentOfficer, setCurrentOfficer] = useState<OfficerUser | null>(null);
-  const [citizenMobileBridge, setCitizenMobileBridge] = useState<{ deepLink: string; email: string } | null>(null);
+  const [citizenMobileBridge, setCitizenMobileBridge] = useState<{ email: string } | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
 
@@ -104,20 +104,15 @@ export const App: React.FC = () => {
             hasOAuthHash;
 
           if (isCitizenUser) {
-            let deepLink = `citizenalert://auth${window.location.hash || window.location.search}`;
-            if (!window.location.hash && session.access_token) {
-              deepLink = `citizenalert://auth#access_token=${session.access_token}&refresh_token=${session.refresh_token || ''}&token_type=bearer`;
-            }
-            setCitizenMobileBridge({
-              deepLink,
-              email: session.user.email || 'Citizen'
-            });
-
-            // If on mobile device, attempt immediate redirect back to app
-            if (isMobileDevice) {
-              try {
-                window.location.href = deepLink;
-              } catch {}
+            // A citizen's mobile sign-in fell back to this site. Never hand their
+            // tokens to the app through a citizenalert:// link: on Android any
+            // installed app can register that scheme and receive them. Sign the
+            // citizen out of the officer portal and send them back to the app to
+            // sign in there.
+            setCitizenMobileBridge({ email: session.user.email || 'Citizen' });
+            await supabase.auth.signOut();
+            if (typeof window !== 'undefined' && (window.location.hash || window.location.search)) {
+              window.history.replaceState(null, '', window.location.pathname);
             }
             return null;
           }
@@ -701,20 +696,20 @@ export const App: React.FC = () => {
           <div className="w-16 h-16 mx-auto mb-4 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center">
             <ShieldCheck className="w-8 h-8 text-emerald-400" />
           </div>
-          <h2 className="text-xl font-black text-white mb-2 tracking-tight">Google Sign-In Successful!</h2>
+          <h2 className="text-xl font-black text-white mb-2 tracking-tight">This is the officer portal</h2>
           <p className="text-sm text-slate-300 mb-6">
-            Signed in as <strong className="text-ghana-gold">{citizenMobileBridge.email}</strong>.
+            Your sign-in as <strong className="text-ghana-gold">{citizenMobileBridge.email}</strong> finished here instead of in the CitizenAlert app, so you have not been signed in.
             <br />
-            Tap below to return to the CitizenAlert Mobile App:
+            Go back to the app and sign in again there.
           </p>
           <a
-            href={citizenMobileBridge.deepLink}
+            href="citizenalert://"
             className="block w-full py-4 px-6 bg-ghana-gold hover:bg-yellow-400 text-slate-950 font-black rounded-xl text-center transition-all shadow-lg shadow-yellow-500/20 text-base mb-4 tracking-wide"
           >
             📱 Return to CitizenAlert App ➔
           </a>
           <p className="text-xs text-slate-500">
-            If the app does not open automatically, tap the button above.
+            If the button does nothing, open the CitizenAlert app yourself.
           </p>
         </div>
       </div>
