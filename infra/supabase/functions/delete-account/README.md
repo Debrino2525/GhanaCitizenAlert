@@ -47,6 +47,19 @@ Anything that is `NO ACTION`/`RESTRICT` (other than `incidents.reporter_id`,
 handles) needs a step added to the function — e.g. `moderation_appeals` if
 it stores a user id.
 
+**Result on the live project, 2026-11-12 (read-only):** nothing blocks.
+`incidents.reporter_id`, `moderation_appeals.reviewed_by`,
+`officer_audit_log.actor_id`, `officers.invited_by` are `SET NULL`;
+`officers.id`, `profiles.id`, `sos_pings.reporter_id` are `CASCADE`. The
+function un-links `sos_pings` before deleting the user, so SOS location
+points are kept for officers instead of being cascade-deleted.
+
+Not covered (no link to the account, so they can't be matched to it):
+free-text contacts in `alert_sightings.reporter_phone`,
+`moderation_appeals.contact` and `statutory_appeals.contact_info`, plus
+evidence files the user uploaded (kept as case evidence; `storage.objects.owner`
+still holds the old uid, which no longer resolves to anyone).
+
 ## Deploy (needs the owner's OK)
 
 From the repo root, with the Supabase CLI logged in:
