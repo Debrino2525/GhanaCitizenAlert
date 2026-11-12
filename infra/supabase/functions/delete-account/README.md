@@ -4,8 +4,8 @@ Lets a signed-in citizen delete their own CitizenAlert account from the
 mobile app (Profile → **Delete my account**). Required by Google Play and the
 App Store for apps that let people create accounts.
 
-**Not deployed yet.** Nothing here has been run against the live project
-(`fqgujgwdgqlxnpmpmiui`).
+**Deployed** to the live project (`fqgujgwdgqlxnpmpmiui`) on 2026-11-12 as
+version 1, Verify JWT on. Not yet exercised end-to-end with a real account.
 
 ## What it does
 
