@@ -671,7 +671,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={tokens.colors.bg.base} />
+      <StatusBar barStyle="light-content" />
 
       {/* Ghana Flag Header Accent */}
       <View style={styles.flagHeader}>

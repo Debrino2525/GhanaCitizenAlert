@@ -38,7 +38,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = memo(({
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={tokens.colors.bg.base} />
+        <StatusBar barStyle="light-content" />
 
         {/* Top Header Bar */}
         <View style={styles.header}>

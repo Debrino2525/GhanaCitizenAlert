@@ -338,7 +338,7 @@ function MainApp() {
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 24)) }]}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle="light-content" />
 
       {/* Ghana tricolour hairline */}
       <View style={styles.flagHeader}>
