@@ -50,6 +50,7 @@ import { PendingReportsScreen } from './src/screens/PendingReportsScreen';
 import { getPendingReports, initAutoSyncNetworkListener } from './src/services/pendingReportsQueue';
 import { verifyKnownSha256Vector } from './src/utils/fileHashing';
 import { resolveEffectiveAvatar } from './src/services/avatarService';
+import { readTrustScore } from './src/services/trustScoreService';
 import { tokens } from './src/theme/tokens';
 
 function MainApp() {
@@ -208,7 +209,7 @@ function MainApp() {
             phone: effectivePhone,
             ghanaCard: userMeta.ghana_card || '',
             avatarUrl: effectiveAvatar,
-            trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 0,
+            trustScore: readTrustScore(user),
             isVerified: Boolean(userMeta.is_verified || false),
             loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
             accessToken: session.access_token,
@@ -263,7 +264,7 @@ function MainApp() {
           phone: effectivePhone,
           ghanaCard: userMeta.ghana_card || '',
           avatarUrl: effectiveAvatar,
-          trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 0,
+          trustScore: readTrustScore(user),
           isVerified: Boolean(userMeta.is_verified || false),
           loginMethod: (session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'EMAIL') as any,
           accessToken: session.access_token,

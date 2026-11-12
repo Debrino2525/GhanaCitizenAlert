@@ -39,11 +39,18 @@ export const PublicWebFeed: React.FC = () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      // 0. Fetch active granted statutory appeals under Act 843 to guarantee client-side retraction
-      const { data: grantedAppeals } = await supabase
-        .from('statutory_appeals')
-        .select('incident_id, tracking_code')
-        .eq('status', 'GRANTED');
+      // The public cannot read incidents or statutory_appeals directly. public_feed_incidents
+      // exposes only safe columns and already excludes DOVVSU cases and granted Act 843
+      // takedowns; public_takedowns is re-checked here so a takedown granted between
+      // realtime events still disappears immediately.
+      const [{ data: grantedAppeals }, { data, error }] = await Promise.all([
+        supabase.from('public_takedowns').select('incident_id, tracking_code'),
+        supabase.from('public_feed_incidents').select('*').order('created_at', { ascending: false }),
+      ]);
+
+      if (error) {
+        throw error;
+      }
 
       const grantedIdSet = new Set<string>();
       (grantedAppeals || []).forEach((g: any) => {
@@ -51,30 +58,7 @@ export const PublicWebFeed: React.FC = () => {
         if (g.tracking_code) grantedIdSet.add(g.tracking_code);
       });
 
-      // 1. Attempt to query public_feed_incidents view
-      const { data, error } = await supabase
-        .from('public_feed_incidents')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        const filtered = data.filter((d: any) => !grantedIdSet.has(d.id) && !grantedIdSet.has(d.tracking_code));
-        setIncidents(filtered);
-        return;
-      }
-
-      // 2. Query fallback on incidents table directly where published
-      const { data: rawData, error: rawError } = await supabase
-        .from('incidents')
-        .select('*')
-        .eq('is_public_published', true)
-        .order('created_at', { ascending: false });
-
-      if (rawError && error) {
-        throw rawError || error;
-      }
-
-      const mapped: PublicFeedIncident[] = (rawData || [])
+      const mapped: PublicFeedIncident[] = (data || [])
         .filter((r: any) => !grantedIdSet.has(r.id) && !grantedIdSet.has(r.tracking_code))
         .map((r: any) => {
           const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);

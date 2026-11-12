@@ -44,62 +44,18 @@ export function formatPlainLanguageUploadError(statusCode?: number, rawError?: s
 }
 
 /**
- * Verifies that the uploaded file exists at the public storage URL and its Content-Length
- * matches the local recorded file size.
- */
-async function verifyRemoteStorageFile(
-  publicUrl: string,
-  localFileSize?: number
-): Promise<{ verified: boolean; statusCode: number; remoteSize?: number; error?: string }> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const headRes = await fetch(publicUrl, { method: 'HEAD', signal: controller.signal });
-    clearTimeout(timeoutId);
-    const statusCode = headRes.status;
-
-    if (!headRes.ok) {
-      return {
-        verified: false,
-        statusCode,
-        error: `Remote storage HEAD verification returned HTTP ${statusCode}`
-      };
-    }
-
-    const contentLengthHeader = headRes.headers.get('content-length');
-    const remoteSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : undefined;
-
-    if (localFileSize && remoteSize !== undefined && remoteSize > 0) {
-      const isSizeMatch = Math.abs(remoteSize - localFileSize) <= 128;
-      if (!isSizeMatch && remoteSize !== localFileSize) {
-        return {
-          verified: false,
-          statusCode,
-          remoteSize,
-          error: `Size mismatch: local is ${localFileSize} bytes, remote is ${remoteSize} bytes`
-        };
-      }
-    }
-
-    return {
-      verified: true,
-      statusCode,
-      remoteSize
-    };
-  } catch (err: any) {
-    return {
-      verified: false,
-      statusCode: 0,
-      error: `Verification network notice: ${err.message || String(err)}`
-    };
-  }
-}
-
-/**
  * High-performance disk-streaming evidence uploader.
  * Performs a mandatory pre-upload file size check (≤ 45 MB).
  * Uploads evidence directly to Supabase storage without upsert (insert-only policy compliant).
- * Performs post-upload verification to ensure binary integrity on the National Evidence Vault.
+ *
+ * The evidence bucket is private and citizens have no read access, so the upload
+ * response itself is the confirmation: 2xx means the object was created, and 409
+ * means an earlier attempt already stored it (names are unique per report and the
+ * bucket is insert-only, so it cannot have been overwritten).
+ *
+ * `publicUrl` is kept as the canonical object reference stored in incident media
+ * (attach_incident_media validates it); it is not directly fetchable. Viewers must
+ * use createSignedUrl().
  */
 export async function uploadEvidenceStreaming({
   fileUri,
@@ -209,33 +165,25 @@ export async function uploadEvidenceStreaming({
         }
       }
 
-      // Handle 409 Conflict ("already exists in vault")
-      if (uploadStatus === 409) {
-        onProgress?.(0.88, 'Object exists in Vault. Verifying integrity...');
-        const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
-        if (verifyRes.verified || verifyRes.statusCode === 200) {
-          onProgress?.(1.0, 'Integrity confirmed. Evidence sealed.');
-          return {
-            success: true,
-            publicUrl: publicStorageUrl,
-            statusCode: 200,
-            verifiedSize: verifyRes.remoteSize || localFileSize
-          };
-        }
+      // 409 Conflict: a previous attempt already stored this object
+      if (uploadStatus === 409 || /already exists|duplicate/i.test(uploadBody)) {
+        onProgress?.(1.0, 'Evidence already sealed in National Vault.');
+        return {
+          success: true,
+          publicUrl: publicStorageUrl,
+          statusCode: 200,
+          verifiedSize: localFileSize
+        };
       }
 
-      // Handle 200-299 Success from POST
+      // 200-299: Supabase confirmed object creation
       if (uploadStatus >= 200 && uploadStatus < 300) {
-        onProgress?.(0.92, 'Verifying forensic byte integrity on Evidence Vault...');
-        const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
-
-        // Supabase returned 200 confirming object creation
-        onProgress?.(1.0, 'Evidence verified and locked in National Vault.');
+        onProgress?.(1.0, 'Evidence locked in National Vault.');
         return {
           success: true,
           publicUrl: publicStorageUrl,
           statusCode: uploadStatus,
-          verifiedSize: verifyRes.remoteSize || localFileSize
+          verifiedSize: localFileSize
         };
       }
 
@@ -260,21 +208,19 @@ export async function uploadEvidenceStreaming({
           upsert: false
         });
 
-      if (!error && data) {
-        onProgress?.(0.9, 'Verifying forensic integrity...');
-        const verifyRes = await verifyRemoteStorageFile(publicStorageUrl, localFileSize);
-        if (verifyRes.verified) {
-          onProgress?.(1.0, 'Evidence sealed in National Vault.');
-          return {
-            success: true,
-            publicUrl: publicStorageUrl,
-            statusCode: 200,
-            verifiedSize: verifyRes.remoteSize
-          };
-        }
+      const webStatus = Number((error as any)?.statusCode || (error as any)?.status) || 400;
+      const alreadyStored = webStatus === 409 || /already exists|duplicate/i.test(error?.message || '');
+
+      if ((!error && data) || alreadyStored) {
+        onProgress?.(1.0, 'Evidence sealed in National Vault.');
+        return {
+          success: true,
+          publicUrl: publicStorageUrl,
+          statusCode: 200,
+          verifiedSize: localFileSize
+        };
       }
 
-      const webStatus = (error as any)?.status || 400;
       return {
         success: false,
         publicUrl: '',

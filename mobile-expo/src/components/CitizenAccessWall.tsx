@@ -43,6 +43,7 @@ import { GoogleSignin, statusCodes, isNativeGoogleAuthAvailable, ensureGoogleSig
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { resolveEffectiveAvatar } from '../services/avatarService';
+import { readTrustScore } from '../services/trustScoreService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -170,7 +171,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         phone: effectivePhone,
         ghanaCard: userMeta.ghana_card || '',
         avatarUrl: savedAvatar || userMeta.avatar_url || userMeta.avatarUrl || userMeta.picture || userMeta.photo || undefined,
-        trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 0,
+        trustScore: readTrustScore(user),
         isVerified: Boolean(userMeta.is_verified || false),
         loginMethod: 'EMAIL',
         accessToken: data.session?.access_token,
@@ -248,7 +249,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
         email: user.email || email.trim().toLowerCase(),
         phone: phone.trim(),
         ghanaCard: ghanaCard.trim().toUpperCase(),
-        trustScore: 70,
+        trustScore: readTrustScore(user),
         isVerified: false,
         loginMethod: 'EMAIL',
         accessToken: data.session?.access_token,
@@ -305,7 +306,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       phone: effectivePhone,
       ghanaCard: userMeta.ghana_card || '',
       avatarUrl: effectiveAvatar,
-      trustScore: typeof userMeta.trust_score === 'number' ? userMeta.trust_score : 0,
+      trustScore: readTrustScore(user),
       isVerified: Boolean(userMeta.is_verified || false),
       loginMethod: provider,
       accessToken: accessToken,

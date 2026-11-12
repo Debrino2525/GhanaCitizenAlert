@@ -507,7 +507,6 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
 
   const handleCancelSos = async () => {
     const trackingCodeToCancel = activeTrackingCode || (await AsyncStorage.getItem('@active_sos_tracking_code').catch(() => null));
-    const incidentIdToCancel = activeIncidentId || (await AsyncStorage.getItem('@active_sos_incident_id').catch(() => null));
 
     if (sosWatcherRef.current) {
       try {
@@ -527,34 +526,17 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     await AsyncStorage.removeItem('@active_sos_tracking_code').catch(() => {});
     await AsyncStorage.removeItem('@active_sos_incident_id').catch(() => {});
 
-    // Notify backend/database that the live distress beacon has stopped
+    // Notify dispatch that the live distress beacon has stopped.
+    // Citizens cannot update incidents directly; the cancel_sos_beacon RPC
+    // only stands down an active SOS raised by this device (tracking code + reporter match).
     try {
-      const updatePayload = {
-        title: '🛑 EMERGENCY SOS BEACON (STAND DOWN / CANCELLED)',
-        location_source: 'LAST_KNOWN',
-        status: 'RESOLVED',
-        updated_at: new Date().toISOString()
-      };
-
       if (trackingCodeToCancel) {
-        const { error } = await supabase
-          .from('incidents')
-          .update(updatePayload)
-          .eq('tracking_code', trackingCodeToCancel);
+        const { data: cancelled, error } = await supabase.rpc('cancel_sos_beacon', {
+          p_tracking_code: trackingCodeToCancel,
+        });
 
-        if (error && __DEV__) {
-          console.warn('[SOS Cancel Notice] Update incident by tracking_code error:', error.message);
-        }
-      }
-
-      if (incidentIdToCancel) {
-        const { error } = await supabase
-          .from('incidents')
-          .update(updatePayload)
-          .eq('id', incidentIdToCancel);
-
-        if (error && __DEV__) {
-          console.warn('[SOS Cancel Notice] Update incident by ID error:', error.message);
+        if (__DEV__ && (error || cancelled !== true)) {
+          console.warn('[SOS Cancel Notice] cancel_sos_beacon:', error?.message || 'no active beacon matched');
         }
       }
     } catch (err: any) {

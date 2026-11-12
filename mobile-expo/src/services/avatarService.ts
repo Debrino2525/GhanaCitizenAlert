@@ -2,9 +2,20 @@ import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
+const AVATAR_BUCKET = 'avatars';
+
 /**
- * Uploads citizen avatar to Supabase storage bucket 'evidence'
- * and updates user_metadata.custom_avatar_url so it persists across all devices.
+ * Avatars uploaded before the evidence bucket went private live at
+ * .../object/public/evidence/avatars/... and no longer load.
+ */
+function isLegacyEvidenceAvatar(url: unknown): boolean {
+  return typeof url === 'string' && url.includes('/storage/v1/object/public/evidence/');
+}
+
+/**
+ * Uploads citizen avatar to the public 'avatars' bucket, inside a folder named after
+ * the signed-in user's id (required by storage policy avatars_owner_insert), and
+ * updates user_metadata.custom_avatar_url so it persists across all devices.
  */
 export async function uploadAndSyncCitizenAvatar(
   userId: string,
@@ -14,20 +25,23 @@ export async function uploadAndSyncCitizenAvatar(
   let publicAvatarUrl = '';
 
   try {
-    if (base64Data) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const authUid = session?.user?.id;
+
+    if (base64Data && authUid) {
       const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
       const arrayBuffer = decode(cleanBase64);
-      const filePath = `avatars/${userId || 'citizen'}_${Date.now()}.jpg`;
+      const filePath = `${authUid}/${Date.now()}.jpg`;
 
       const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from('evidence')
+        .from(AVATAR_BUCKET)
         .upload(filePath, arrayBuffer, {
           contentType: 'image/jpeg',
           upsert: true
         });
 
       if (!uploadErr && uploadData?.path) {
-        const { data } = supabase.storage.from('evidence').getPublicUrl(uploadData.path);
+        const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(uploadData.path);
         publicAvatarUrl = data.publicUrl;
       } else if (uploadErr) {
         console.warn('[Avatar Upload] Storage error, falling back:', uploadErr.message);
@@ -75,9 +89,10 @@ export function resolveEffectiveAvatar(
   cachedLocalAvatar: string | null | undefined
 ): string | undefined {
   const meta = userMetadata || {};
+  const usable = (url: any): string | undefined => (isLegacyEvidenceAvatar(url) ? undefined : url || undefined);
   return (
-    meta.custom_avatar_url ||
-    cachedLocalAvatar ||
+    usable(meta.custom_avatar_url) ||
+    usable(cachedLocalAvatar) ||
     meta.avatar_url ||
     meta.avatarUrl ||
     meta.picture ||

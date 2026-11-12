@@ -1,7 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 export interface TrustScoreUpdateResult {
   newScore: number;
@@ -9,15 +6,30 @@ export interface TrustScoreUpdateResult {
   message: string;
 }
 
+const clampScore = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0;
+};
+
 /**
- * Awards +5% Civic Trust score when a citizen posts a report.
- * Rate-limited to at most one +5% reward per 24-hour rolling window (Option B).
+ * The authoritative Civic Trust score lives in app_metadata, which only the server
+ * (claim_daily_post_trust_bonus / adjust_citizen_trust_score) can write.
+ * user_metadata.trust_score is user-editable and must never be trusted.
+ */
+export function readTrustScore(user: { app_metadata?: Record<string, any> } | null | undefined): number {
+  return clampScore(user?.app_metadata?.trust_score);
+}
+
+/**
+ * Claims the +5% Civic Trust reward for posting a report.
+ * The server enforces the one-per-24h limit and requires a non-anonymous report
+ * from this user in the last hour, so call this only after the incident insert succeeds.
  */
 export async function awardPostSubmissionTrustBonus(
   userId: string,
   currentScore: number
 ): Promise<TrustScoreUpdateResult> {
-  const safeCurrentScore = typeof currentScore === 'number' && !isNaN(currentScore) ? currentScore : 0;
+  const safeCurrentScore = clampScore(currentScore);
 
   if (!userId || userId.startsWith('anon-') || userId === 'cit-guest') {
     return {
@@ -27,62 +39,53 @@ export async function awardPostSubmissionTrustBonus(
     };
   }
 
-  const cacheKey = `@citizen_last_post_trust_${userId}`;
-  let lastAwardedTimestamp: number | null = null;
-
   try {
-    const cached = await AsyncStorage.getItem(cacheKey);
-    if (cached) {
-      lastAwardedTimestamp = parseInt(cached, 10);
+    const { data, error } = await supabase.rpc('claim_daily_post_trust_bonus');
+    if (error || !data) {
+      console.warn('[TrustScoreService] Trust bonus claim notice:', error?.message);
+      return { newScore: safeCurrentScore, bonusEarned: false, message: 'Report submitted!' };
     }
-  } catch (readErr) {
-    console.warn('[TrustScoreService] Failed to read last post trust cache:', readErr);
+
+    const result = data as { awarded: boolean; trust_score?: number; reason?: string; next_eligible_at?: string };
+    const newScore = clampScore(result.trust_score ?? safeCurrentScore);
+
+    // Refresh the cached session so app_metadata reflects the new score.
+    supabase.auth.refreshSession().catch(() => {});
+
+    if (result.awarded) {
+      return {
+        newScore,
+        bonusEarned: true,
+        message: `🎉 +5% Civic Trust awarded! Your trust rating is now ${newScore}%.`
+      };
+    }
+
+    if (result.reason === 'cooldown' && result.next_eligible_at) {
+      const msRemaining = new Date(result.next_eligible_at).getTime() - Date.now();
+      const hoursRemaining = Math.max(1, Math.ceil(msRemaining / (60 * 60 * 1000)));
+      return {
+        newScore,
+        bonusEarned: false,
+        message: `Report submitted! Next 24h posting trust bonus available in ~${hoursRemaining}h.`
+      };
+    }
+
+    return { newScore, bonusEarned: false, message: 'Report submitted!' };
+  } catch (err) {
+    console.warn('[TrustScoreService] Trust bonus claim exception:', err);
+    return { newScore: safeCurrentScore, bonusEarned: false, message: 'Report submitted!' };
   }
-
-  const now = Date.now();
-
-  // If user already received bonus within the last 24 hours, do not grant another +5%
-  if (lastAwardedTimestamp && now - lastAwardedTimestamp < TWENTY_FOUR_HOURS_MS) {
-    const msRemaining = TWENTY_FOUR_HOURS_MS - (now - lastAwardedTimestamp);
-    const hoursRemaining = Math.max(1, Math.ceil(msRemaining / (60 * 60 * 1000)));
-    return {
-      newScore: safeCurrentScore,
-      bonusEarned: false,
-      message: `Report submitted! Next 24h posting trust bonus available in ~${hoursRemaining}h.`
-    };
-  }
-
-  const newScore = Math.min(100, Math.max(0, safeCurrentScore + 5));
-
-  try {
-    await AsyncStorage.setItem(cacheKey, String(now));
-    await supabase.auth.updateUser({
-      data: {
-        trust_score: newScore,
-        last_post_trust_at: new Date(now).toISOString()
-      }
-    });
-  } catch (syncErr) {
-    console.warn('[TrustScoreService] Failed to sync trust score to Supabase auth:', syncErr);
-  }
-
-  return {
-    newScore,
-    bonusEarned: true,
-    message: `🎉 +5% Civic Trust awarded! Your trust rating is now ${newScore}%.`
-  };
 }
 
 /**
- * Reads the latest trust score from user metadata or local fallback.
+ * Reads the latest server-owned trust score, or the fallback when offline.
  */
 export async function resolveLatestTrustScore(fallbackScore: number = 0): Promise<number> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (user?.user_metadata?.trust_score !== undefined) {
-      const score = Number(user.user_metadata.trust_score);
-      if (!isNaN(score)) return Math.min(100, Math.max(0, score));
+    if (user?.app_metadata?.trust_score !== undefined) {
+      return readTrustScore(user);
     }
   } catch {}
-  return Math.min(100, Math.max(0, fallbackScore));
+  return clampScore(fallbackScore);
 }

@@ -85,6 +85,66 @@ export interface MobilePublicCivicBulletin {
 
 type BulletinFilter = 'ALL' | 'EMERGENCY' | 'CIVIC';
 
+const SIGNED_MEDIA_TTL_SECONDS = 60 * 60;
+
+/** Object path inside the evidence bucket, from a stored media entry. */
+function evidenceObjectPath(item: any): string | null {
+  if (!item || typeof item !== 'object') return null;
+  if (typeof item.video_storage_path === 'string' && item.video_storage_path) {
+    return item.video_storage_path;
+  }
+  const url: unknown = item.rawS3Url || item.thumbnailUrl;
+  if (typeof url !== 'string') return null;
+  const match = url.match(/\/evidence\/([^?#]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * The evidence bucket is private. Published bulletin media is readable only through
+ * short-lived signed URLs (storage policy evidence_published_select), so attach one
+ * to the first media item of each bulletin.
+ */
+async function attachSignedMediaUrls(
+  bulletins: MobilePublicCivicBulletin[]
+): Promise<MobilePublicCivicBulletin[]> {
+  const parsed = bulletins.map((b) => {
+    let items = b.media;
+    if (typeof items === 'string') {
+      try {
+        items = JSON.parse(items);
+      } catch {
+        items = [];
+      }
+    }
+    return { bulletin: b, items: Array.isArray(items) ? items : [] };
+  });
+
+  const paths = Array.from(
+    new Set(parsed.map(({ items }) => evidenceObjectPath(items[0])).filter((p): p is string => !!p))
+  );
+  if (paths.length === 0) return bulletins;
+
+  const { data, error } = await supabase.storage
+    .from('evidence')
+    .createSignedUrls(paths, SIGNED_MEDIA_TTL_SECONDS);
+  if (error || !data) {
+    console.warn('[AlertsHub] Signed media URL notice:', error?.message);
+    return bulletins;
+  }
+
+  const signedByPath = new Map<string, string>();
+  data.forEach((d) => {
+    if (d.path && d.signedUrl && !d.error) signedByPath.set(d.path, d.signedUrl);
+  });
+
+  return parsed.map(({ bulletin, items }) => {
+    const path = evidenceObjectPath(items[0]);
+    const signedUrl = path ? signedByPath.get(path) : undefined;
+    if (!signedUrl) return bulletin;
+    return { ...bulletin, media: [{ ...items[0], signedUrl }, ...items.slice(1)] };
+  });
+}
+
 interface EvidenceVideoPlayerProps {
   uri: string;
 }
@@ -185,13 +245,12 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
     const item = items[0];
     if (!item) return null;
 
-    let resolvedUri: string | null = item.rawS3Url || item.thumbnailUrl || item.uri || item.localUri || null;
-    if (!resolvedUri && item.video_storage_path) {
-      resolvedUri = supabase.storage.from('evidence').getPublicUrl(item.video_storage_path).data.publicUrl;
-    }
+    // The evidence bucket is private: playback must use the signed URL attached in
+    // fetchAllBulletins. Raw storage URLs are only object references and will not load.
+    const resolvedUri: string | null = item.signedUrl || null;
     if (!resolvedUri) return null;
 
-    const isVideo = item.type === 'VIDEO' || (typeof resolvedUri === 'string' && /\.(mp4|mov)$/i.test(resolvedUri));
+    const isVideo = item.type === 'VIDEO' || /\.(mp4|mov)$/i.test(resolvedUri.split('?')[0]);
     const duration = item.durationSeconds || 15;
     const sha = item.sha256Checksum || item.sha256Hash || null;
 
@@ -209,11 +268,11 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
     try {
       const nowIso = new Date().toISOString();
 
-      // Fetch active granted takedowns to guarantee instantaneous client-side filter under Act 843
+      // Granted Act 843 takedowns (public view exposes only ids, never applicant details).
+      // public_feed_incidents already excludes these; this also filters emergency alerts.
       const { data: grantedAppeals } = await supabase
-        .from('statutory_appeals')
-        .select('incident_id, tracking_code')
-        .eq('status', 'GRANTED');
+        .from('public_takedowns')
+        .select('incident_id, tracking_code');
 
       const grantedIdSet = new Set<string>();
       (grantedAppeals || []).forEach((g: any) => {
@@ -240,9 +299,8 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 
       // 2. Fetch Officer-Published Civic Bulletins (with verified video/photo media payload)
       const { data: civicData, error: civicErr } = await supabase
-        .from('incidents')
+        .from('public_feed_incidents')
         .select('id, tracking_code, category, title, description, location_name, ghanapost_code, region, latitude, longitude, severity, status, assigned_agency, public_corroborations, media, created_at')
-        .eq('is_public_published', true)
         .order('created_at', { ascending: false });
 
       if (civicErr) {
@@ -251,7 +309,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
         const filteredCivic = ((civicData as MobilePublicCivicBulletin[]) || []).filter(
           c => !grantedIdSet.has(c.id) && !grantedIdSet.has(c.tracking_code)
         );
-        setCivicBulletins(filteredCivic);
+        setCivicBulletins(await attachSignedMediaUrls(filteredCivic));
       }
     } catch (err) {
       console.warn('[AlertsHub] Network fetch exception:', err);
