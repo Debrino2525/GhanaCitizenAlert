@@ -37,6 +37,7 @@ import { GoogleSignin } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { LanguageCode } from '../types';
+import { clearLocalCitizenData, requestServerAccountDeletion } from '../services/accountDeletion';
 
 interface CitizenProfileSheetProps {
   isOpen: boolean;
@@ -76,6 +77,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [inputPhone, setInputPhone] = useState(citizen.phone || '');
   const [isSavingPhone, setIsSavingPhone] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const hasServerAccount = citizen.loginMethod !== 'ANONYMOUS';
 
   const handlePickAvatar = async () => {
     Alert.alert(
@@ -191,10 +194,62 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
     }
   };
 
+  const runAccountDeletion = async () => {
+    setIsDeletingAccount(true);
+    const result = await requestServerAccountDeletion();
+    if (!result.ok) {
+      setIsDeletingAccount(false);
+      Alert.alert('Account not deleted', `${result.message}\n\nNothing was removed from this phone.`);
+      return;
+    }
+    await clearLocalCitizenData(citizen.id, citizen.email);
+    setIsDeletingAccount(false);
+    onClose();
+    onSignOut();
+    Alert.alert(
+      'Account deleted',
+      result.incidentsAnonymised > 0
+        ? `Your account is deleted. ${result.incidentsAnonymised} report${result.incidentsAnonymised === 1 ? '' : 's'} you sent stay with officers but are no longer linked to you.`
+        : 'Your account is deleted and this phone has been cleared.'
+    );
+  };
+
   const handleDeleteAccountPress = () => {
     Alert.alert(
+      'Delete your account?',
+      'This permanently deletes:\n' +
+        '• your CitizenAlert sign-in account\n' +
+        '• your profile photo\n' +
+        '• your name, email, phone number and Ghana Card number on reports you sent\n' +
+        '• reports still waiting to send on this phone\n\n' +
+        'Reports you already sent stay with officers so cases can continue, but they will no longer be linked to you and officers will not be able to contact you about them.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Delete account permanently?',
+              'This cannot be undone. You will need to create a new account to sign in again.',
+              [
+                { text: 'Keep my account', style: 'cancel' },
+                { text: 'Delete my account', style: 'destructive', onPress: runAccountDeletion }
+              ]
+            );
+          }
+        }
+      ]
+    );
+  };
+
+  const handleClearPhonePress = () => {
+    Alert.alert(
       'Sign out and clear this phone?',
-      'This signs you out and deletes reports that are still waiting to send on this phone.\n\nIt does not yet delete your account or reports already sent. To have those deleted, contact the CitizenAlert data protection officer through the privacy policy.',
+      'This signs you out and deletes reports that are still waiting to send on this phone.\n\n' +
+        (hasServerAccount
+          ? 'It does not delete your account. To do that, use "Delete my account" instead.'
+          : 'You are not signed in, so there is no account on our servers to delete.'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -506,7 +561,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 
           {/* Delete Account & Purge Data Button (Apple 5.1.1(v) & Google Play Compliance) */}
           <TouchableOpacity
-            onPress={handleDeleteAccountPress}
+            onPress={handleClearPhonePress}
             style={styles.deleteAccountBtn}
             accessibilityRole="button"
             accessibilityLabel="Sign out and clear this phone"
@@ -514,6 +569,27 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             <Trash2 color={tokens.colors.text.crimson} size={16} />
             <Text style={styles.deleteAccountBtnText}>Sign out and clear this phone</Text>
           </TouchableOpacity>
+
+          {/* Real account deletion (Google Play / App Store account-deletion requirement) */}
+          {hasServerAccount && (
+            <TouchableOpacity
+              onPress={handleDeleteAccountPress}
+              disabled={isDeletingAccount}
+              style={[styles.deleteAccountBtn, styles.deleteAccountForeverBtn]}
+              accessibilityRole="button"
+              accessibilityLabel="Delete my account"
+              accessibilityState={{ disabled: isDeletingAccount, busy: isDeletingAccount }}
+            >
+              {isDeletingAccount ? (
+                <ActivityIndicator color={tokens.colors.text.crimson} size="small" />
+              ) : (
+                <Trash2 color={tokens.colors.text.crimson} size={16} />
+              )}
+              <Text style={styles.deleteAccountBtnText}>
+                {isDeletingAccount ? 'Deleting your account…' : 'Delete my account'}
+              </Text>
+            </TouchableOpacity>
+          )}
           </ScrollView>
         </View>
       </View>
@@ -669,6 +745,7 @@ const styles = StyleSheet.create({
   privacyLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.minHeight },
   privacyLinkText: { color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sans, textDecorationLine: 'underline' },
   deleteAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.minHeight, borderRadius: tokens.radius.lg },
+  deleteAccountForeverBtn: { borderWidth: 1, borderColor: tokens.colors.text.crimson },
   deleteAccountBtnText: { color: tokens.colors.text.crimson, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansMedium },
   act843MiniBadge: {
     backgroundColor: 'rgba(250, 204, 21, 0.12)',

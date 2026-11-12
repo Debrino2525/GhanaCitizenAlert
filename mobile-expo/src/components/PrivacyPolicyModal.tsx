@@ -145,13 +145,16 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = memo(({
               <Text style={styles.cardTitle}>5. Account Deletion & Data Purge (Act 843)</Text>
             </View>
             <Text style={styles.bodyText}>
-              You have the statutory right under Section 33 of Act 843 to delete your citizen account at any time via the Citizen Profile screen. Upon deletion:
+              You can delete your account at any time from Profile → Delete my account. When you do:
             </Text>
             <Text style={styles.bodyText}>
-              • All stored local credentials, pending drafts, and session tokens are immediately wiped.
+              • Your sign-in account and profile photo are deleted from our servers.
             </Text>
             <Text style={styles.bodyText}>
-              • Any past incident evidence already submitted remains fully anonymized under Whistleblower Act 720.
+              • Your name, email, phone number and Ghana Card number are removed from reports you already sent. The reports themselves stay with officers so cases can continue, but they are no longer linked to you.
+            </Text>
+            <Text style={styles.bodyText}>
+              • Reports still waiting to send, and your sign-in, are removed from this phone.
             </Text>
           </View>
 
