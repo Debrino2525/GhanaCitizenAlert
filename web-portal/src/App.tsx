@@ -112,13 +112,6 @@ export const App: React.FC = () => {
               deepLink,
               email: session.user.email || 'Citizen'
             });
-
-            // If on mobile device, attempt immediate redirect back to app
-            if (isMobileDevice) {
-              try {
-                window.location.href = deepLink;
-              } catch {}
-            }
             return null;
           }
 
