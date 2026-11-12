@@ -14,7 +14,7 @@ import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser, SosPing } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
-import { Shield, Loader2 } from 'lucide-react';
+import { Shield, ShieldCheck, Loader2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -31,6 +31,7 @@ export const App: React.FC = () => {
   // Authentication State
   const [authSession, setAuthSession] = useState<Session | null>(null);
   const [currentOfficer, setCurrentOfficer] = useState<OfficerUser | null>(null);
+  const [citizenMobileBridge, setCitizenMobileBridge] = useState<{ deepLink: string; email: string } | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
 
@@ -93,6 +94,34 @@ export const App: React.FC = () => {
         // Query SUCCEEDED (HTTP 200) but returned no row
         if (!officerRow) {
           console.warn('[Auth] Verified: No officer record found for user ID:', userId);
+
+          // Check if this is a citizen logging in from the mobile app (or arriving from OAuth callback)
+          const isMobileDevice = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+          const hasOAuthHash = typeof window !== 'undefined' && (window.location.hash.includes('access_token') || window.location.search.includes('code'));
+          const isCitizenUser = session.user.user_metadata?.role === 'citizen' ||
+            session.user.app_metadata?.provider === 'google' ||
+            isMobileDevice ||
+            hasOAuthHash;
+
+          if (isCitizenUser) {
+            let deepLink = `citizenalert://auth${window.location.hash || window.location.search}`;
+            if (!window.location.hash && session.access_token) {
+              deepLink = `citizenalert://auth#access_token=${session.access_token}&refresh_token=${session.refresh_token || ''}&token_type=bearer`;
+            }
+            setCitizenMobileBridge({
+              deepLink,
+              email: session.user.email || 'Citizen'
+            });
+
+            // If on mobile device, attempt immediate redirect back to app
+            if (isMobileDevice) {
+              try {
+                window.location.href = deepLink;
+              } catch {}
+            }
+            return null;
+          }
+
           setAuthErrorMsg('Not authorized: No officer credentials registered for this account.');
           await supabase.auth.signOut();
           return null;
@@ -660,6 +689,35 @@ export const App: React.FC = () => {
         }}
         onSignOut={handleLogout}
       />
+    );
+  }
+
+  // 6.5. If authenticated as Citizen on mobile or via OAuth redirect, show Mobile App Bridge
+  if (citizenMobileBridge) {
+    return (
+      <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(30,58,138,0.25),rgba(0,0,0,0))] flex flex-col items-center justify-center p-4">
+        <div className="bg-slate-900 border border-yellow-500/40 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-yellow-500 to-emerald-600" />
+          <div className="w-16 h-16 mx-auto mb-4 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center">
+            <ShieldCheck className="w-8 h-8 text-emerald-400" />
+          </div>
+          <h2 className="text-xl font-black text-white mb-2 tracking-tight">Google Sign-In Successful!</h2>
+          <p className="text-sm text-slate-300 mb-6">
+            Signed in as <strong className="text-ghana-gold">{citizenMobileBridge.email}</strong>.
+            <br />
+            Tap below to return to the CitizenAlert Mobile App:
+          </p>
+          <a
+            href={citizenMobileBridge.deepLink}
+            className="block w-full py-4 px-6 bg-ghana-gold hover:bg-yellow-400 text-slate-950 font-black rounded-xl text-center transition-all shadow-lg shadow-yellow-500/20 text-base mb-4 tracking-wide"
+          >
+            📱 Return to CitizenAlert App ➔
+          </a>
+          <p className="text-xs text-slate-500">
+            If the app does not open automatically, tap the button above.
+          </p>
+        </div>
+      </div>
     );
   }
 

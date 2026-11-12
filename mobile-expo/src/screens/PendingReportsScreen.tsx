@@ -4,52 +4,126 @@ import {
   Text,
   View,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   Alert,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  TextInput,
+  Keyboard
 } from 'react-native';
-import {
-  Clock,
-  RotateCw,
-  Trash2,
-  AlertTriangle,
-  CheckCircle2,
-  ShieldCheck,
-  FileVideo,
-  HardDrive,
-  Download
-} from 'lucide-react-native';
-import * as MediaLibrary from 'expo-media-library';
+import { CloudOff, RotateCw, Trash2, TriangleAlert, Lock, Search, Check, FileText } from 'lucide-react-native';
 import {
   getPendingReports,
   removePendingReport,
   processPendingReport,
   PendingReportItem
 } from '../services/pendingReportsQueue';
+import { supabase } from '../lib/supabase';
+import { IncidentCategory } from '../types';
 import { tokens } from '../theme/tokens';
 import { safeHaptics } from '../utils/haptics';
 
 interface PendingReportsScreenProps {
   onQueueCountChange?: (count: number) => void;
+  /** True while the My Reports tab is on screen; the list refreshes each time it opens. */
+  isVisible?: boolean;
 }
 
-export const PendingReportsScreen: React.FC<PendingReportsScreenProps> = ({
-  onQueueCountChange
-}) => {
-  const [reports, setReports] = useState<PendingReportItem[]>([]);
+/** Coarse, honest stages only — never officer names, units or ETAs. */
+type Stage = 'RECEIVED' | 'UNDER_REVIEW' | 'RESOLVED' | 'CLOSED';
+
+interface FiledReport {
+  tracking_code: string;
+  category: IncidentCategory;
+  title: string;
+  status: string;
+  created_at: string;
+  region: string | null;
+}
+
+const STAGE_LABEL: Record<Stage, string> = {
+  RECEIVED: 'Received — awaiting review',
+  UNDER_REVIEW: 'Under review',
+  RESOLVED: 'Resolved',
+  CLOSED: 'Closed'
+};
+
+type StepState = 'done' | 'active' | 'todo';
+
+/** Sent → Received → Under review → Resolved/Closed, from the coarse stage only. */
+function pipelineFor(stage: Stage): { label: string; state: StepState }[] {
+  const finished = stage === 'RESOLVED' || stage === 'CLOSED';
+  return [
+    { label: 'Sent', state: 'done' },
+    { label: 'Received', state: 'done' },
+    { label: 'Under review', state: finished ? 'done' : stage === 'UNDER_REVIEW' ? 'active' : 'todo' },
+    { label: stage === 'CLOSED' ? 'Closed' : 'Resolved', state: finished ? 'done' : 'todo' }
+  ];
+}
+
+function toStage(status: string): Stage {
+  if (status === 'RESOLVED') return 'RESOLVED';
+  if (status === 'DISMISSED') return 'CLOSED';
+  if (status === 'DISPATCHED' || status === 'UNDER_ACTIVE_INVESTIGATION' || status === 'COURT_EVIDENCE_PACKAGED') {
+    return 'UNDER_REVIEW';
+  }
+  return 'RECEIVED';
+}
+
+const CATEGORY_LABEL: Record<IncidentCategory, string> = {
+  CRIMINAL_OFFENSE: 'Violent crime',
+  DOMESTIC_ABUSE: 'Domestic abuse',
+  TRAFFIC_RECKLESS: 'Road traffic',
+  GALAMSEY_ENVIRONMENTAL: 'Galamsey & water',
+  SANITATION_ZONING: 'Sanitation'
+};
+
+type Filter = 'ALL' | 'ACTIVE' | 'RESOLVED';
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+
+export const PendingReportsScreen: React.FC<PendingReportsScreenProps> = ({ onQueueCountChange, isVisible = true }) => {
+  const [queue, setQueue] = useState<PendingReportItem[]>([]);
+  const [filed, setFiled] = useState<FiledReport[]>([]);
+  const [signedIn, setSignedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [progressText, setProgressText] = useState<string>('');
+  const [progressText, setProgressText] = useState('');
+  const [filter, setFilter] = useState<Filter>('ALL');
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
-  const loadQueue = useCallback(async () => {
+  const [lookupCode, setLookupCode] = useState('');
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupResult, setLookupResult] = useState<string | null>(null);
+
+  const loadAll = useCallback(async () => {
     try {
       const items = await getPendingReports();
-      setReports(items);
+      setQueue(items);
       onQueueCountChange?.(items.length);
     } catch (e) {
-      console.warn('Error loading pending reports:', e);
+      console.warn('[MyReports] Queue load notice:', e);
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setSignedIn(!!user);
+      if (user) {
+        // RLS returns only this person's own, non-anonymous reports.
+        const { data, error } = await supabase
+          .from('incidents')
+          .select('tracking_code, category, title, status, created_at, region')
+          .eq('reporter_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (!error && data) setFiled(data as FiledReport[]);
+      } else {
+        setFiled([]);
+      }
+    } catch (e) {
+      console.warn('[MyReports] Filed reports notice:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -57,475 +131,385 @@ export const PendingReportsScreen: React.FC<PendingReportsScreenProps> = ({
   }, [onQueueCountChange]);
 
   useEffect(() => {
-    loadQueue();
-  }, [loadQueue]);
-
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadQueue();
-  }, [loadQueue]);
+    if (isVisible) loadAll();
+  }, [loadAll, isVisible]);
 
   const handleRetry = async (item: PendingReportItem) => {
     setProcessingId(item.id);
-    setProgressText('Connecting to Evidence Vault...');
+    setProgressText('Connecting…');
     safeHaptics.medium();
-
     try {
-      const res = await processPendingReport(item, (_ratio, text) => {
-        setProgressText(text);
-      });
-
+      const res = await processPendingReport(item, (_ratio, text) => setProgressText(text));
       if (res.success) {
         safeHaptics.success();
-        Alert.alert('✅ Transmitted', `Incident ${item.trackingCode} is now live on the National Command Map.`);
-        await loadQueue();
+        Alert.alert('Report sent', `Report ${item.trackingCode} has been sent and is awaiting review.`);
       } else {
         safeHaptics.warning();
-        Alert.alert('⚠️ Transmission Failed', res.error || 'Could not verify evidence upload.');
-        await loadQueue();
+        Alert.alert('Not sent yet', res.error || 'It will try again automatically when you are back online.');
       }
     } catch (err: any) {
       safeHaptics.warning();
-      Alert.alert('Retry Error', err?.message || 'Unexpected transmission error');
-      await loadQueue();
+      Alert.alert('Not sent yet', err?.message || 'It will try again automatically when you are back online.');
     } finally {
       setProcessingId(null);
       setProgressText('');
+      await loadAll();
     }
   };
 
   const handleDelete = (item: PendingReportItem) => {
     safeHaptics.warning();
     Alert.alert(
-      'Delete Pending Report?',
-      `Are you sure you want to permanently delete report ${item.trackingCode} and its local evidence? This cannot be undone.`,
+      'Delete this report?',
+      `Report ${item.trackingCode} and its evidence will be permanently removed from this phone. It has not been sent yet, so this cannot be undone.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             await removePendingReport(item.id, true);
             safeHaptics.medium();
-            await loadQueue();
+            await loadAll();
           }
         }
       ]
     );
   };
 
-  const handleSaveToGallery = async (item: PendingReportItem) => {
-    if (!item.permanentVideoUri) {
-      Alert.alert('No Video', 'No local video file found for this report.');
-      return;
-    }
-
+  const handleLookup = async () => {
+    const code = lookupCode.trim().toUpperCase();
+    if (!code) return;
+    Keyboard.dismiss();
+    setLookupBusy(true);
+    setLookupResult(null);
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync(true);
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Photo library permission required to save video.');
-        return;
+      const { data, error } = await supabase.rpc('get_report_status', { p_tracking_code: code });
+      if (error) {
+        setLookupResult('Tracking lookup is not available right now. Please try again later.');
+      } else if (!data?.found) {
+        setLookupResult('No report found with that code. Check it and try again.');
+      } else {
+        const stage = (data.stage as Stage) || 'RECEIVED';
+        setLookupResult(`${STAGE_LABEL[stage]}${data.submitted_on ? ` · sent ${formatDate(data.submitted_on)}` : ''}`);
       }
-
-      await MediaLibrary.createAssetAsync(item.permanentVideoUri);
-      safeHaptics.success();
-      Alert.alert('Saved to Gallery', `A copy of ${item.trackingCode} video was saved to your device gallery.`);
-    } catch (err: any) {
-      Alert.alert('Save Failed', err?.message || 'Could not save video to gallery.');
+    } catch {
+      setLookupResult('No connection. Please try again when you are online.');
+    } finally {
+      setLookupBusy(false);
     }
   };
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={styles.center}>
         <ActivityIndicator color={tokens.colors.brand.gold} size="large" />
-        <Text style={styles.loadingText}>Loading offline queue...</Text>
+        <Text style={styles.bodyMuted}>Loading your reports…</Text>
       </View>
     );
   }
 
+  const visibleFiled = filed.filter((r) => {
+    const stage = toStage(r.status);
+    if (filter === 'ACTIVE') return stage === 'RECEIVED' || stage === 'UNDER_REVIEW';
+    if (filter === 'RESOLVED') return stage === 'RESOLVED' || stage === 'CLOSED';
+    return true;
+  });
+  const activeCount = filed.filter((r) => ['RECEIVED', 'UNDER_REVIEW'].includes(toStage(r.status))).length;
+
   return (
-    <View style={styles.container}>
-      {/* Header Banner */}
-      <View style={styles.banner}>
-        <View style={styles.bannerIcon}>
-          <HardDrive color={tokens.colors.brand.gold} size={20} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bannerTitle}>Offline Report Queue</Text>
-          <Text style={styles.bannerSubtitle}>
-            Reports stored locally on this device when offline. Transmits to Police Command when connection returns.
-          </Text>
-        </View>
-      </View>
-
-      {reports.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <ShieldCheck color={tokens.colors.status.success} size={48} />
-          <Text style={styles.emptyTitle}>All Evidence Synced & Live</Text>
-          <Text style={styles.emptySubtitle}>
-            There are no pending incident reports stored on your device. Every submitted dossier has been
-            cryptographically verified on the National Command Center.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={reports}
-          keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={tokens.colors.brand.gold}
-            />
-          }
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => {
-            const isItemProcessing = processingId === item.id;
-            const mbSize = (item.fileSizeBytes / (1024 * 1024)).toFixed(1);
-
+    <ScrollView
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            loadAll();
+          }}
+          tintColor={tokens.colors.brand.gold}
+        />
+      }
+    >
+      {/* Waiting to send */}
+      {queue.length > 0 && (
+        <View style={{ gap: tokens.spacing.sm }}>
+          <Text style={styles.sectionTitle}>Waiting to send</Text>
+          {queue.map((item) => {
+            const busy = processingId === item.id;
+            const sensitive = item.category === 'DOMESTIC_ABUSE';
+            const chip =
+              item.status === 'FAILED' ? 'Failed — retry' : item.status === 'UPLOADING' ? 'Uploading' : 'Saved on device';
             return (
-              <View style={styles.card}>
-                {/* Card Top Row */}
-                <View style={styles.cardHeader}>
-                  <View style={styles.trackingBadge}>
-                    <Text style={styles.trackingCodeText}>{item.trackingCode}</Text>
+              <View key={item.id} style={[styles.card, styles.queueCard]}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.row}>
+                    <CloudOff color={tokens.colors.brand.gold} size={18} />
+                    <Text style={styles.chipGold}>{chip}</Text>
                   </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      item.status === 'FAILED'
-                        ? styles.statusBadgeFailed
-                        : item.status === 'UPLOADING'
-                        ? styles.statusBadgeUploading
-                        : styles.statusBadgeQueued
-                    ]}
-                  >
-                    <Text style={styles.statusBadgeText}>
-                      {item.status === 'FAILED'
-                        ? 'SYNC FAILED'
-                        : item.status === 'UPLOADING'
-                        ? 'TRANSMITTING'
-                        : 'QUEUED OFFLINE'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Title & Description */}
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardDesc} numberOfLines={2}>
-                  {item.description}
-                </Text>
-
-                {/* Telemetry info */}
-                <View style={styles.metaRow}>
-                  <View style={styles.metaItem}>
-                    <FileVideo color={tokens.colors.text.secondary} size={13} />
-                    <Text style={styles.metaText}>
-                      {item.recordedDuration}s Video • {mbSize} MB
-                    </Text>
-                  </View>
-                  <Text style={styles.metaDate}>
+                  <Text style={styles.monoMuted}>
                     {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </View>
-
-                {/* Error notice if failed */}
-                {item.lastError && (
-                  <View style={styles.errorBox}>
-                    <AlertTriangle color={tokens.colors.status.danger} size={14} />
-                    <Text style={styles.errorText} numberOfLines={2}>
-                      {item.lastError}
-                    </Text>
+                <Text style={styles.cardTitle}>{sensitive ? 'Sensitive report' : item.title}</Text>
+                <Text style={styles.monoMuted}>{item.trackingCode}</Text>
+                <Text style={styles.bodyMuted}>
+                  {item.reportInserted
+                    ? 'Your report was sent. The evidence file will finish uploading automatically.'
+                    : 'This will send automatically when you are back online.'}
+                </Text>
+                {!!item.lastError && item.status === 'FAILED' && (
+                  <View style={[styles.row, { alignItems: 'flex-start' }]}>
+                    <TriangleAlert color={tokens.colors.text.crimson} size={16} />
+                    <Text style={[styles.bodyMuted, { flex: 1, color: tokens.colors.text.crimson }]}>{item.lastError}</Text>
                   </View>
                 )}
-
-                {/* Processing status text */}
-                {isItemProcessing && (
-                  <View style={styles.processingRow}>
+                {busy && (
+                  <View style={styles.row}>
                     <ActivityIndicator color={tokens.colors.brand.gold} size="small" />
-                    <Text style={styles.processingText}>{progressText || 'Transmitting...'}</Text>
+                    <Text style={styles.bodyMuted}>{progressText}</Text>
                   </View>
                 )}
-
-                {/* Action Buttons */}
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    onPress={() => handleSaveToGallery(item)}
-                    style={styles.galleryBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Save Video to Gallery"
-                  >
-                    <Download color={tokens.colors.text.secondary} size={14} />
-                    <Text style={styles.galleryBtnText}>Gallery</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => handleDelete(item)}
-                    disabled={isItemProcessing}
-                    style={styles.deleteBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Delete pending report"
-                  >
-                    <Trash2 color={tokens.colors.status.danger} size={14} />
-                    <Text style={styles.deleteBtnText}>Delete</Text>
-                  </TouchableOpacity>
-
+                <View style={[styles.row, { marginTop: tokens.spacing.xs }]}>
                   <TouchableOpacity
                     onPress={() => handleRetry(item)}
-                    disabled={isItemProcessing}
-                    style={[styles.retryBtn, isItemProcessing && { opacity: 0.6 }]}
+                    disabled={busy}
+                    style={[styles.primarySmall, busy && { opacity: 0.6 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Retry uploading report"
+                    accessibilityLabel={`Retry sending report ${item.trackingCode}`}
                   >
-                    <RotateCw color={tokens.colors.bg.base} size={14} />
-                    <Text style={styles.retryBtnText}>Retry Upload</Text>
+                    <RotateCw color={tokens.colors.text.inverse} size={16} />
+                    <Text style={styles.primarySmallText}>Retry now</Text>
                   </TouchableOpacity>
+                  {!item.reportInserted && (
+                    <TouchableOpacity
+                      onPress={() => handleDelete(item)}
+                      disabled={busy}
+                      style={styles.secondarySmall}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete unsent report ${item.trackingCode}`}
+                    >
+                      <Trash2 color={tokens.colors.text.crimson} size={16} />
+                      <Text style={[styles.secondarySmallText, { color: tokens.colors.text.crimson }]}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             );
-          }}
-        />
+          })}
+        </View>
       )}
-    </View>
+
+      {/* Track with code */}
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Search color={tokens.colors.brand.gold} size={18} />
+          <Text style={styles.cardTitle}>Track a report with its code</Text>
+        </View>
+        <Text style={styles.bodyMuted}>
+          For anonymous reports, your tracking code is the only way to follow up. Keep it somewhere safe.
+        </Text>
+        <View style={[styles.row, { marginTop: tokens.spacing.xs }]}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="GH-2026-XXXXXXXX"
+            placeholderTextColor={tokens.colors.text.muted}
+            value={lookupCode}
+            onChangeText={setLookupCode}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="search"
+            onSubmitEditing={handleLookup}
+            accessibilityLabel="Your tracking code"
+          />
+          <TouchableOpacity
+            onPress={handleLookup}
+            disabled={lookupBusy || !lookupCode.trim()}
+            style={[styles.primarySmall, styles.trackButton, (lookupBusy || !lookupCode.trim()) && { opacity: 0.5 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Track report"
+          >
+            {lookupBusy ? <ActivityIndicator color={tokens.colors.text.inverse} /> : <Text style={styles.primarySmallText}>Track</Text>}
+          </TouchableOpacity>
+        </View>
+        {!!lookupResult && <Text style={[styles.body, { marginTop: tokens.spacing.xs }]}>{lookupResult}</Text>}
+      </View>
+
+      {/* Filed reports */}
+      <View style={styles.rowBetween}>
+        <Text style={styles.sectionTitle}>Your reports</Text>
+        <Text style={styles.monoMuted}>{filed.length} sent</Text>
+      </View>
+
+      {signedIn && filed.length > 0 && (
+        <View style={styles.filterRow}>
+          {([
+            ['ALL', 'All'],
+            ['ACTIVE', `Active (${activeCount})`],
+            ['RESOLVED', `Resolved (${filed.length - activeCount})`]
+          ] as [Filter, string][]).map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setFilter(key)}
+              style={[styles.filterPill, filter === key && styles.filterPillActive]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: filter === key }}
+            >
+              <Text style={[styles.filterText, filter === key && styles.filterTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {!signedIn ? (
+        <View style={[styles.card, styles.empty]}>
+          <FileText color={tokens.colors.text.secondary} size={28} />
+          <Text style={styles.bodyMuted}>
+            You are using CitizenAlert without an account, so reports are not listed here. Use your tracking code above to check on a report.
+          </Text>
+        </View>
+      ) : filed.length === 0 ? (
+        <View style={[styles.card, styles.empty]}>
+          <FileText color={tokens.colors.text.secondary} size={28} />
+          <Text style={styles.bodyMuted}>
+            Reports you send with your name will appear here. Anonymous reports are never linked to your account.
+          </Text>
+        </View>
+      ) : (
+        visibleFiled.map((r) => {
+          const stage = toStage(r.status);
+          const sensitive = r.category === 'DOMESTIC_ABUSE';
+          const isRevealed = !sensitive || revealed[r.tracking_code];
+          return (
+            <TouchableOpacity
+              key={r.tracking_code}
+              activeOpacity={sensitive ? 0.8 : 1}
+              disabled={!sensitive}
+              onPress={() => setRevealed((prev) => ({ ...prev, [r.tracking_code]: !prev[r.tracking_code] }))}
+              style={styles.card}
+              accessibilityRole={sensitive ? 'button' : undefined}
+              accessibilityLabel={sensitive && !isRevealed ? `Sensitive report ${r.tracking_code}. Tap to show details.` : undefined}
+            >
+              <View style={styles.rowBetween}>
+                <Text style={styles.monoMuted}>{r.tracking_code}</Text>
+                <View style={[styles.stageChip, (stage === 'RESOLVED' || stage === 'CLOSED') && styles.stageChipDone]}>
+                  <Text style={[styles.stageChipText, (stage === 'RESOLVED' || stage === 'CLOSED') && { color: tokens.colors.text.emerald }]}>
+                    {STAGE_LABEL[stage]}
+                  </Text>
+                </View>
+              </View>
+
+              {isRevealed ? (
+                <>
+                  <Text style={styles.cardTitle}>{r.title}</Text>
+                  <Text style={styles.bodyMuted}>
+                    {CATEGORY_LABEL[r.category] || 'Report'} · {formatDate(r.created_at)}
+                    {r.region && r.region !== 'UNKNOWN' ? ` · ${r.region}` : ''}
+                  </Text>
+                </>
+              ) : (
+                <View style={styles.row}>
+                  <Lock color={tokens.colors.brand.gold} size={16} />
+                  <Text style={styles.cardTitle}>Sensitive report</Text>
+                  <Text style={styles.bodyMuted}>· Tap to show</Text>
+                </View>
+              )}
+
+              <View style={styles.pipeline}>
+                {pipelineFor(stage).map((s) => (
+                  <View key={s.label} style={styles.pipelineStep}>
+                    <View style={[styles.pipelineDot, s.state === 'done' && styles.pipelineDotDone, s.state === 'active' && styles.pipelineDotActive]}>
+                      {s.state === 'done' && <Check color={tokens.colors.status.successDark} size={10} strokeWidth={3} />}
+                    </View>
+                    <Text style={[styles.pipelineLabel, s.state === 'active' && { color: tokens.colors.brand.gold }]}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </TouchableOpacity>
+          );
+        })
+      )}
+    </ScrollView>
   );
 };
 
+const f = tokens.typography.fontFamily;
+const c = tokens.colors;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: tokens.colors.bg.base
-  },
-  centerContainer: {
-    padding: tokens.spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 250
-  },
-  loadingText: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    marginTop: tokens.spacing.sm
-  },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: tokens.spacing.sm,
-    backgroundColor: tokens.colors.surface.card,
+  content: { gap: tokens.spacing.lg, paddingBottom: tokens.spacing.xxxl },
+  center: { padding: tokens.spacing.xl, alignItems: 'center', justifyContent: 'center', minHeight: 250, gap: tokens.spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing.sm },
+  sectionTitle: { color: c.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: f.sansBold },
+  card: { backgroundColor: c.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg, gap: tokens.spacing.sm },
+  queueCard: { borderLeftWidth: 3, borderLeftColor: c.brand.gold },
+  empty: { alignItems: 'center', gap: tokens.spacing.md },
+  cardTitle: { color: c.text.primary, fontSize: tokens.typography.fontSize.lg, lineHeight: 24, fontFamily: f.sans },
+  body: { color: c.text.primary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: f.sansRegular },
+  bodyMuted: { color: c.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: f.sansRegular },
+  monoMuted: { color: c.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.mono },
+  chipGold: { color: c.brand.gold, fontSize: tokens.typography.fontSize.sm, fontFamily: f.mono, textTransform: 'uppercase' },
+  input: {
+    backgroundColor: c.surface.input,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    padding: tokens.spacing.md,
-    marginBottom: tokens.spacing.md
+    borderColor: c.border.medium,
+    minHeight: tokens.touchTarget.minHeight,
+    paddingHorizontal: tokens.spacing.md,
+    color: c.text.primary,
+    fontSize: tokens.typography.fontSize.lg,
+    fontFamily: f.mono
   },
-  bannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: tokens.colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  bannerTitle: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.sm,
-    fontWeight: '700'
-  },
-  bannerSubtitle: {
-    color: tokens.colors.text.secondary,
-    fontSize: 11,
-    marginTop: 2
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: tokens.spacing.xxl,
-    minHeight: 260,
-    backgroundColor: tokens.colors.surface.card,
-    borderRadius: tokens.radius.lg,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
-  emptyTitle: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.md,
-    fontWeight: '800',
-    marginTop: tokens.spacing.md
-  },
-  emptySubtitle: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    textAlign: 'center',
-    marginTop: tokens.spacing.xs,
-    lineHeight: 18,
-    maxWidth: 320
-  },
-  listContent: {
-    gap: tokens.spacing.sm,
-    paddingBottom: tokens.spacing.xxl
-  },
-  card: {
-    backgroundColor: tokens.colors.surface.card,
-    borderRadius: tokens.radius.lg,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    padding: tokens.spacing.md,
-    gap: tokens.spacing.xs
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  trackingBadge: {
-    backgroundColor: tokens.colors.border.subtle,
-    paddingHorizontal: tokens.spacing.sm,
-    paddingVertical: 3,
-    borderRadius: tokens.radius.xs,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.medium
-  },
-  trackingCodeText: {
-    fontFamily: tokens.typography.fontFamily.mono,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '700',
-    color: tokens.colors.brand.gold
-  },
-  statusBadge: {
-    paddingHorizontal: tokens.spacing.xs,
-    paddingVertical: 3,
-    borderRadius: tokens.radius.xs
-  },
-  statusBadgeFailed: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    borderWidth: 1,
-    borderColor: tokens.colors.status.danger
-  },
-  statusBadgeUploading: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    borderWidth: 1,
-    borderColor: tokens.colors.police.accent
-  },
-  statusBadgeQueued: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    borderWidth: 1,
-    borderColor: tokens.colors.status.amber
-  },
-  statusBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: tokens.colors.text.white
-  },
-  cardTitle: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.md,
-    fontWeight: '700',
-    marginTop: 2
-  },
-  cardDesc: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    lineHeight: 16
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 4
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4
-  },
-  metaText: {
-    color: tokens.colors.text.secondary,
-    fontSize: 11
-  },
-  metaDate: {
-    color: tokens.colors.text.muted,
-    fontSize: 10
-  },
-  errorBox: {
+  trackButton: { minWidth: 84, justifyContent: 'center' },
+  primarySmall: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: tokens.radius.sm,
-    padding: tokens.spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    marginTop: 4
+    minHeight: tokens.touchTarget.minHeight,
+    paddingHorizontal: tokens.spacing.lg,
+    borderRadius: tokens.radius.md,
+    backgroundColor: c.brand.gold,
+    justifyContent: 'center'
   },
-  errorText: {
-    color: tokens.colors.status.danger,
-    fontSize: 10,
-    flex: 1
-  },
-  processingRow: {
+  primarySmallText: { color: c.text.inverse, fontFamily: f.sansBold, fontSize: tokens.typography.fontSize.md },
+  secondarySmall: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: tokens.spacing.xs,
-    backgroundColor: tokens.colors.bg.subtle,
-    borderRadius: tokens.radius.sm,
-    padding: tokens.spacing.xs,
-    marginTop: 4
+    gap: 6,
+    minHeight: tokens.touchTarget.minHeight,
+    paddingHorizontal: tokens.spacing.lg,
+    borderRadius: tokens.radius.md,
+    backgroundColor: c.surface.cardHover
   },
-  processingText: {
-    color: tokens.colors.brand.gold,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: tokens.spacing.sm,
-    marginTop: tokens.spacing.xs,
-    paddingTop: tokens.spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: tokens.colors.border.subtle
-  },
-  galleryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: tokens.colors.border.subtle,
-    paddingHorizontal: tokens.spacing.sm,
-    paddingVertical: 6,
-    borderRadius: tokens.radius.sm
-  },
-  galleryBtnText: {
-    color: tokens.colors.text.secondary,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    paddingHorizontal: tokens.spacing.sm,
-    paddingVertical: 6,
-    borderRadius: tokens.radius.sm
-  },
-  deleteBtnText: {
-    color: tokens.colors.status.danger,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  retryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: tokens.colors.brand.gold,
+  secondarySmallText: { color: c.text.primary, fontFamily: f.sans, fontSize: tokens.typography.fontSize.md },
+  filterRow: { flexDirection: 'row', gap: tokens.spacing.sm, flexWrap: 'wrap' },
+  filterPill: {
+    minHeight: 40,
     paddingHorizontal: tokens.spacing.md,
-    paddingVertical: 6,
-    borderRadius: tokens.radius.sm
+    borderRadius: tokens.radius.full,
+    backgroundColor: c.surface.card,
+    justifyContent: 'center'
   },
-  retryBtnText: {
-    color: tokens.colors.bg.base,
-    fontSize: 11,
-    fontWeight: '800'
-  }
+  filterPillActive: { backgroundColor: c.brand.gold },
+  filterText: { color: c.text.primary, fontFamily: f.sansMedium, fontSize: tokens.typography.fontSize.md },
+  filterTextActive: { color: c.text.inverse },
+  stageChip: { backgroundColor: c.brand.goldMuted, borderRadius: tokens.radius.full, paddingHorizontal: 10, paddingVertical: 4, flexShrink: 1 },
+  stageChipDone: { backgroundColor: c.status.successDark },
+  stageChipText: { color: c.brand.gold, fontFamily: f.sansMedium, fontSize: tokens.typography.fontSize.sm },
+  pipeline: { flexDirection: 'row', justifyContent: 'space-between', marginTop: tokens.spacing.xs },
+  pipelineStep: { flex: 1, alignItems: 'center', gap: 4 },
+  pipelineDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: c.surface.highest,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  pipelineDotDone: { backgroundColor: c.text.emerald, borderColor: c.text.emerald },
+  pipelineDotActive: { borderColor: c.brand.gold, backgroundColor: c.brand.goldMuted },
+  pipelineLabel: { color: c.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.sansMedium, textAlign: 'center' }
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -99,6 +99,53 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
 
+  const buildAndSetCitizenUser = useCallback(async (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' | 'EMAIL' = 'GOOGLE') => {
+    const userMeta = user.user_metadata || {};
+    const defaultName = provider === 'APPLE' ? 'Apple Citizen' : provider === 'EMAIL' ? 'Ghana Citizen' : 'Google Citizen';
+    const normalizedEmail = (user.email || '').trim().toLowerCase();
+    const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
+    const effectiveAvatar = resolveEffectiveAvatar(userMeta, savedAvatar);
+    if (userMeta.custom_avatar_url && userMeta.custom_avatar_url !== savedAvatar) {
+      AsyncStorage.setItem(`@citizen_avatar_${user.id}`, userMeta.custom_avatar_url).catch(() => {});
+    }
+
+    // Cross-provider phone synchronization (e.g. registered with email, now logging in with Google)
+    let effectivePhone = userMeta.phone || '';
+    if (!effectivePhone && normalizedEmail) {
+      const cachedPhone = await AsyncStorage.getItem(`@citizen_phone_${normalizedEmail}`).catch(() => null);
+      if (cachedPhone) {
+        effectivePhone = cachedPhone;
+        // Sync to Supabase user metadata for this OAuth identity
+        await supabase.auth.updateUser({
+          data: {
+            phone: cachedPhone,
+            emergency_telecom_consent: true,
+            emergency_consent_at: new Date().toISOString(),
+            emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
+          }
+        }).catch(() => {});
+      }
+    } else if (effectivePhone && normalizedEmail) {
+      await AsyncStorage.setItem(`@citizen_phone_${normalizedEmail}`, effectivePhone).catch(() => {});
+    }
+
+    const authenticatedCitizen: CitizenUser = {
+      id: user.id,
+      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
+      email: user.email || '',
+      phone: effectivePhone,
+      ghanaCard: userMeta.ghana_card || '',
+      avatarUrl: effectiveAvatar,
+      trustScore: readTrustScore(user),
+      isVerified: Boolean(userMeta.is_verified || false),
+      loginMethod: provider,
+      accessToken: accessToken,
+      emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(effectivePhone),
+      emergencyConsentAt: userMeta.emergency_consent_at || undefined
+    };
+    onAuthenticated(authenticatedCitizen);
+  }, [onAuthenticated]);
+
   // Listen for Supabase password recovery triggers & deep links
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
@@ -107,16 +154,57 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       }
     });
 
-    const handleUrl = (event: { url: string }) => {
-      if (event.url.includes('type=recovery') || event.url.includes('reset-password')) {
+    const processDeepLink = async (urlStr: string) => {
+      if (!urlStr) return;
+      if (urlStr.includes('type=recovery') || urlStr.includes('reset-password')) {
         setIsSetNewPasswordModalOpen(true);
+        return;
+      }
+
+      // Check for OAuth tokens or auth code in deep link
+      try {
+        const parsedUrl = Linking.parse(urlStr);
+        let code = parsedUrl.queryParams?.code as string;
+        let accessToken = parsedUrl.queryParams?.access_token as string;
+        let refreshToken = parsedUrl.queryParams?.refresh_token as string;
+
+        if (urlStr.includes('#')) {
+          const hashPart = urlStr.split('#')[1];
+          const hashParams = new URLSearchParams(hashPart);
+          if (!code && hashParams.get('code')) code = hashParams.get('code')!;
+          if (!accessToken && hashParams.get('access_token')) accessToken = hashParams.get('access_token')!;
+          if (!refreshToken && hashParams.get('refresh_token')) refreshToken = hashParams.get('refresh_token')!;
+        }
+
+        if (code) {
+          setIsLoading(true);
+          const { data: sessionData, error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (!codeErr && sessionData?.user) {
+            await buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, 'GOOGLE');
+          }
+          setIsLoading(false);
+        } else if (accessToken && refreshToken) {
+          setIsLoading(true);
+          const { data: sessionData, error: sessErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+          if (!sessErr && sessionData?.user) {
+            await buildAndSetCitizenUser(sessionData.user, sessionData.session?.access_token, 'GOOGLE');
+          }
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.warn('[CitizenAccessWall] Deep link parsing error:', err);
       }
     };
 
+    const handleUrl = (event: { url: string }) => {
+      processDeepLink(event.url);
+    };
+
     Linking.getInitialURL().then((url) => {
-      if (url && (url.includes('type=recovery') || url.includes('reset-password'))) {
-        setIsSetNewPasswordModalOpen(true);
-      }
+      if (url) processDeepLink(url);
     });
 
     const sub = Linking.addEventListener('url', handleUrl);
@@ -125,7 +213,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       authListener?.subscription?.unsubscribe();
       sub.remove();
     };
-  }, []);
+  }, [buildAndSetCitizenUser]);
 
   // 1. Supabase Citizen Sign In (Email / Password)
   const handleSignIn = async () => {
@@ -267,53 +355,6 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const buildAndSetCitizenUser = async (user: any, accessToken?: string, provider: 'GOOGLE' | 'APPLE' | 'EMAIL' = 'GOOGLE') => {
-    const userMeta = user.user_metadata || {};
-    const defaultName = provider === 'APPLE' ? 'Apple Citizen' : provider === 'EMAIL' ? 'Ghana Citizen' : 'Google Citizen';
-    const normalizedEmail = (user.email || '').trim().toLowerCase();
-    const savedAvatar = await AsyncStorage.getItem(`@citizen_avatar_${user.id}`).catch(() => null);
-    const effectiveAvatar = resolveEffectiveAvatar(userMeta, savedAvatar);
-    if (userMeta.custom_avatar_url && userMeta.custom_avatar_url !== savedAvatar) {
-      AsyncStorage.setItem(`@citizen_avatar_${user.id}`, userMeta.custom_avatar_url).catch(() => {});
-    }
-
-    // Cross-provider phone synchronization (e.g. registered with email, now logging in with Google)
-    let effectivePhone = userMeta.phone || '';
-    if (!effectivePhone && normalizedEmail) {
-      const cachedPhone = await AsyncStorage.getItem(`@citizen_phone_${normalizedEmail}`).catch(() => null);
-      if (cachedPhone) {
-        effectivePhone = cachedPhone;
-        // Sync to Supabase user metadata for this OAuth identity
-        await supabase.auth.updateUser({
-          data: {
-            phone: cachedPhone,
-            emergency_telecom_consent: true,
-            emergency_consent_at: new Date().toISOString(),
-            emergency_consent_act: 'DATA_PROTECTION_ACT_843_SEC_20'
-          }
-        }).catch(() => {});
-      }
-    } else if (effectivePhone && normalizedEmail) {
-      await AsyncStorage.setItem(`@citizen_phone_${normalizedEmail}`, effectivePhone).catch(() => {});
-    }
-
-    const authenticatedCitizen: CitizenUser = {
-      id: user.id,
-      name: userMeta.full_name || userMeta.name || user.email?.split('@')[0] || defaultName,
-      email: user.email || '',
-      phone: effectivePhone,
-      ghanaCard: userMeta.ghana_card || '',
-      avatarUrl: effectiveAvatar,
-      trustScore: readTrustScore(user),
-      isVerified: Boolean(userMeta.is_verified || false),
-      loginMethod: provider,
-      accessToken: accessToken,
-      emergencyTelecomConsent: userMeta.emergency_telecom_consent !== undefined ? Boolean(userMeta.emergency_telecom_consent) : Boolean(effectivePhone),
-      emergencyConsentAt: userMeta.emergency_consent_at || undefined
-    };
-    onAuthenticated(authenticatedCitizen);
   };
 
   // Password Reset Dispatch Handler (Sends 6-digit recovery code)
@@ -506,6 +547,7 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
 
       // Step B: WebBrowser OAuth (Supports Expo Go, Web, and universal deep links)
       const redirectUrl = AuthSession.makeRedirectUri({
+        scheme: 'citizenalert',
         preferLocalhost: false
       });
 

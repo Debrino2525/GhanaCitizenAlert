@@ -12,7 +12,8 @@
       "backgroundColor": "#FFFFFF"
     },
     "plugins": [
-      "expo-video"
+      "expo-video",
+      "@react-native-google-signin/google-signin"
     ],
     "userInterfaceStyle": "dark",
     "ios": {

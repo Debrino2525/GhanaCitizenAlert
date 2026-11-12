@@ -11,6 +11,7 @@ import {
   Image,
   RefreshControl,
   Keyboard,
+  ScrollView,
   TouchableWithoutFeedback,
   Share,
   Linking
@@ -37,7 +38,8 @@ import {
   Video,
   Lock,
   Flag,
-  Scale
+  Scale,
+  Users
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { GpsCoordinates } from '../types';
@@ -84,6 +86,14 @@ export interface MobilePublicCivicBulletin {
 }
 
 type BulletinFilter = 'ALL' | 'EMERGENCY' | 'CIVIC';
+
+const CATEGORY_NAMES: Record<string, string> = {
+  CRIMINAL_OFFENSE: 'Crime',
+  DOMESTIC_ABUSE: 'Domestic abuse',
+  TRAFFIC_RECKLESS: 'Road hazard',
+  GALAMSEY_ENVIRONMENTAL: 'Galamsey & water',
+  SANITATION_ZONING: 'Sanitation'
+};
 
 const SIGNED_MEDIA_TTL_SECONDS = 60 * 60;
 
@@ -398,17 +408,6 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 
     setIsSubmittingAppeal(true);
     try {
-      const appealPayload = {
-        incident_id: selectedAppealBulletin.id,
-        tracking_code: selectedAppealBulletin.tracking_code,
-        bulletin_title: selectedAppealBulletin.title,
-        applicant_name: appealFullName.trim(),
-        contact_info: appealContact.trim(),
-        reason: appealReason.trim(),
-        legal_basis: 'Ghana Data Protection Act 2012 (Act 843, Sections 32-43)',
-        submitted_at: new Date().toISOString()
-      };
-
       // Insert into statutory_appeals table (Act 843)
       const { error: appealErr } = await supabase.from('statutory_appeals').insert([{
         incident_id: selectedAppealBulletin.id,
@@ -422,19 +421,14 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 
       if (appealErr) {
         console.warn('[AlertsHub] statutory_appeals insert notice:', appealErr.message);
-        try {
-          await supabase.from('incident_feedback').insert([{
-            incident_id: selectedAppealBulletin.id,
-            feedback_type: 'TAKEDOWN_APPEAL',
-            comments: JSON.stringify(appealPayload),
-            contact_phone: appealContact.trim()
-          }]);
-        } catch {}
+        safeHaptics.warning();
+        Alert.alert('Request not sent', 'We could not send your removal request. Please check your connection and try again.');
+        return;
       }
 
       safeHaptics.success();
       setAppealSuccess(true);
-      announceAccessibility('Statutory appeal lodged successfully under Act 843.');
+      announceAccessibility('Removal request sent. A data protection officer will review it.');
 
       setTimeout(() => {
         setIsAppealModalOpen(false);
@@ -442,8 +436,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
         setSelectedAppealBulletin(null);
       }, 2200);
     } catch (err: any) {
-      Alert.alert('Appeal Lodged', 'Your appeal has been recorded for review by the Data Protection Officer.');
-      setIsAppealModalOpen(false);
+      Alert.alert('Request not sent', 'We could not send your removal request. Please check your connection and try again.');
     } finally {
       setIsSubmittingAppeal(false);
     }
@@ -492,19 +485,19 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
       if (error) throw error;
 
       safeHaptics.success();
-      announceAccessibility('Sighting tip transmitted to Police Operations.');
+      announceAccessibility('Sighting sent.');
       setIsTipModalOpen(false);
       setTipDescription('');
       Alert.alert(
-        '✅ Sighting Transmitted',
-        'Your sighting details and live coordinates have been transmitted directly to the Police Operations Room.'
+        'Sighting sent',
+        'Thank you. Your sighting and location were sent to the officers handling this alert. If anyone is in immediate danger, call 191.'
       );
     } catch (e: any) {
       console.warn('[AlertsHub] Error transmitting sighting:', e?.message || e);
       safeHaptics.warning();
       Alert.alert(
-        '⚠️ Transmission Failed',
-        `Could not transmit sighting tip: ${e?.message || 'Network error'}. Would you like to retry?`,
+        'Sighting not sent',
+        `We could not send your sighting (${e?.message || 'no connection'}). Try again?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Retry', onPress: () => handleSendAmberTip() }
@@ -519,23 +512,17 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 
   return (
     <View style={styles.section}>
-      {/* Geofence Hub Header */}
-      <View style={styles.geofenceHeader}>
-        <Radio color={tokens.colors.status.warning} size={18} />
-        <Text style={styles.geofenceHeaderText}>NATIONAL PUBLIC SAFETY & EMERGENCY ALERTS</Text>
-      </View>
-
-      {/* Act 843 Privacy & Sanitization Banner */}
-      <View style={styles.act843Banner}>
-        <ShieldCheck color={tokens.colors.police.badge} size={16} />
-        <Text style={styles.act843BannerText}>
-          <Text style={{ fontWeight: 'bold', color: tokens.colors.text.white }}>Act 843 Sanitized Feed: </Text>
-          Official police bulletins broadcast verified hazard warnings without private citizen identities.
-        </Text>
+      {/* Where these alerts are for */}
+      <View style={styles.locationHeader}>
+        <MapPin color={tokens.colors.brand.gold} size={20} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.locationHeaderTitle}>{locationName || 'Your area'}</Text>
+          {!!region && region !== 'UNKNOWN' && <Text style={styles.locationHeaderSub}>{region}</Text>}
+        </View>
       </View>
 
       {/* Filter Chips Bar */}
-      <View style={styles.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         <TouchableOpacity
           onPress={() => {
             safeHaptics.light();
@@ -555,7 +542,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
           }}
           style={[styles.filterChip, activeFilter === 'EMERGENCY' && styles.filterChipActiveAmber]}
         >
-          <AlertTriangle color={activeFilter === 'EMERGENCY' ? tokens.colors.status.amber : tokens.colors.text.muted} size={12} />
+          <AlertTriangle color={activeFilter === 'EMERGENCY' ? tokens.colors.text.inverse : tokens.colors.text.secondary} size={14} />
           <Text style={[styles.filterChipText, activeFilter === 'EMERGENCY' && styles.filterChipTextActive]}>
             Emergency ({emergencyAlerts.length})
           </Text>
@@ -568,26 +555,26 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
           }}
           style={[styles.filterChip, activeFilter === 'CIVIC' && styles.filterChipActiveCivic]}
         >
-          <ShieldCheck color={activeFilter === 'CIVIC' ? tokens.colors.brand.gold : tokens.colors.text.muted} size={12} />
+          <Users color={activeFilter === 'CIVIC' ? tokens.colors.text.inverse : tokens.colors.text.secondary} size={14} />
           <Text style={[styles.filterChipText, activeFilter === 'CIVIC' && styles.filterChipTextActive]}>
-            Civic Feeds ({civicBulletins.length})
+            Community ({civicBulletins.length})
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={tokens.colors.brand.gold} />
-          <Text style={styles.loadingText}>Connecting to National Safety Broadcast Relay...</Text>
+          <Text style={styles.loadingText}>Loading alerts…</Text>
         </View>
       ) : totalBulletinsCount === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconCircle}>
             <ShieldAlert color={tokens.colors.text.muted} size={36} />
           </View>
-          <Text style={styles.emptyTitle}>No Active Safety Bulletins</Text>
+          <Text style={styles.emptyTitle}>No active alerts right now</Text>
           <Text style={styles.emptySub}>
-            There are currently no active emergency broadcasts or road hazard feeds in your district.
+            There are no emergency alerts or community warnings for your area at the moment.
           </Text>
           <TouchableOpacity
             onPress={handleRefresh}
@@ -595,7 +582,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
             accessibilityRole="button"
             accessibilityLabel="Refresh Alert Feed"
           >
-            <Text style={styles.refreshBtnText}>Check for Updates</Text>
+            <Text style={styles.refreshBtnText}>Check for updates</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -607,10 +594,10 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               const badgeBg = isAmber ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)';
               const badgeColor = isAmber ? tokens.colors.status.amber : tokens.colors.status.danger;
               const badgeTitle = isAmber
-                ? 'CRITICAL AMBER ALERT'
+                ? 'Missing person'
                 : alertItem.type === 'RED'
-                ? 'RED EMERGENCY BROADCAST'
-                : 'CIVIL DISASTER ALERT';
+                ? 'Emergency alert'
+                : 'Disaster alert';
 
               return (
                 <View key={alertItem.id} style={[styles.amberCard, !isAmber && { borderColor: tokens.colors.status.danger }]}>
@@ -622,7 +609,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     </View>
                     <View style={styles.radiusPill}>
                       <MapPin color={tokens.colors.brand.gold} size={12} />
-                      <Text style={styles.radiusPillText}>{alertItem.radius_km || 35}km Radius</Text>
+                      <Text style={styles.radiusPillText}>Within {alertItem.radius_km || 35} km</Text>
                     </View>
                   </View>
 
@@ -637,7 +624,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     ) : (
                       <View style={styles.placeholderImageBox}>
                         <ImageIcon color={tokens.colors.text.muted} size={28} />
-                        <Text style={styles.placeholderImageText}>No Photo Provided</Text>
+                        <Text style={styles.placeholderImageText}>No photo</Text>
                       </View>
                     )}
 
@@ -647,13 +634,13 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                       </Text>
                       {alertItem.subject_age !== undefined && alertItem.subject_age !== null && (
                         <Text style={styles.subjectAgeText}>
-                          Age: {alertItem.subject_age} Years Old
+                          {alertItem.subject_age} years old
                         </Text>
                       )}
                       {alertItem.last_seen_location ? (
                         <View style={styles.lastSeenRow}>
                           <Clock color={tokens.colors.text.muted} size={12} />
-                          <Text style={styles.lastSeenText} numberOfLines={2}>
+                          <Text style={styles.lastSeenText}>
                             Last seen: {alertItem.last_seen_location}
                           </Text>
                         </View>
@@ -692,18 +679,9 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   {/* Timestamp & Expiry Row */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 6 }}>
                     <Text style={{ fontSize: 11, color: tokens.colors.text.secondary, fontFamily: 'PlusJakartaSans_500Medium' }}>
-                      🕒 Issued: {new Date(alertItem.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {new Date(alertItem.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      Issued {new Date(alertItem.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {new Date(alertItem.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                   </View>
-
-                  {/* Broadcast Area */}
-                  {alertItem.last_seen_location ? (
-                    <View style={styles.broadcastGpsBox}>
-                      <Text style={styles.broadcastGpsText}>
-                        📍 Target Area: {alertItem.last_seen_location}
-                      </Text>
-                    </View>
-                  ) : null}
 
                   {/* Action Button */}
                   <TouchableOpacity
@@ -712,8 +690,8 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     accessibilityRole="button"
                     accessibilityLabel={`Send Sighting Tip for ${alertItem.subject_name || alertItem.title}`}
                   >
-                    <Eye color={tokens.colors.text.white} size={18} />
-                    <Text style={styles.sightingBtnText}>Send Sighting Tip to Police</Text>
+                    <Eye color={tokens.colors.text.inverse} size={20} />
+                    <Text style={styles.sightingBtnText}>I've seen this person</Text>
                   </TouchableOpacity>
                 </View>
               );
@@ -741,12 +719,12 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     <View style={styles.civicBadgeGroup}>
                       <Text style={styles.trackingCodePill}>{bulletin.tracking_code}</Text>
                       <View style={styles.agencyPill}>
-                        <Text style={styles.agencyPillText}>🚔 {agencyLabel}</Text>
+                        <Text style={styles.agencyPillText}>{CATEGORY_NAMES[bulletin.category] || agencyLabel}</Text>
                       </View>
                     </View>
                     <View style={styles.verifiedPill}>
-                      <CheckCircle2 color={tokens.colors.status.success} size={12} />
-                      <Text style={styles.verifiedPillText}>Verified Hazard</Text>
+                      <CheckCircle2 color={tokens.colors.text.emerald} size={12} />
+                      <Text style={styles.verifiedPillText}>Reviewed by officers</Text>
                     </View>
                   </View>
 
@@ -754,7 +732,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   <View style={{ gap: 4 }}>
                     <Text style={styles.civicTitle}>{bulletin.title}</Text>
                     <Text style={{ fontSize: 11, color: tokens.colors.text.secondary, fontFamily: 'PlusJakartaSans_500Medium', marginTop: -2, marginBottom: 2 }}>
-                      🕒 {new Date(bulletin.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {new Date(bulletin.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(bulletin.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • {new Date(bulletin.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                     <Text style={styles.civicDescription}>{bulletin.description}</Text>
                   </View>
@@ -777,14 +755,14 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                       style={styles.evidenceMediaCard}
                       activeOpacity={0.85}
                       accessibilityRole="button"
-                      accessibilityLabel={bulletinMedia.isVideo ? 'Watch verified video evidence' : 'View verified photo evidence'}
+                      accessibilityLabel={bulletinMedia.isVideo ? 'Play video' : 'View photo'}
                     >
                       {bulletinMedia.isVideo ? (
                         <View style={styles.evidenceVideoPlaceholder}>
                           <View style={styles.evidenceBadgeRow}>
                             <View style={styles.verifiedMediaBadge}>
                               <ShieldCheck color={tokens.colors.status.success} size={12} />
-                              <Text style={styles.verifiedMediaBadgeText}>POLICE VERIFIED EVIDENCE VIDEO</Text>
+                              <Text style={styles.verifiedMediaBadgeText}>VIDEO</Text>
                             </View>
                             <View style={styles.durationBadge}>
                               <Clock color={tokens.colors.brand.gold} size={10} />
@@ -796,17 +774,9 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                             <View style={styles.playCircle}>
                               <Play color={tokens.colors.bg.base} size={20} fill={tokens.colors.bg.base} style={{ marginLeft: 2 }} />
                             </View>
-                            <Text style={styles.watchVideoPrompt}>Tap to Stream Verified Warning Footage</Text>
+                            <Text style={styles.watchVideoPrompt}>Tap to play</Text>
                           </View>
 
-                          {bulletinMedia.sha && (
-                            <View style={styles.hashFooter}>
-                              <Lock color={tokens.colors.text.muted} size={10} />
-                              <Text style={styles.hashFooterText} numberOfLines={1}>
-                                SHA-256: {bulletinMedia.sha.substring(0, 16)}… (Act 772 Sealed)
-                              </Text>
-                            </View>
-                          )}
                         </View>
                       ) : (
                         <View style={styles.evidenceImageContainer}>
@@ -818,7 +788,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                           <View style={styles.evidenceBadgeRowAbsolute}>
                             <View style={styles.verifiedMediaBadge}>
                               <ShieldCheck color={tokens.colors.status.success} size={12} />
-                              <Text style={styles.verifiedMediaBadgeText}>POLICE VERIFIED EVIDENCE PHOTO</Text>
+                              <Text style={styles.verifiedMediaBadgeText}>PHOTO</Text>
                             </View>
                           </View>
                         </View>
@@ -829,8 +799,8 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   {/* Location & GPS Landmark */}
                   <View style={styles.civicLocationBox}>
                     <MapPin color={tokens.colors.brand.gold} size={14} />
-                    <Text style={styles.civicLocationText} numberOfLines={2}>
-                      {bulletin.location_name} {bulletin.ghanapost_code ? `(${bulletin.ghanapost_code})` : ''} • {bulletin.region}
+                    <Text style={styles.civicLocationText}>
+                      {[bulletin.location_name, bulletin.region].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
 
@@ -841,11 +811,11 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                       style={[styles.corroborateBtn, isCorroborated && styles.corroborateBtnActive]}
                       activeOpacity={0.8}
                       accessibilityRole="button"
-                      accessibilityLabel="Corroborate this hazard"
+                      accessibilityLabel="Confirm I saw this too"
                     >
-                      <ThumbsUp color={isCorroborated ? tokens.colors.status.success : tokens.colors.text.white} size={15} />
-                      <Text style={[styles.corroborateBtnText, isCorroborated && { color: tokens.colors.status.success }]}>
-                        {isCorroborated ? 'Confirmed' : 'Confirm'} ({bulletin.public_corroborations || 0})
+                      <ThumbsUp color={isCorroborated ? tokens.colors.text.emerald : tokens.colors.text.primary} size={16} />
+                      <Text style={[styles.corroborateBtnText, isCorroborated && { color: tokens.colors.text.emerald }]}>
+                        {isCorroborated ? 'You confirmed this' : 'Confirm I saw this too'} ({bulletin.public_corroborations || 0})
                       </Text>
                     </TouchableOpacity>
 
@@ -854,10 +824,10 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                       style={styles.appealBtn}
                       activeOpacity={0.8}
                       accessibilityRole="button"
-                      accessibilityLabel="File statutory takedown appeal under Act 843"
+                      accessibilityLabel="Request removal of this post under the Data Protection Act"
                     >
-                      <Flag color="#F87171" size={14} />
-                      <Text style={styles.appealBtnText}>Appeal (Act 843)</Text>
+                      <Flag color={tokens.colors.text.crimson} size={14} />
+                      <Text style={styles.appealBtnText}>Request removal</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -892,7 +862,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               <View style={styles.modalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
                   <ShieldAlert color={tokens.colors.status.warning} size={20} />
-                  <Text style={styles.modalTitle}>Sighting Intelligence</Text>
+                  <Text style={styles.modalTitle}>Report a sighting</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setIsTipModalOpen(false)}
@@ -905,7 +875,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               </View>
 
               <View style={styles.modalTargetBox}>
-                <Text style={styles.modalTargetLabel}>EMERGENCY ALERT TARGET:</Text>
+                <Text style={styles.modalTargetLabel}>ALERT</Text>
                 <Text style={styles.modalTargetName}>
                   {selectedAlert?.subject_name || selectedAlert?.title}
                 </Text>
@@ -938,7 +908,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
                     <Send color={tokens.colors.text.white} size={16} />
-                    <Text style={styles.sightingSubmitBtnText}>Transmit Sighting to Police</Text>
+                    <Text style={styles.sightingSubmitBtnText}>Send sighting</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -963,7 +933,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   <Text style={styles.trackingCodePill}>{selectedMediaItem?.trackingCode}</Text>
                   <View style={styles.verifiedMediaBadge}>
                     <ShieldCheck color={tokens.colors.status.success} size={12} />
-                    <Text style={styles.verifiedMediaBadgeText}>POLICE VERIFIED EVIDENCE</Text>
+                    <Text style={styles.verifiedMediaBadgeText}>PUBLISHED MEDIA</Text>
                   </View>
                 </View>
                 <Text style={styles.mediaModalTitle} numberOfLines={1}>
@@ -986,7 +956,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                 <View style={styles.videoPlayerBox}>
                   <View style={styles.videoHeaderRow}>
                     <Video color={tokens.colors.brand.gold} size={16} />
-                    <Text style={styles.videoPlayerTitle}>CitizenAlert In-App Player</Text>
+                    <Text style={styles.videoPlayerTitle}>Video</Text>
                     {selectedMediaItem.duration ? (
                       <Text style={styles.videoDurationPill}>{selectedMediaItem.duration}s clip</Text>
                     ) : null}
@@ -1019,14 +989,14 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               <View style={styles.mediaFooterRow}>
                 <MapPin color={tokens.colors.brand.gold} size={12} />
                 <Text style={styles.mediaFooterLocationText} numberOfLines={1}>
-                  {selectedMediaItem?.location || 'Verified Incident Location'}
+                  {selectedMediaItem?.location || 'Location not provided'}
                 </Text>
               </View>
               {selectedMediaItem?.sha ? (
                 <View style={styles.mediaFooterRow}>
                   <Lock color={tokens.colors.status.success} size={12} />
                   <Text style={styles.mediaFooterShaText} numberOfLines={1}>
-                    SHA-256: {selectedMediaItem.sha}
+                    File fingerprint: {selectedMediaItem.sha}
                   </Text>
                 </View>
               ) : null}
@@ -1051,7 +1021,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               <View style={styles.modalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
                   <Scale color={tokens.colors.status.danger} size={20} />
-                  <Text style={styles.modalTitle}>File Takedown Appeal</Text>
+                  <Text style={styles.modalTitle}>Request removal</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setIsAppealModalOpen(false)}
@@ -1064,7 +1034,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               </View>
 
               <View style={styles.modalTargetBox}>
-                <Text style={styles.modalTargetLabel}>BULLETIN REFERENCE (ACT 843):</Text>
+                <Text style={styles.modalTargetLabel}>POST REFERENCE</Text>
                 <Text style={styles.modalTargetName}>
                   {selectedAppealBulletin?.tracking_code} • {selectedAppealBulletin?.title}
                 </Text>
@@ -1077,7 +1047,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               {appealSuccess ? (
                 <View style={styles.appealSuccessBox}>
                   <CheckCircle2 color={tokens.colors.status.success} size={28} />
-                  <Text style={styles.appealSuccessTitle}>Statutory Appeal Lodged</Text>
+                  <Text style={styles.appealSuccessTitle}>Request sent</Text>
                   <Text style={styles.appealSuccessSub}>
                     Our Data Protection Officer and Police CAD team will review this bulletin within the 24-hour statutory SLA.
                   </Text>
@@ -1085,7 +1055,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
               ) : (
                 <>
                   <View style={{ gap: 4 }}>
-                    <Text style={styles.fieldLabel}>Your Full Name / Legal Entity *</Text>
+                    <Text style={styles.fieldLabel}>Your full name *</Text>
                     <TextInput
                       style={styles.inputSingle}
                       placeholder="e.g. Kwame Mensah or Legal Counsel"
@@ -1096,7 +1066,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   </View>
 
                   <View style={{ gap: 4 }}>
-                    <Text style={styles.fieldLabel}>Phone Number or Email *</Text>
+                    <Text style={styles.fieldLabel}>Phone number or email *</Text>
                     <TextInput
                       style={styles.inputSingle}
                       placeholder="e.g. 0244123456 or name@gmail.com"
@@ -1109,7 +1079,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                   </View>
 
                   <View style={{ gap: 4 }}>
-                    <Text style={styles.fieldLabel}>Reason for Appeal / Takedown Request *</Text>
+                    <Text style={styles.fieldLabel}>Why should this be removed? *</Text>
                     <TextInput
                       style={[styles.input, { height: 85, textAlignVertical: 'top' }]}
                       placeholder="Describe mistaken identity, unblurred faces, privacy infringement, or defamation..."
@@ -1134,7 +1104,7 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
                     ) : (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
                         <Send color={tokens.colors.text.white} size={15} />
-                        <Text style={styles.appealSubmitBtnText}>Submit Statutory Appeal (Act 843)</Text>
+                        <Text style={styles.appealSubmitBtnText}>Send removal request</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -1149,6 +1119,9 @@ export const AmberAlertsScreen: React.FC<AmberAlertsScreenProps> = memo(({
 });
 
 const styles = StyleSheet.create({
+  locationHeader: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.md, backgroundColor: tokens.colors.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg },
+  locationHeaderTitle: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg, lineHeight: 24, fontFamily: tokens.typography.fontFamily.sansBold },
+  locationHeaderSub: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansRegular },
   section: {
     gap: tokens.spacing.md,
     paddingBottom: tokens.spacing.xl
@@ -1187,43 +1160,13 @@ const styles = StyleSheet.create({
     lineHeight: tokens.typography.lineHeight.xs,
     flex: 1
   },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: tokens.spacing.xs
-  },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: tokens.radius.full,
-    backgroundColor: tokens.colors.surface.card,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
-  filterChipActive: {
-    backgroundColor: tokens.colors.police.dark,
-    borderColor: tokens.colors.police.badge
-  },
-  filterChipActiveAmber: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    borderColor: tokens.colors.status.amber
-  },
-  filterChipActiveCivic: {
-    backgroundColor: 'rgba(252, 209, 22, 0.15)',
-    borderColor: tokens.colors.brand.gold
-  },
-  filterChipText: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '700'
-  },
-  filterChipTextActive: {
-    color: tokens.colors.text.white,
-    fontWeight: '900'
-  },
+  filterRow: { flexDirection: 'row', gap: tokens.spacing.sm, paddingRight: tokens.spacing.lg },
+  filterChip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: tokens.spacing.md, borderRadius: tokens.radius.full, backgroundColor: tokens.colors.surface.card },
+  filterChipActive: { backgroundColor: tokens.colors.brand.gold },
+  filterChipActiveAmber: { backgroundColor: tokens.colors.brand.gold },
+  filterChipActiveCivic: { backgroundColor: tokens.colors.brand.gold },
+  filterChipText: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansMedium },
+  filterChipTextActive: { color: tokens.colors.text.inverse },
   loadingContainer: {
     padding: tokens.spacing.xxl,
     alignItems: 'center',
@@ -1234,17 +1177,7 @@ const styles = StyleSheet.create({
     color: tokens.colors.text.secondary,
     fontSize: tokens.typography.fontSize.xs
   },
-  emptyContainer: {
-    backgroundColor: tokens.colors.surface.card,
-    borderRadius: tokens.radius.xl,
-    padding: tokens.spacing.xxl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing.sm,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    marginTop: tokens.spacing.sm
-  },
+  emptyContainer: { alignItems: 'center', gap: tokens.spacing.md, backgroundColor: tokens.colors.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.xxl },
   emptyIconCircle: {
     width: 64,
     height: 64,
@@ -1254,97 +1187,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: tokens.spacing.xs
   },
-  emptyTitle: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.md,
-    fontWeight: '800'
-  },
-  emptySub: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xs,
-    textAlign: 'center',
-    lineHeight: tokens.typography.lineHeight.sm,
-    maxWidth: 280
-  },
-  refreshBtn: {
-    marginTop: tokens.spacing.sm,
-    paddingVertical: tokens.spacing.sm,
-    paddingHorizontal: tokens.spacing.lg,
-    backgroundColor: tokens.colors.bg.base,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: tokens.colors.brand.gold
-  },
-  refreshBtnText: {
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
-  amberCard: {
-    backgroundColor: tokens.colors.surface.card,
-    borderRadius: tokens.radius.xl,
-    borderWidth: 1,
-    borderColor: tokens.colors.status.warning,
-    padding: tokens.spacing.md,
-    gap: tokens.spacing.md
-  },
+  emptyTitle: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.xl, fontFamily: tokens.typography.fontFamily.sansBold, textAlign: 'center' },
+  emptySub: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: tokens.typography.fontFamily.sansRegular, textAlign: 'center' },
+  refreshBtn: { minHeight: tokens.touchTarget.minHeight, paddingHorizontal: tokens.spacing.xl, borderRadius: tokens.radius.md, backgroundColor: tokens.colors.brand.gold, alignItems: 'center', justifyContent: 'center' },
+  refreshBtnText: { color: tokens.colors.text.inverse, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansBold },
+  amberCard: { backgroundColor: tokens.colors.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg, gap: tokens.spacing.md, borderTopWidth: 4, borderTopColor: tokens.colors.sos.container },
   amberBadgeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-  amberPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: tokens.spacing.xs,
-    paddingVertical: 4,
-    paddingHorizontal: tokens.spacing.sm,
-    borderRadius: tokens.radius.sm
-  },
-  amberPillText: {
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: '900',
-    letterSpacing: 0.5
-  },
-  radiusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: tokens.colors.bg.base,
-    paddingVertical: 4,
-    paddingHorizontal: tokens.spacing.sm,
-    borderRadius: tokens.radius.sm,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
-  radiusPillText: {
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: 'bold'
-  },
+  amberPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: tokens.radius.full },
+  amberPillText: { fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.monoBold, textTransform: 'uppercase' },
+  radiusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: tokens.radius.full, backgroundColor: tokens.colors.surface.cardHover },
+  radiusPillText: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.mono },
   identityRow: {
     flexDirection: 'row',
     gap: tokens.spacing.md,
     alignItems: 'center'
   },
-  subjectImage: {
-    width: 80,
-    height: 80,
-    borderRadius: tokens.radius.lg,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
-  placeholderImageBox: {
-    width: 80,
-    height: 80,
-    borderRadius: tokens.radius.lg,
-    backgroundColor: tokens.colors.bg.base,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 4
-  },
+  subjectImage: { width: 96, height: 112, borderRadius: tokens.radius.md, backgroundColor: tokens.colors.surface.cardHover },
+  placeholderImageBox: { width: 96, height: 112, borderRadius: tokens.radius.md, backgroundColor: tokens.colors.surface.cardHover, alignItems: 'center', justifyContent: 'center', gap: 4 },
   placeholderImageText: {
     color: tokens.colors.text.muted,
     fontSize: 8,
@@ -1355,11 +1218,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2
   },
-  amberSubject: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.md,
-    fontWeight: '800'
-  },
+  amberSubject: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.xl, lineHeight: 28, fontFamily: tokens.typography.fontFamily.sansBold },
   subjectAgeText: {
     color: tokens.colors.brand.gold,
     fontSize: tokens.typography.fontSize.xs,
@@ -1371,30 +1230,14 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 2
   },
-  lastSeenText: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    flex: 1
-  },
-  detailsBox: {
-    gap: tokens.spacing.sm,
-    backgroundColor: tokens.colors.bg.base,
-    padding: tokens.spacing.md,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
+  lastSeenText: { flex: 1, color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: tokens.typography.fontFamily.sansRegular },
+  detailsBox: { gap: tokens.spacing.sm, backgroundColor: tokens.colors.bg.subtle, borderRadius: tokens.radius.md, padding: tokens.spacing.md },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: tokens.spacing.sm
   },
-  detailText: {
-    color: tokens.colors.text.primary,
-    fontSize: tokens.typography.fontSize.xs,
-    lineHeight: tokens.typography.lineHeight.sm,
-    flex: 1
-  },
+  detailText: { flex: 1, color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: tokens.typography.fontFamily.sansRegular },
   broadcastGpsBox: {
     backgroundColor: 'rgba(252, 209, 22, 0.08)',
     padding: tokens.spacing.sm,
@@ -1406,30 +1249,11 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.monoBold,
     fontWeight: 'bold'
   },
-  sightingBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing.sm,
-    backgroundColor: tokens.colors.status.amber,
-    minHeight: tokens.touchTarget.minHeight,
-    borderRadius: tokens.radius.lg
-  },
-  sightingBtnText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.sm,
-    fontWeight: 'bold'
-  },
+  sightingBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.primaryButton, borderRadius: tokens.radius.lg, backgroundColor: tokens.colors.brand.gold },
+  sightingBtnText: { color: tokens.colors.text.inverse, fontSize: tokens.typography.fontSize.lg, fontFamily: tokens.typography.fontFamily.sansBold },
 
   /* Civic Bulletin Cards */
-  civicCard: {
-    backgroundColor: tokens.colors.surface.card,
-    borderRadius: tokens.radius.xl,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    padding: tokens.spacing.md,
-    gap: tokens.spacing.md
-  },
+  civicCard: { backgroundColor: tokens.colors.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg, gap: tokens.spacing.md },
   civicHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1440,98 +1264,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6
   },
-  trackingCodePill: {
-    backgroundColor: tokens.colors.bg.base,
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontFamily: tokens.typography.fontFamily.monoBold,
-    fontWeight: 'bold',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
-  agencyPill: {
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4
-  },
-  agencyPillText: {
-    color: tokens.colors.police.badge,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: '800'
-  },
-  verifiedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4
-  },
-  verifiedPillText: {
-    color: tokens.colors.status.success,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: 'bold'
-  },
-  civicTitle: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.sm,
-    fontWeight: '800'
-  },
-  civicDescription: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    lineHeight: tokens.typography.lineHeight.xs
-  },
-  civicLocationBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: tokens.colors.bg.base,
-    padding: tokens.spacing.sm,
-    borderRadius: tokens.radius.sm
-  },
-  civicLocationText: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    flex: 1
-  },
+  trackingCodePill: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.mono },
+  agencyPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: tokens.radius.full, backgroundColor: tokens.colors.brand.gold },
+  agencyPillText: { color: tokens.colors.text.inverse, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.monoBold },
+  verifiedPill: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  verifiedPillText: { color: tokens.colors.text.emerald, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.sansMedium },
+  civicTitle: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.xl, lineHeight: 28, fontFamily: tokens.typography.fontFamily.sansBold },
+  civicDescription: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: tokens.typography.fontFamily.sansRegular },
+  civicLocationBox: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.spacing.sm },
+  civicLocationText: { flex: 1, color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm, lineHeight: 18, fontFamily: tokens.typography.fontFamily.mono },
   civicActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: tokens.spacing.sm
   },
-  corroborateBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: tokens.colors.police.dark,
-    borderWidth: 1,
-    borderColor: tokens.colors.police.badge,
-    minHeight: 38,
-    borderRadius: tokens.radius.md
-  },
+  corroborateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.minHeight, paddingHorizontal: tokens.spacing.md, borderRadius: tokens.radius.md, backgroundColor: tokens.colors.surface.cardHover },
   corroborateBtnActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
     borderColor: tokens.colors.status.success
   },
-  corroborateBtnText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '800'
-  },
-  shareBtn: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: tokens.colors.bg.base,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
-  },
+  corroborateBtnText: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sans },
+  shareBtn: { width: tokens.touchTarget.minWidth, height: tokens.touchTarget.minHeight, borderRadius: tokens.radius.md, backgroundColor: tokens.colors.surface.cardHover, alignItems: 'center', justifyContent: 'center' },
 
   /* Modal Styles */
   modalBackdrop: {
@@ -1857,23 +1610,8 @@ const styles = StyleSheet.create({
   },
 
   /* Statutory Appeal Button & Modal Styles (Act 843) */
-  appealBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    minHeight: 38,
-    paddingHorizontal: tokens.spacing.sm,
-    borderRadius: tokens.radius.md
-  },
-  appealBtnText: {
-    color: '#F87171',
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: '700'
-  },
+  appealBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: tokens.touchTarget.minHeight, paddingHorizontal: tokens.spacing.sm },
+  appealBtnText: { color: tokens.colors.text.crimson, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.sansMedium, textDecorationLine: 'underline' },
   appealSubmitBtn: {
     backgroundColor: tokens.colors.status.danger,
     minHeight: tokens.touchTarget.minHeight,

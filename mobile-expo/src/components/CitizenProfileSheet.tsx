@@ -8,7 +8,8 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
-  Image
+  Image,
+  ScrollView
 } from 'react-native';
 import {
   ShieldCheck,
@@ -79,7 +80,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   const handlePickAvatar = async () => {
     Alert.alert(
       '📸 Citizen Profile Photo',
-      'Upload a verified facial photo for identification during emergency SOS alerts and civic verification.',
+      'Add a profile photo. It is shared with responders when you send an SOS so they can recognise you.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -87,7 +88,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
           onPress: async () => {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-              Alert.alert('Permission Denied', 'Camera permission is required to capture a verification selfie.');
+              Alert.alert('Permission Denied', 'Allow camera access to take a profile photo.');
               return;
             }
             const result = await ImagePicker.launchCameraAsync({
@@ -130,8 +131,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 
   const handleSignOutPress = () => {
     Alert.alert(
-      '🔒 Sign Out & Lock App',
-      'Are you sure you want to lock the app and return to the Citizen Access Control Gateway?',
+      'Sign out?',
+      'You will return to the sign-in screen. Reports waiting to send stay on this phone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -192,21 +193,21 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 
   const handleDeleteAccountPress = () => {
     Alert.alert(
-      '⚠️ Delete Account & Purge Data?',
-      'Under the Data Protection Act, 2012 (Act 843), requesting account deletion will permanently erase your profile credentials, device tokens, and local queued reports. Any evidence already submitted will be completely anonymized under Whistleblower Act 720.\n\nAre you sure you want to proceed?',
+      'Sign out and clear this phone?',
+      'This signs you out and deletes reports that are still waiting to send on this phone.\n\nIt does not yet delete your account or reports already sent. To have those deleted, contact the CitizenAlert data protection officer through the privacy policy.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Continue to Delete',
+          text: 'Continue',
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              '🚨 Final Confirmation',
-              'This action is irreversible. Your account and all stored local session data will be permanently deleted now.',
+              'Are you sure?',
+              'Unsent reports on this phone will be deleted and cannot be recovered.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                  text: 'Permanently Delete',
+                  text: 'Sign out and clear',
                   style: 'destructive',
                   onPress: async () => {
                     try {
@@ -224,8 +225,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
                     onClose();
                     onSignOut();
                     Alert.alert(
-                      '✅ Account Deleted',
-                      'Your citizen session, credentials, and local data have been permanently purged from this device.'
+                      'Signed out',
+                      'You are signed out and unsent reports were removed from this phone.'
                     );
                   }
                 }
@@ -252,8 +253,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
                 <ShieldCheck color={tokens.colors.brand.gold} size={20} />
               </View>
               <View>
-                <Text style={styles.modalTitle}>Citizen Profile & Trust Vault</Text>
-                <Text style={styles.modalSubtitle}>Active Verified Citizen Session</Text>
+                <Text style={styles.modalTitle}>Profile</Text>
+                <Text style={styles.modalSubtitle}>{citizen.loginMethod === 'ANONYMOUS' ? 'Using CitizenAlert without an account' : 'Signed in'}</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -266,15 +267,20 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             </TouchableOpacity>
           </View>
 
+          <ScrollView
+            contentContainerStyle={{ gap: tokens.spacing.md, paddingBottom: tokens.spacing.xl }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           {/* Trust Score Meter Card */}
           <View style={styles.trustScoreCard}>
             <View style={styles.trustScoreHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
                 <Award color={tokens.colors.brand.gold} size={18} />
-                <Text style={styles.trustScoreLabel}>CIVIC TRUST RATING</Text>
+                <Text style={styles.trustScoreLabel}>Civic trust</Text>
               </View>
               <View style={styles.trustPill}>
-                <Text style={styles.trustPillText}>{citizen.trustScore}/100 TRUST</Text>
+                <Text style={styles.trustPillText}>{citizen.trustScore}%</Text>
               </View>
             </View>
 
@@ -282,7 +288,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               <View style={[styles.trustBarFill, { width: `${citizen.trustScore}%` }]} />
             </View>
             <Text style={styles.trustExplainer}>
-              Civic Trust starts at 0%. Earn +5% once every 24h by submitting reports, and an additional +5% when verified & published by authorities. Reports rejected as false lose 5%.
+              Trust starts at 0%. You earn +5% once a day when you send a report with your name, and more when officers confirm a report. Reports found to be false lose 5%.
             </Text>
           </View>
 
@@ -310,15 +316,9 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               <View style={{ flex: 1 }}>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailName}>{citizen.name}</Text>
-                  {citizen.isVerified && (
-                    <View style={styles.verifiedBadge}>
-                      <ShieldCheck color={tokens.colors.status.success} size={12} />
-                      <Text style={styles.verifiedText}>Verified</Text>
-                    </View>
-                  )}
                 </View>
                 <Text style={styles.avatarTipText}>
-                  {citizen.avatarUrl ? 'Profile face linked • Transmitted on SOS' : 'Tap to add face for SOS facial identification'}
+                  {citizen.avatarUrl ? 'Shared with responders when you send an SOS' : 'Tap to add a photo responders can recognise you by'}
                 </Text>
               </View>
             </View>
@@ -371,7 +371,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
                 <Phone color={tokens.colors.brand.gold} size={14} />
                 <Text style={styles.infoText}>{citizen.phone}</Text>
                 <View style={styles.act843MiniBadge}>
-                  <Text style={styles.act843MiniBadgeText}>Act 843 SOS Linked</Text>
+                  <Text style={styles.act843MiniBadgeText}>SOS callback</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => {
@@ -399,7 +399,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                   <Phone color={tokens.colors.status.warning} size={14} />
                   <Text style={styles.addPhoneAlertBannerText}>
-                    + Link Phone for SOS & Carrier Triangulation (Act 843)
+                    + Add a phone number for SOS callbacks
                   </Text>
                 </View>
                 <Plus color={tokens.colors.status.warning} size={14} />
@@ -416,7 +416,7 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             ) : null}
 
             <Text style={styles.authProviderText}>
-              Auth: {citizen.loginMethod} • Whistleblower Act 720 Immunity Active
+              Signed in with {citizen.loginMethod === 'GOOGLE' ? 'Google' : citizen.loginMethod === 'EMAIL' ? 'email' : citizen.loginMethod === 'PHONE' ? 'phone' : 'no account'}
             </Text>
           </View>
 
@@ -426,10 +426,10 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               const nextAnonymous = !isAnonymous;
               onToggleAnonymous(nextAnonymous);
               Alert.alert(
-                nextAnonymous ? '🛡️ Whistleblower Mode Activated' : '🇬🇭 Verified Citizen Mode Activated',
+                nextAnonymous ? 'Anonymous reporting on' : 'Anonymous reporting off',
                 nextAnonymous
-                  ? 'All personal details and phone numbers will be stripped from your incident transmissions under Act 720.'
-                  : 'Transmissions will include your verified contact details for expedited police follow-up.'
+                  ? 'Your name and phone number will not be sent with your reports.'
+                  : 'Your reports will include your name and phone number so an officer can follow up.'
               );
             }}
             style={[
@@ -437,7 +437,8 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               isAnonymous ? styles.whistleblowerActive : styles.whistleblowerInactive
             ]}
             accessibilityRole="switch"
-            accessibilityLabel="Toggle Whistleblower Mode"
+            accessibilityLabel="Report anonymously"
+            accessibilityState={{ checked: isAnonymous }}
           >
             {isAnonymous ? (
               <ShieldAlert color={tokens.colors.text.white} size={16} />
@@ -445,13 +446,13 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
               <ShieldCheck color={tokens.colors.text.secondary} size={16} />
             )}
             <Text style={styles.whistleblowerBtnText}>
-              {isAnonymous ? 'Anonymous Whistleblower: ACTIVE' : 'Enable Anonymous Whistleblower Mode'}
+              {isAnonymous ? 'Report anonymously: on' : 'Report anonymously: off'}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>SESSION ACTIONS</Text>
+            <Text style={styles.dividerText}>SETTINGS</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -486,10 +487,10 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             onPress={handleOpenPrivacyPolicy}
             style={styles.privacyLinkBtn}
             accessibilityRole="button"
-            accessibilityLabel="View Data Protection & Privacy Policy"
+            accessibilityLabel="Privacy policy and your data rights"
           >
             <ExternalLink color={tokens.colors.brand.gold} size={14} />
-            <Text style={styles.privacyLinkText}>Statutory Privacy Policy (Act 843)</Text>
+            <Text style={styles.privacyLinkText}>Privacy policy & your data rights</Text>
           </TouchableOpacity>
 
           {/* Sign Out Button */}
@@ -497,10 +498,10 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             onPress={handleSignOutPress}
             style={styles.signOutBtn}
             accessibilityRole="button"
-            accessibilityLabel="Sign Out and Lock App"
+            accessibilityLabel="Sign out"
           >
             <LogOut color={tokens.colors.text.white} size={16} />
-            <Text style={styles.signOutBtnText}>Sign Out & Lock App</Text>
+            <Text style={styles.signOutBtnText}>Sign out</Text>
           </TouchableOpacity>
 
           {/* Delete Account & Purge Data Button (Apple 5.1.1(v) & Google Play Compliance) */}
@@ -508,11 +509,12 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             onPress={handleDeleteAccountPress}
             style={styles.deleteAccountBtn}
             accessibilityRole="button"
-            accessibilityLabel="Permanently Delete Citizen Account and Purge Data"
+            accessibilityLabel="Sign out and clear this phone"
           >
-            <Trash2 color={tokens.colors.status.danger} size={15} />
-            <Text style={styles.deleteAccountBtnText}>Delete Account & Purge Data</Text>
+            <Trash2 color={tokens.colors.text.crimson} size={16} />
+            <Text style={styles.deleteAccountBtnText}>Sign out and clear this phone</Text>
           </TouchableOpacity>
+          </ScrollView>
         </View>
       </View>
 
@@ -526,112 +528,22 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
 });
 
 const styles = StyleSheet.create({
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: tokens.colors.bg.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: tokens.spacing.lg
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: tokens.colors.surface.card,
-    borderRadius: tokens.radius.xl,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.medium,
-    padding: tokens.spacing.lg,
-    gap: tokens.spacing.md
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  shieldIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: tokens.radius.md,
-    backgroundColor: tokens.colors.bg.base,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: tokens.colors.brand.gold
-  },
-  modalTitle: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.lg,
-    fontWeight: '800'
-  },
-  modalSubtitle: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs
-  },
-  modalCloseBtn: {
-    padding: tokens.spacing.xs,
-    borderRadius: tokens.radius.sm,
-    backgroundColor: tokens.colors.border.subtle,
-    minHeight: 36,
-    minWidth: 36,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  trustScoreCard: {
-    backgroundColor: tokens.colors.bg.base,
-    borderRadius: tokens.radius.md,
-    padding: tokens.spacing.md,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    gap: tokens.spacing.xs
-  },
-  trustScoreHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  trustScoreLabel: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: 'bold',
-    letterSpacing: 0.5
-  },
-  trustPill: {
-    backgroundColor: tokens.colors.status.success,
-    paddingHorizontal: tokens.spacing.sm,
-    paddingVertical: 2,
-    borderRadius: tokens.radius.xs
-  },
-  trustPillText: {
-    color: tokens.colors.bg.base,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: '900'
-  },
-  trustBarTrack: {
-    height: 6,
-    backgroundColor: tokens.colors.border.subtle,
-    borderRadius: tokens.radius.xs,
-    overflow: 'hidden',
-    marginTop: tokens.spacing.xs
-  },
-  trustBarFill: {
-    height: '100%',
-    backgroundColor: tokens.colors.status.success,
-    borderRadius: tokens.radius.xs
-  },
-  trustExplainer: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    lineHeight: tokens.typography.lineHeight.xxs,
-    marginTop: 2
-  },
-  profileOverview: {
-    backgroundColor: tokens.colors.bg.base,
-    padding: tokens.spacing.md,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    gap: tokens.spacing.xs
-  },
+  modalBackdrop: { flex: 1, backgroundColor: tokens.colors.bg.overlay, justifyContent: 'flex-end' },
+  modalCard: { maxHeight: '92%', backgroundColor: tokens.colors.bg.base, borderTopLeftRadius: tokens.radius.xl, borderTopRightRadius: tokens.radius.xl, padding: tokens.spacing.lg, gap: tokens.spacing.md },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  shieldIconWrapper: { width: 40, height: 40, borderRadius: 20, backgroundColor: tokens.colors.surface.cardHover, alignItems: 'center', justifyContent: 'center' },
+  modalTitle: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.xl, fontFamily: tokens.typography.fontFamily.sansBold },
+  modalSubtitle: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansRegular },
+  modalCloseBtn: { width: tokens.touchTarget.minWidth, height: tokens.touchTarget.minHeight, borderRadius: tokens.touchTarget.minHeight / 2, backgroundColor: tokens.colors.surface.cardHover, alignItems: 'center', justifyContent: 'center' },
+  trustScoreCard: { backgroundColor: tokens.colors.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg, gap: tokens.spacing.sm },
+  trustScoreHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  trustScoreLabel: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: tokens.typography.fontFamily.sans },
+  trustPill: { backgroundColor: tokens.colors.brand.goldMuted, borderRadius: tokens.radius.full, paddingHorizontal: 10, paddingVertical: 4 },
+  trustPillText: { color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.monoBold },
+  trustBarTrack: { height: 8, borderRadius: 4, backgroundColor: tokens.colors.surface.highest, overflow: 'hidden' },
+  trustBarFill: { height: 8, borderRadius: 4, backgroundColor: tokens.colors.brand.gold },
+  trustExplainer: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: tokens.typography.fontFamily.sansRegular },
+  profileOverview: { backgroundColor: tokens.colors.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg, gap: tokens.spacing.md },
   avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -676,22 +588,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  avatarTipText: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    marginTop: 2
-  },
+  avatarTipText: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm, lineHeight: 18, fontFamily: tokens.typography.fontFamily.sansRegular },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: tokens.spacing.xxs
   },
-  detailName: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.lg,
-    fontWeight: '800'
-  },
+  detailName: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: tokens.typography.fontFamily.sansBold },
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -706,42 +610,13 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold'
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: tokens.spacing.xs
-  },
-  infoText: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs
-  },
-  authProviderText: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    marginTop: tokens.spacing.xs
-  },
-  whistleblowerToggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing.sm,
-    minHeight: tokens.touchTarget.minHeight,
-    borderRadius: tokens.radius.lg,
-    borderWidth: 1
-  },
-  whistleblowerActive: {
-    backgroundColor: tokens.colors.brand.green,
-    borderColor: tokens.colors.status.success
-  },
-  whistleblowerInactive: {
-    backgroundColor: tokens.colors.border.subtle,
-    borderColor: tokens.colors.border.medium
-  },
-  whistleblowerBtnText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, minHeight: 32 },
+  infoText: { flex: 1, color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansRegular },
+  authProviderText: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.mono },
+  whistleblowerToggleBtn: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.primaryButton, paddingHorizontal: tokens.spacing.lg, borderRadius: tokens.radius.lg },
+  whistleblowerActive: { backgroundColor: tokens.colors.status.successDark },
+  whistleblowerInactive: { backgroundColor: tokens.colors.surface.card },
+  whistleblowerBtnText: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: tokens.typography.fontFamily.sans },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -752,12 +627,7 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: tokens.colors.border.medium
   },
-  dividerText: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: 'bold',
-    letterSpacing: 0.5
-  },
+  dividerText: { color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: tokens.typography.fontFamily.mono, letterSpacing: 0.5 },
   languageBox: {
     backgroundColor: tokens.colors.surface.card,
     borderRadius: tokens.radius.lg,
@@ -794,50 +664,12 @@ const styles = StyleSheet.create({
   languageChipTextActive: {
     color: tokens.colors.text.inverse
   },
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing.sm,
-    backgroundColor: tokens.colors.status.emergency,
-    minHeight: tokens.touchTarget.minHeight,
-    borderRadius: tokens.radius.lg
-  },
-  signOutBtnText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.sm,
-    fontWeight: 'bold'
-  },
-  privacyLinkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing.xs,
-    paddingVertical: tokens.spacing.xs
-  },
-  privacyLinkText: {
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: '600',
-    textDecorationLine: 'underline'
-  },
-  deleteAccountBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing.sm,
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    minHeight: 40,
-    borderRadius: tokens.radius.lg,
-    marginTop: tokens.spacing.xs
-  },
-  deleteAccountBtnText: {
-    color: tokens.colors.status.danger,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.primaryButton, borderRadius: tokens.radius.lg, backgroundColor: tokens.colors.surface.cardHover },
+  signOutBtnText: { color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: tokens.typography.fontFamily.sans },
+  privacyLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.minHeight },
+  privacyLinkText: { color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sans, textDecorationLine: 'underline' },
+  deleteAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.minHeight, borderRadius: tokens.radius.lg },
+  deleteAccountBtnText: { color: tokens.colors.text.crimson, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sansMedium },
   act843MiniBadge: {
     backgroundColor: 'rgba(250, 204, 21, 0.12)',
     borderWidth: 1,
@@ -903,19 +735,6 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.fontSize.xxs,
     fontWeight: '700'
   },
-  addPhoneAlertBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-    borderRadius: tokens.radius.md,
-    padding: tokens.spacing.sm,
-    marginVertical: 4
-  },
-  addPhoneAlertBannerText: {
-    color: tokens.colors.status.warning,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: '700'
-  }
+  addPhoneAlertBanner: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, minHeight: tokens.touchTarget.minHeight, paddingHorizontal: tokens.spacing.md, borderRadius: tokens.radius.md, backgroundColor: tokens.colors.brand.goldMuted },
+  addPhoneAlertBannerText: { color: tokens.colors.brand.gold, fontSize: tokens.typography.fontSize.md, fontFamily: tokens.typography.fontFamily.sans }
 });

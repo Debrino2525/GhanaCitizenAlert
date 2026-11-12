@@ -396,7 +396,7 @@ function MainApp() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[styles.queueContainer, { display: activeTab === 'QUEUE' ? 'flex' : 'none' }]}>
-          <PendingReportsScreen onQueueCountChange={setPendingCount} />
+          <PendingReportsScreen onQueueCountChange={setPendingCount} isVisible={activeTab === 'QUEUE'} />
         </View>
 
         <ScrollView
