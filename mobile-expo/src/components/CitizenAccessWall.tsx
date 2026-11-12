@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Shield,
@@ -566,13 +567,17 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       }
 
       // Step B: WebBrowser OAuth (Supports Expo Go, Web, and universal deep links)
-      // A path keeps the address matchable by the "/**" allow-list entries
-      // (citizenalert://auth/callback, or exp://<host>/--/auth/callback in Expo Go).
-      const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'citizenalert',
-        path: 'auth/callback',
-        preferLocalhost: false
-      });
+      // Expo Go cannot receive citizenalert:// links, so it gets an exp:// address.
+      // Both carry a path so they match the "/**" Supabase redirect allow-list
+      // entries (citizenalert://auth/callback, exp://<host>/--/auth/callback);
+      // without a path Supabase falls back to the Site URL (the officer portal).
+      const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient || (Constants as any).appOwnership === 'expo';
+      const redirectUrl = AuthSession.makeRedirectUri(
+        isExpoGo
+          ? { path: 'auth/callback', preferLocalhost: false }
+          : { scheme: 'citizenalert', path: 'auth/callback', preferLocalhost: false }
+      );
+      if (__DEV__) console.log('[OAuth] isExpoGo =', isExpoGo, '| redirectUrl =', redirectUrl);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider,

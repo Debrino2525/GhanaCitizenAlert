@@ -709,7 +709,7 @@ export const App: React.FC = () => {
             📱 Return to CitizenAlert App ➔
           </a>
           <p className="text-xs text-slate-500">
-            If the button does nothing, open the CitizenAlert app yourself.
+            If the button does nothing (for example when testing in Expo Go), switch back to the app yourself.
           </p>
         </div>
       </div>
