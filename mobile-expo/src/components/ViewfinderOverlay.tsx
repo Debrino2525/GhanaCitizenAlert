@@ -106,7 +106,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
         <View style={styles.permissionBox}>
           <Camera color={tokens.colors.brand.gold} size={40} style={{ marginBottom: tokens.spacing.sm }} />
           <Text style={styles.permissionText}>
-            Camera access enables live hardware viewfinder and evidence capture
+            Allow camera access to record video or take photos as evidence.
           </Text>
           <TouchableOpacity
             onPress={onRequestPermissions}
@@ -114,7 +114,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
             accessibilityRole="button"
             accessibilityLabel="Enable Live Viewfinder"
           >
-            <Text style={styles.permBtnText}>Enable Live Viewfinder</Text>
+            <Text style={styles.permBtnText}>Allow camera</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -174,10 +174,10 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
             ]}
           >
             {isRecording
-              ? `RECORDING (${45 - recordingSeconds}s left)`
+              ? `REC · ${45 - recordingSeconds}s left`
               : hasRecordedMedia
-              ? 'EVIDENCE HASH-LOCKED'
-              : 'HARDWARE SENSOR LIVE'}
+              ? 'Clip ready'
+              : 'Camera ready'}
           </Text>
         </View>
       </View>
@@ -186,7 +186,7 @@ export const ViewfinderOverlay: React.FC<ViewfinderOverlayProps> = memo(({
       <View style={styles.watermarkBox}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <ShieldCheck color={tokens.colors.brand.gold} size={12} />
-          <Text style={styles.watermarkGold}>FORENSIC WATERMARK (ACT 772)</Text>
+          <Text style={styles.watermarkGold}>Time & location stamp</Text>
         </View>
 
         {isLocating ? (

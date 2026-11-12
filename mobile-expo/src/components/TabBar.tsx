@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Keyboard } from 'react-native';
-import { Video, AlertTriangle, Radio, Clock } from 'lucide-react-native';
+import { Camera, Bell, Asterisk, History } from 'lucide-react-native';
 import { TabType } from '../types';
 import { tokens } from '../theme/tokens';
 
@@ -9,100 +9,87 @@ interface TabBarProps {
   onSelectTab: (tab: TabType) => void;
   pendingCount?: number;
   isSosActive?: boolean;
+  bottomInset?: number;
 }
 
-export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pendingCount = 0, isSosActive = false }) => {
+/**
+ * Bottom navigation: Report · Alerts · SOS (centre, red pill) · My Reports.
+ */
+export const TabBar: React.FC<TabBarProps> = memo(({
+  activeTab,
+  onSelectTab,
+  pendingCount = 0,
+  isSosActive = false,
+  bottomInset = 0
+}) => {
+  const select = (tab: TabType) => {
+    Keyboard.dismiss();
+    onSelectTab(tab);
+  };
+
+  const tabColor = (tab: TabType) =>
+    activeTab === tab ? tokens.colors.brand.gold : tokens.colors.text.secondary;
+
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: Math.max(bottomInset, tokens.spacing.sm) }]}>
       <TouchableOpacity
-        onPress={() => {
-          Keyboard.dismiss();
-          onSelectTab('CAPTURE');
-        }}
-        style={[styles.tabItem, activeTab === 'CAPTURE' && styles.tabItemActiveCapture]}
+        onPress={() => select('CAPTURE')}
+        style={styles.tabItem}
         accessibilityRole="tab"
-        accessibilityLabel="45s Evidence Capture"
+        accessibilityState={{ selected: activeTab === 'CAPTURE' }}
+        accessibilityLabel="Report an incident"
       >
-        <Video
-          color={activeTab === 'CAPTURE' ? tokens.colors.text.white : tokens.colors.text.secondary}
-          size={16}
-        />
-        <Text style={[styles.tabText, activeTab === 'CAPTURE' && styles.tabTextActive]}>
-          Capture
-        </Text>
+        <Camera color={tabColor('CAPTURE')} size={22} />
+        <Text style={[styles.tabText, { color: tabColor('CAPTURE') }]}>Report</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => {
-          Keyboard.dismiss();
-          onSelectTab('ALERTS');
-        }}
-        style={[styles.tabItem, activeTab === 'ALERTS' && styles.tabItemActiveAlerts]}
+        onPress={() => select('ALERTS')}
+        style={styles.tabItem}
         accessibilityRole="tab"
-        accessibilityLabel="Public Alerts & Safety Bulletins Hub"
+        accessibilityState={{ selected: activeTab === 'ALERTS' }}
+        accessibilityLabel="Safety alerts"
       >
-        <AlertTriangle
-          color={activeTab === 'ALERTS' ? tokens.colors.text.white : tokens.colors.text.secondary}
-          size={16}
-        />
-        <Text style={[styles.tabText, activeTab === 'ALERTS' && styles.tabTextActive]}>
-          Alerts
-        </Text>
+        <Bell color={tabColor('ALERTS')} size={22} />
+        <Text style={[styles.tabText, { color: tabColor('ALERTS') }]}>Alerts</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => {
-          Keyboard.dismiss();
-          onSelectTab('SOS');
-        }}
-        style={[
-          styles.tabItem,
-          activeTab === 'SOS' && styles.tabItemActiveSos,
-          isSosActive && activeTab !== 'SOS' && styles.tabItemSosBroadcasting
-        ]}
+        onPress={() => select('SOS')}
+        style={styles.tabItem}
         accessibilityRole="tab"
-        accessibilityLabel="Emergency SOS Panic Beacon"
+        accessibilityState={{ selected: activeTab === 'SOS' }}
+        accessibilityLabel={isSosActive ? 'Emergency SOS, active' : 'Emergency SOS'}
       >
-        <View style={{ position: 'relative' }}>
-          <Radio
-            color={activeTab === 'SOS' || isSosActive ? tokens.colors.text.white : tokens.colors.text.secondary}
-            size={16}
-          />
-          {isSosActive && <View style={styles.sosLiveDot} />}
-        </View>
-        <Text
+        <View
           style={[
-            styles.tabText,
-            (activeTab === 'SOS' || isSosActive) && styles.tabTextActive
+            styles.sosPill,
+            activeTab === 'SOS' && styles.sosPillSelected,
+            isSosActive && styles.sosPillLive
           ]}
         >
-          SOS{isSosActive ? ' 🔴' : ''}
-        </Text>
+          <Asterisk color={tokens.colors.text.white} size={16} strokeWidth={3} />
+          <Text style={styles.sosText}>SOS</Text>
+          {isSosActive && <View style={styles.sosLiveDot} />}
+        </View>
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => {
-          Keyboard.dismiss();
-          onSelectTab('QUEUE');
-        }}
-        style={[styles.tabItem, activeTab === 'QUEUE' && styles.tabItemActiveQueue]}
+        onPress={() => select('QUEUE')}
+        style={styles.tabItem}
         accessibilityRole="tab"
-        accessibilityLabel="Pending Uploads Queue"
+        accessibilityState={{ selected: activeTab === 'QUEUE' }}
+        accessibilityLabel={pendingCount > 0 ? `My reports, ${pendingCount} waiting to send` : 'My reports'}
       >
-        <View style={{ position: 'relative' }}>
-          <Clock
-            color={activeTab === 'QUEUE' ? tokens.colors.text.white : tokens.colors.text.secondary}
-            size={16}
-          />
+        <View>
+          <History color={tabColor('QUEUE')} size={22} />
           {pendingCount > 0 && (
             <View style={styles.badgeDot}>
               <Text style={styles.badgeText}>{pendingCount > 9 ? '9+' : pendingCount}</Text>
             </View>
           )}
         </View>
-        <Text style={[styles.tabText, activeTab === 'QUEUE' && styles.tabTextActive]}>
-          Queue
-        </Text>
+        <Text style={[styles.tabText, { color: tabColor('QUEUE') }]}>My Reports</Text>
       </TouchableOpacity>
     </View>
   );
@@ -111,77 +98,69 @@ export const TabBar: React.FC<TabBarProps> = memo(({ activeTab, onSelectTab, pen
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: tokens.spacing.sm,
     paddingHorizontal: tokens.spacing.sm,
-    paddingVertical: tokens.spacing.xs,
-    gap: 6,
     backgroundColor: tokens.colors.bg.subtle,
-    borderBottomWidth: 1,
-    borderBottomColor: tokens.colors.border.subtle
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.border.subtle
   },
   tabItem: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minHeight: tokens.touchTarget.minHeight,
-    borderRadius: tokens.radius.md,
-    backgroundColor: tokens.colors.surface.card,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle
+    minHeight: tokens.touchTarget.minHeight
   },
-  tabItemActiveCapture: {
-    backgroundColor: tokens.colors.police.primary,
-    borderColor: tokens.colors.police.accent
+  tabText: {
+    fontSize: tokens.typography.fontSize.sm,
+    fontFamily: tokens.typography.fontFamily.sansMedium
   },
-  tabItemActiveAlerts: {
-    backgroundColor: tokens.colors.status.amber,
-    borderColor: tokens.colors.status.warning
+  sosPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: tokens.spacing.lg,
+    paddingVertical: tokens.spacing.sm,
+    borderRadius: tokens.radius.full,
+    backgroundColor: tokens.colors.sos.container
   },
-  tabItemActiveSos: {
-    backgroundColor: tokens.colors.status.emergency,
-    borderColor: tokens.colors.status.danger
+  sosPillSelected: {
+    borderWidth: 2,
+    borderColor: tokens.colors.sos.onContainer
   },
-  tabItemSosBroadcasting: {
-    backgroundColor: '#dc2626',
-    borderColor: '#ef4444'
+  sosPillLive: {
+    backgroundColor: tokens.colors.status.danger
+  },
+  sosText: {
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md,
+    fontFamily: tokens.typography.fontFamily.monoBold
   },
   sosLiveDot: {
     position: 'absolute',
-    top: -2,
-    right: -3,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#ffffff'
-  },
-  tabItemActiveQueue: {
-    backgroundColor: tokens.colors.brand.gold,
-    borderColor: tokens.colors.brand.gold
-  },
-  tabText: {
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '700',
-    color: tokens.colors.text.secondary
-  },
-  tabTextActive: {
-    color: tokens.colors.text.white
+    top: 4,
+    right: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: tokens.colors.text.white
   },
   badgeDot: {
     position: 'absolute',
     top: -6,
-    right: -8,
-    backgroundColor: tokens.colors.status.danger,
+    right: -10,
+    backgroundColor: tokens.colors.sos.container,
     borderRadius: 8,
-    minWidth: 14,
-    height: 14,
+    minWidth: 16,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 2
+    paddingHorizontal: 3
   },
   badgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: 'bold'
+    color: tokens.colors.text.white,
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.monoBold
   }
 });

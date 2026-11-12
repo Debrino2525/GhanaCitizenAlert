@@ -24,15 +24,7 @@ import {
   JetBrainsMono_400Regular,
   JetBrainsMono_700Bold
 } from '@expo-google-fonts/jetbrains-mono';
-import {
-  Shield,
-  ShieldCheck,
-  Globe,
-  Radio,
-  UserCheck,
-  Lock,
-  ChevronDown
-} from 'lucide-react-native';
+import { Shield, User as UserIcon } from 'lucide-react-native';
 import { CitizenAccessWall, CitizenUser } from './src/components/CitizenAccessWall';
 import { supabase } from './src/lib/supabase';
 import { GHANAIAN_LANGUAGES } from './src/constants/i18n';
@@ -345,129 +337,57 @@ function MainApp() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 24)), paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 24)) }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Ghana Flag Header Accent */}
+      {/* Ghana tricolour hairline */}
       <View style={styles.flagHeader}>
         <View style={{ flex: 1, backgroundColor: tokens.colors.brand.red }} />
         <View style={{ flex: 1, backgroundColor: tokens.colors.brand.gold }} />
         <View style={{ flex: 1, backgroundColor: tokens.colors.brand.green }} />
       </View>
 
-      {/* Top Header Bar */}
+      {/* Header: GH mark · CitizenAlert / current section · profile avatar */}
       <View style={styles.topBar}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs, flex: 1 }}>
-          <ShieldCheck color={tokens.colors.brand.gold} size={22} />
-          <View>
-            <Text style={styles.appTitle}>
-              CITIZEN<Text style={{ color: tokens.colors.brand.gold }}>ALERT</Text>
-            </Text>
-            <Text style={styles.appSubtitle}>National Evidence Vault 🇬🇭</Text>
-          </View>
+        <View style={styles.ghChip}>
+          <View style={styles.ghDot} />
+          <Text style={styles.ghChipText}>GH</Text>
         </View>
-
-        {/* Language Selector */}
-        <View style={styles.langSelector}>
-          {(['en', 'tw', 'ga', 'ee', 'ha'] as LanguageCode[]).map((l) => (
-            <TouchableOpacity
-              key={l}
-              onPress={() => setLang(l)}
-              style={[styles.langBtn, lang === l && styles.langBtnActive]}
-              accessibilityRole="button"
-              accessibilityLabel={`Select language ${l.toUpperCase()}`}
-            >
-              <Text style={[styles.langBtnText, lang === l && styles.langBtnTextActive]}>
-                {l.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.appTitle} numberOfLines={1}>CitizenAlert</Text>
+          <Text style={styles.appSubtitle} numberOfLines={1}>{TAB_TITLES[activeTab]}</Text>
         </View>
-      </View>
-
-      {/* Citizen Identity Bar */}
-      <View style={styles.citizenProfileBar}>
         <TouchableOpacity
           onPress={() => setIsCitizenProfileOpen(true)}
-          style={styles.citizenBadgePill}
+          style={styles.avatarButton}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel="Open Citizen Profile"
+          accessibilityLabel={citizen.loginMethod === 'ANONYMOUS' ? 'Open profile and sign in' : 'Open profile'}
         >
-          <View style={styles.citizenAvatar}>
-            {citizen.avatarUrl && citizen.loginMethod !== 'ANONYMOUS' ? (
-              <Image
-                source={{ uri: citizen.avatarUrl }}
-                style={styles.citizenAvatarImage}
-                resizeMode="cover"
-              />
-            ) : citizen.loginMethod === 'ANONYMOUS' ? (
-              <Shield color={tokens.colors.brand.gold} size={16} />
-            ) : (
-              <UserCheck color={tokens.colors.police.badge} size={16} />
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={styles.citizenNameText} numberOfLines={1}>
-                {citizen.loginMethod === 'ANONYMOUS' ? 'Anonymous Whistleblower' : citizen.name}
-              </Text>
-              {citizen.isVerified && (
-                <ShieldCheck color={tokens.colors.status.success} size={12} />
-              )}
-            </View>
-            <Text style={styles.citizenMetaText}>
-              {citizen.loginMethod === 'GOOGLE'
-                ? `Google Verified • ${citizen.trustScore}% Trust`
-                : citizen.loginMethod === 'PHONE'
-                ? `Phone Verified • ${citizen.trustScore}% Trust`
-                : citizen.loginMethod === 'EMAIL'
-                ? `Citizen Verified • ${citizen.trustScore}% Trust`
-                : 'Whistleblower Act 720 Immunity Active'}
-            </Text>
-          </View>
-          <View style={styles.citizenAuthBtn}>
-            <Text style={styles.citizenAuthBtnText}>
-              {citizen.loginMethod === 'ANONYMOUS' ? 'Sign In' : 'Profile'}
-            </Text>
-            <ChevronDown color={tokens.colors.police.badge} size={12} />
-          </View>
+          {citizen.avatarUrl && citizen.loginMethod !== 'ANONYMOUS' ? (
+            <Image source={{ uri: citizen.avatarUrl }} style={styles.avatarImage} resizeMode="cover" />
+          ) : citizen.loginMethod === 'ANONYMOUS' ? (
+            <Shield color={tokens.colors.text.inverse} size={20} />
+          ) : (
+            <UserIcon color={tokens.colors.text.inverse} size={20} />
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Navigation Tabs */}
-      <TabBar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        pendingCount={pendingCount}
-        isSosActive={isSosActive}
-      />
-
-      {/* Sticky Emergency SOS Banner across all screens when active */}
-      {isSosActive && (
+      {/* Persistent SOS bar while a beacon is live (shown on every tab except SOS itself) */}
+      {isSosActive && activeTab !== 'SOS' && (
         <TouchableOpacity
           onPress={() => setActiveTab('SOS')}
           activeOpacity={0.85}
           style={styles.sosGlobalBanner}
           accessibilityRole="button"
-          accessibilityLabel="Emergency SOS Distress Beacon is actively transmitting. Tap to return to SOS screen."
+          accessibilityLabel="SOS is active. Tap to return to the SOS screen."
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-            <View style={styles.sosBeaconDot} />
-            <Text style={styles.sosGlobalBannerTitle} numberOfLines={1}>
-              🚨 SOS BEACON ACTIVE: #{activeSosTrackingCode || 'TRANSMITTING'}
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.sosGlobalBannerPings}>
-              {sosPingsCount > 0 ? `${sosPingsCount} pings sent` : 'Pinging CAD...'}
-            </Text>
-            {activeTab !== 'SOS' && (
-              <View style={styles.sosReturnBadge}>
-                <Text style={styles.sosReturnBadgeText}>RETURN ➔</Text>
-              </View>
-            )}
-          </View>
+          <View style={styles.sosBeaconDot} />
+          <Text style={styles.sosGlobalBannerTitle}>SOS active · tap to return</Text>
+          <Text style={styles.sosGlobalBannerPings}>
+            {sosPingsCount > 0 ? `${sosPingsCount} updates sent` : 'Sending…'}
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -531,6 +451,7 @@ function MainApp() {
               landmark={draft.landmark}
               isAnonymous={draft.isAnonymous}
               reporterPhone={draft.reporterPhone}
+              reporterName={citizen.loginMethod === 'ANONYMOUS' ? null : citizen.name}
               isSubmitting={draft.isSubmitting}
               uploadProgress={draft.uploadProgress}
               uploadStatusText={draft.uploadStatusText}
@@ -541,8 +462,10 @@ function MainApp() {
               onLandmarkChange={draft.setLandmark}
               onAnonymousChange={draft.setIsAnonymous}
               onReporterPhoneChange={draft.setReporterPhone}
-              onSaveToGallery={draft.saveEvidenceToGallery}
               onSubmitReport={draft.handleSubmitReport}
+              lastSubmission={draft.lastSubmission}
+              onDismissSubmission={draft.clearLastSubmission}
+              onViewMyReports={() => setActiveTab('QUEUE')}
             />
           )}
 
@@ -577,11 +500,22 @@ function MainApp() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Bottom navigation */}
+      <TabBar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        pendingCount={pendingCount}
+        isSosActive={isSosActive}
+        bottomInset={insets.bottom}
+      />
+
       {/* Citizen Profile Sheet */}
       <CitizenProfileSheet
         isOpen={isCitizenProfileOpen}
         citizen={citizen}
         isAnonymous={draft.isAnonymous}
+        language={lang}
+        onChangeLanguage={setLang}
         onClose={() => setIsCitizenProfileOpen(false)}
         onToggleAnonymous={draft.setIsAnonymous}
         onSignOut={handleSignOut}
@@ -690,24 +624,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row'
   },
   topBar: {
+    minHeight: 64,
     paddingHorizontal: tokens.spacing.lg,
-    paddingVertical: tokens.spacing.sm,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: tokens.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: tokens.colors.border.subtle,
     backgroundColor: tokens.colors.bg.subtle
   },
+  ghChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: tokens.radius.full,
+    backgroundColor: tokens.colors.surface.cardHover
+  },
+  ghDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: tokens.colors.brand.gold
+  },
+  ghChipText: {
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.sm,
+    fontFamily: tokens.typography.fontFamily.mono
+  },
   appTitle: {
     fontSize: tokens.typography.fontSize.lg,
-    fontWeight: '900',
-    color: tokens.colors.text.white,
-    letterSpacing: 0.5
+    fontFamily: tokens.typography.fontFamily.sansBold,
+    color: tokens.colors.text.primary
   },
   appSubtitle: {
-    fontSize: tokens.typography.fontSize.xxs,
+    fontSize: tokens.typography.fontSize.sm,
+    fontFamily: tokens.typography.fontFamily.sansMedium,
     color: tokens.colors.text.secondary
+  },
+  avatarButton: {
+    width: tokens.touchTarget.minWidth,
+    height: tokens.touchTarget.minHeight,
+    borderRadius: tokens.touchTarget.minHeight / 2,
+    backgroundColor: '#FFF0C9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%'
   },
   langSelector: {
     flexDirection: 'row',
@@ -807,41 +774,35 @@ const styles = StyleSheet.create({
     padding: tokens.spacing.md
   },
   sosGlobalBanner: {
-    backgroundColor: '#b91c1c',
-    paddingHorizontal: tokens.spacing.md,
-    paddingVertical: 10,
+    backgroundColor: tokens.colors.sos.container,
+    minHeight: tokens.touchTarget.minHeight,
+    paddingHorizontal: tokens.spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f87171'
+    gap: tokens.spacing.sm
   },
   sosBeaconDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#ffffff'
+    backgroundColor: tokens.colors.text.white
   },
   sosGlobalBannerTitle: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5
+    flex: 1,
+    color: tokens.colors.text.white,
+    fontSize: tokens.typography.fontSize.md,
+    fontFamily: tokens.typography.fontFamily.sans
   },
   sosGlobalBannerPings: {
-    color: '#fecaca',
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  sosReturnBadge: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4
-  },
-  sosReturnBadgeText: {
-    color: '#b91c1c',
-    fontSize: 10,
-    fontWeight: '800'
+    color: tokens.colors.sos.onContainer,
+    fontSize: tokens.typography.fontSize.sm,
+    fontFamily: tokens.typography.fontFamily.mono
   }
 });
+
+const TAB_TITLES: Record<TabType, string> = {
+  CAPTURE: 'Report an incident',
+  ALERTS: 'Safety alerts',
+  SOS: 'Emergency SOS',
+  QUEUE: 'My reports'
+};

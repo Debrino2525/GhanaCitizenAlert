@@ -37,7 +37,7 @@ export const GHANAIAN_LANGUAGES: Record<LanguageCode, TranslationMap> = {
     ghanaPostLabel: 'GhanaPost GPS Digital Code',
     sosPanic: 'EMERGENCY SOS',
     anonymous: 'Anonymous Whistleblower',
-    submitReport: 'Transmit Official Report',
+    submitReport: 'Send report',
     safetyNotice: 'DO NOT CONFRONT SUSPECTS. Observe from a safe distance.',
     amberAlert: 'AMBER ALERT ACTIVE',
     categories: 'Incident Category'

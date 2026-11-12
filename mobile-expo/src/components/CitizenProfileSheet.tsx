@@ -35,6 +35,7 @@ import { supabase } from '../lib/supabase';
 import { GoogleSignin } from '../lib/googleAuth';
 import { tokens } from '../theme/tokens';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
+import { LanguageCode } from '../types';
 
 interface CitizenProfileSheetProps {
   isOpen: boolean;
@@ -45,7 +46,17 @@ interface CitizenProfileSheetProps {
   onSignOut: () => void;
   onUpdateAvatar?: (avatarUrl: string) => void;
   onUpdatePhone?: (phone: string) => void;
+  language?: LanguageCode;
+  onChangeLanguage?: (code: LanguageCode) => void;
 }
+
+const LANGUAGE_OPTIONS: { code: LanguageCode; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'tw', label: 'Twi' },
+  { code: 'ga', label: 'Ga' },
+  { code: 'ee', label: 'Ewe' },
+  { code: 'ha', label: 'Hausa' }
+];
 
 export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   isOpen,
@@ -55,7 +66,9 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
   onToggleAnonymous,
   onSignOut,
   onUpdateAvatar,
-  onUpdatePhone
+  onUpdatePhone,
+  language,
+  onChangeLanguage
 }) => {
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -442,6 +455,32 @@ export const CitizenProfileSheet: React.FC<CitizenProfileSheetProps> = memo(({
             <View style={styles.dividerLine} />
           </View>
 
+          {/* Language / Kasa (moved here from the header in the redesign) */}
+          {onChangeLanguage && (
+            <View style={styles.languageBox}>
+              <Text style={styles.languageTitle}>Language / Kasa</Text>
+              <View style={styles.languageRow}>
+                {LANGUAGE_OPTIONS.map((opt) => {
+                  const active = language === opt.code;
+                  return (
+                    <TouchableOpacity
+                      key={opt.code}
+                      onPress={() => onChangeLanguage(opt.code)}
+                      style={[styles.languageChip, active && styles.languageChipActive]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={opt.label}
+                    >
+                      <Text style={[styles.languageChipText, active && styles.languageChipTextActive]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {/* Privacy Policy Link */}
           <TouchableOpacity
             onPress={handleOpenPrivacyPolicy}
@@ -718,6 +757,42 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.fontSize.xxs,
     fontWeight: 'bold',
     letterSpacing: 0.5
+  },
+  languageBox: {
+    backgroundColor: tokens.colors.surface.card,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.sm,
+    marginBottom: tokens.spacing.md
+  },
+  languageTitle: {
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.md,
+    fontFamily: tokens.typography.fontFamily.sans
+  },
+  languageRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.spacing.sm
+  },
+  languageChip: {
+    minHeight: 40,
+    paddingHorizontal: tokens.spacing.md,
+    borderRadius: tokens.radius.full,
+    backgroundColor: tokens.colors.surface.cardHover,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  languageChipActive: {
+    backgroundColor: tokens.colors.brand.gold
+  },
+  languageChipText: {
+    color: tokens.colors.text.primary,
+    fontSize: tokens.typography.fontSize.md,
+    fontFamily: tokens.typography.fontFamily.sansMedium
+  },
+  languageChipTextActive: {
+    color: tokens.colors.text.inverse
   },
   signOutBtn: {
     flexDirection: 'row',

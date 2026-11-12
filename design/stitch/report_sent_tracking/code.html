@@ -1,0 +1,175 @@
+<!DOCTYPE html><html class="dark" lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "on-primary-fixed": "#231b00", "on-tertiary-fixed-variant": "#005236", "on-error-container": "#ffdad6", "on-secondary-fixed-variant": "#930013", "secondary-fixed-dim": "#ffb3ad", "on-surface-variant": "#d0c6ab", "surface-container-high": "#222a3d", "surface-tint": "#ecc300", "on-surface": "#dae2fd", "primary-container": "#fcd116", "on-primary": "#3b2f00", "on-secondary-container": "#ffaea8", "on-tertiary-container": "#006947", "on-tertiary": "#003824", "on-secondary-fixed": "#410004", "secondary-fixed": "#ffdad7", "tertiary": "#bfffdc", "tertiary-fixed": "#6ffbbe", "secondary": "#ffb3ad", "surface-container-highest": "#2d3449", "inverse-on-surface": "#283044", "primary-fixed-dim": "#ecc300", "outline": "#999078", "on-background": "#dae2fd", "surface-dim": "#0b1326", "error-container": "#93000a", "surface-variant": "#2d3449", "inverse-primary": "#715c00", "surface-bright": "#31394d", "on-error": "#690005", "on-secondary": "#68000a", "surface-container-lowest": "#060e20", "on-primary-container": "#6e5a00", "on-tertiary-fixed": "#002113", "surface-container": "#171f33", "outline-variant": "#4d4632", "error": "#ffb4ab", "surface": "#0b1326", "surface-container-low": "#131b2e", "on-primary-fixed-variant": "#554500", "primary": "#fff0c9", "secondary-container": "#a40217", "primary-fixed": "#ffe17b", "inverse-surface": "#dae2fd", "background": "#0b1326", "tertiary-container": "#5fedb0", "tertiary-fixed-dim": "#4edea3" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "space-lg": "1.5rem", "space-xl": "2rem", "margin": "1rem", "space-md": "1rem", "gutter-sm": "0.75rem", "gutter": "1rem", "margin-desktop": "2rem", "margin-tablet": "1.5rem", "space-sm": "0.5rem" }, fontFamily: { "body-md": ["Plus Jakarta Sans"], "label-mono-lg": ["JetBrains Mono"], "body-lg": ["Plus Jakarta Sans"], "caption": ["Plus Jakarta Sans"], "headline-xl": ["Plus Jakarta Sans"], "label-mono-sm": ["JetBrains Mono"], "title-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"] }, fontSize: { "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "label-mono-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.05em", fontWeight: "500" }], "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }], "caption": ["12px", { lineHeight: "16px", fontWeight: "500" }], "headline-xl": ["32px", { lineHeight: "40px", fontWeight: "800" }], "label-mono-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.04em", fontWeight: "400" }], "title-sm": ["16px", { lineHeight: "24px", fontWeight: "600" }], "headline-lg": ["24px", { lineHeight: "32px", fontWeight: "700" }], "headline-md": ["20px", { lineHeight: "28px", fontWeight: "600" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col"><header class="fixed top-0 w-full z-50 pt-safe bg-surface-container-low/90 backdrop-blur-xl"><div class="w-full h-[3px] bg-gradient-to-r from-secondary-container via-primary-container to-tertiary-container"></div><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go back" class="min-w-[48px] min-h-[48px] -ml-2 flex items-center justify-center text-on-surface hover:text-primary-container transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-title-sm text-title-sm font-semibold tracking-tight text-on-surface line-clamp-1">Tracking Details</h1></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface px-margin"><div class="flex flex-col w-full pb-8 space-y-4">
+<!-- Tricolor Ribbon Top Accent -->
+<div class="w-full h-[3px] bg-gradient-to-r from-secondary-container via-primary-container to-tertiary-container rounded-full"></div>
+<!-- Breadcrumb & Clean Sub-Header -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-container animate-pulse"></span>
+<span class="font-caption text-caption text-on-surface-variant font-medium tracking-wider uppercase">CitizenAlert GH</span>
+</div>
+
+</div>
+<!-- Success Feedback Hero Card -->
+<div class="relative bg-surface-container rounded-xl p-5 shadow-md flex flex-col items-center text-center overflow-hidden">
+<!-- Ambient Success Glow -->
+<div class="absolute -top-12 -right-12 w-32 h-32 bg-tertiary-container/10 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Animated Check Ring -->
+<div class="w-16 h-16 rounded-full bg-tertiary-container/15 flex items-center justify-center text-tertiary-container mb-3 shadow-inner">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface">Report sent</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Thank you for protecting your neighborhood.</p>
+<!-- Tracking Code Lockup Card -->
+<div class="w-full mt-4 bg-surface-container-high rounded-lg p-3 flex items-center justify-between">
+<div class="flex flex-col text-left">
+<span class="font-caption text-caption text-outline">OFFICIAL TRACKING KEY</span>
+<span class="font-label-mono-lg text-label-mono-lg font-bold text-primary tracking-wide" id="trackingCodeText">GH-2026-7K4QZ8M2</span>
+</div>
+<button aria-label="Copy tracking code" class="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg bg-surface-bright text-on-surface hover:text-primary transition-all active:scale-95" id="copyCodeBtn" type="button">
+<span class="material-symbols-outlined text-[20px]" id="copyIcon">content_copy</span>
+</button>
+</div>
+<!-- Anonymous Shield Indicator -->
+<div class="mt-3 flex items-center space-x-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-tertiary-container">shield</span>
+<span class="font-caption text-caption">Submitted anonymously — no personal identity linked</span>
+</div>
+</div>
+<!-- Honest Status Callout & Pipeline -->
+<div class="bg-surface-container rounded-xl p-4 shadow-sm flex flex-col space-y-4">
+<!-- Status Badge & Explanation -->
+<div class="flex flex-col space-y-2">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption uppercase text-outline font-semibold">Verification Pipeline</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-label-mono-sm text-label-mono-sm bg-primary-container/15 text-primary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container mr-1.5 animate-pulse"></span>
+          RECEIVED • IN QUEUE
+        </span>
+</div>
+<p class="font-body-md text-body-md text-on-surface">Your report has reached the regional intake queue. An officer will review your report as soon as possible.</p>
+</div>
+<!-- Honest Progress Line -->
+<div class="pt-2">
+<div class="grid grid-cols-4 gap-2 relative">
+<!-- Connecting Line Behind Steps -->
+<div class="absolute top-3 left-4 right-4 h-0.5 bg-surface-container-highest -z-0"></div>
+<!-- Step 1: Sent -->
+<div class="flex flex-col items-center text-center z-10">
+<div class="w-6 h-6 rounded-full bg-tertiary-container text-on-tertiary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<span class="font-caption text-caption font-semibold text-tertiary-container mt-1.5">Sent</span>
+<span class="font-label-mono-sm text-[10px] text-outline">14:02</span>
+</div>
+<!-- Step 2: Received -->
+<div class="flex flex-col items-center text-center z-10">
+<div class="w-6 h-6 rounded-full bg-tertiary-container text-on-tertiary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<span class="font-caption text-caption font-semibold text-tertiary-container mt-1.5">Received</span>
+<span class="font-label-mono-sm text-[10px] text-outline">14:03</span>
+</div>
+<!-- Step 3: Under review (Active) -->
+<div class="flex flex-col items-center text-center z-10">
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary-fixed flex items-center justify-center ring-4 ring-primary-container/20">
+<span class="w-2 h-2 rounded-full bg-on-primary-fixed animate-ping"></span>
+</div>
+<span class="font-caption text-caption font-semibold text-primary-container mt-1.5">Under review</span>
+<span class="font-label-mono-sm text-[10px] text-primary-container font-medium">Active</span>
+</div>
+<!-- Step 4: Resolved (Pending) -->
+<div class="flex flex-col items-center text-center z-10">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest text-outline flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+</div>
+<span class="font-caption text-caption text-outline mt-1.5">Resolved</span>
+<span class="font-label-mono-sm text-[10px] text-outline">—</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Immediate Physical Safety Advisory Card -->
+<div class="relative bg-surface-container rounded-xl p-4 shadow-sm overflow-hidden">
+<!-- Subtle Red Danger Warning Ambient Glow -->
+<div class="absolute -top-8 -left-8 w-24 h-24 bg-error-container/20 rounded-full blur-xl pointer-events-none"></div>
+<div class="flex items-start space-x-2.5">
+<span class="text-xl leading-none">🚨</span>
+<div class="flex-1">
+<h3 class="font-title-sm text-title-sm font-bold text-on-surface">Need immediate help?</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">
+          If anyone is in danger right now, do not wait for report review — contact Ghana emergency lines directly.
+        </p>
+</div>
+</div>
+<!-- Dual Direct Call Triggers -->
+<div class="grid grid-cols-2 gap-3 mt-4">
+<a class="min-h-[48px] px-3 py-2.5 bg-secondary-container text-on-secondary-container rounded-lg flex items-center justify-center space-x-2 font-title-sm text-title-sm font-bold shadow-md hover:brightness-110 active:scale-95 transition-all" href="tel:191">
+<span class="material-symbols-outlined text-[20px]">call</span>
+<span>Call 191 (Police)</span>
+</a>
+<a class="min-h-[48px] px-3 py-2.5 bg-secondary-container text-on-secondary-container rounded-lg flex items-center justify-center space-x-2 font-title-sm text-title-sm font-bold shadow-md hover:brightness-110 active:scale-95 transition-all" href="tel:112">
+<span class="material-symbols-outlined text-[20px]">emergency</span>
+<span>Call 112 (All)</span>
+</a>
+</div>
+</div>
+<!-- Digital Location Lockup Visual (GhanaPost GPS Anchor) -->
+<div class="bg-surface-container rounded-xl p-3.5 flex items-center space-x-3"><div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary-container"><span class="material-symbols-outlined text-[22px]">location_on</span></div><div class="flex flex-col text-left"><span class="font-caption text-caption text-outline uppercase">Attached Location</span><span class="font-label-mono-sm text-label-mono-sm font-medium text-on-surface mt-0.5">Takoradi, Western Region · 4.934, -1.768 · ±4 m</span></div></div>
+<!-- Bottom Ergonomic Action Controls -->
+<div class="flex flex-col space-y-2.5 pt-2">
+<!-- Primary CTA: View in My Reports -->
+<button class="w-full min-h-[52px] bg-primary-container text-on-primary-fixed rounded-xl font-title-sm text-title-sm font-bold shadow-lg flex items-center justify-center space-x-2 hover:brightness-105 active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-[22px]">folder_open</span>
+<span>View in My Reports</span>
+</button>
+<!-- Secondary CTA: Back to Home -->
+<button class="w-full min-h-[52px] bg-surface-container-high text-on-surface rounded-xl font-title-sm text-title-sm font-semibold flex items-center justify-center space-x-2 hover:bg-surface-bright active:scale-[0.99] transition-all" onclick="window.history.length &gt; 1 ? window.history.back() : window.location.href='/'" type="button">
+<span class="material-symbols-outlined text-[20px]">home</span>
+<span>Back to home</span>
+</button>
+</div>
+</div>
+<script>
+  (function() {
+    const copyBtn = document.getElementById('copyCodeBtn');
+    const trackingText = document.getElementById('trackingCodeText');
+    const copyIcon = document.getElementById('copyIcon');
+
+    if (copyBtn && trackingText) {
+      copyBtn.addEventListener('click', async () => {
+        const textToCopy = trackingText.innerText.trim();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(textToCopy);
+          } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = textToCopy;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+          }
+
+          copyIcon.textContent = 'done';
+          copyBtn.classList.add('text-tertiary-container');
+          
+          setTimeout(() => {
+            copyIcon.textContent = 'content_copy';
+            copyBtn.classList.remove('text-tertiary-container');
+          }, 2000);
+        } catch (e) {
+          copyIcon.textContent = 'done';
+          setTimeout(() => { copyIcon.textContent = 'content_copy'; }, 2000);
+        }
+      });
+    }
+  })();
+</script></main>
+
+</body></html>

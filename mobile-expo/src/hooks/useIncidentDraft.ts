@@ -57,6 +57,21 @@ export interface UseIncidentDraftResult {
   clearAttachedMedia: () => void;
   saveEvidenceToGallery: () => Promise<boolean>;
   handleSubmitReport: () => Promise<void>;
+  lastSubmission: SubmissionReceipt | null;
+  clearLastSubmission: () => void;
+}
+
+/**
+ * Outcome of the most recent submission, shown on the "Report sent" screen.
+ * Only states the app actually knows: saved offline, sent (media pending), or sent.
+ */
+export interface SubmissionReceipt {
+  trackingCode: string;
+  status: 'SENT' | 'SENT_MEDIA_PENDING' | 'SAVED_OFFLINE';
+  isAnonymous: boolean;
+  locationLabel: string;
+  sentAt: string;
+  trustMessage?: string;
 }
 
 export const useIncidentDraft = ({
@@ -87,29 +102,31 @@ export const useIncidentDraft = ({
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
   const [uploadStatusText, setUploadStatusText] = useState<string>('');
+  const [lastSubmission, setLastSubmission] = useState<SubmissionReceipt | null>(null);
+  const clearLastSubmission = useCallback(() => setLastSubmission(null), []);
 
   const activePermanentUriRef = useRef<string | null>(null);
 
   const processAndAttachEvidence = useCallback((type: 'VIDEO' | 'IMAGE', uri: string, durationSec: number = 15) => {
     setIsUploadingMedia(true);
     setUploadProgress(15);
-    setUploadStatusText('Extracting telemetry & frame buffers...');
+    setUploadStatusText('Preparing evidence...');
     setMediaType(type);
     setRecordedDuration(durationSec);
 
     setTimeout(() => {
       setUploadProgress(45);
-      setUploadStatusText('Encrypting GPS watermark under Act 772...');
+      setUploadStatusText('Adding time and location stamp...');
     }, 300);
 
     setTimeout(() => {
       setUploadProgress(75);
-      setUploadStatusText('Generating SHA-256 evidence integrity seal...');
+      setUploadStatusText('Recording a fingerprint of your file...');
     }, 600);
 
     setTimeout(() => {
       setUploadProgress(100);
-      setUploadStatusText('✅ 100% Attached & Cryptographically Sealed');
+      setUploadStatusText('Evidence attached');
       setRecordedUri(uri);
       setHasRecordedMedia(true);
       setIsUploadingMedia(false);
@@ -186,7 +203,7 @@ export const useIncidentDraft = ({
     setIsSubmitting(true);
     setIsUploadingMedia(true);
     setUploadProgress(5);
-    setUploadStatusText('Securing incident dossier...');
+    setUploadStatusText('Preparing your report...');
 
     const generateTrackingCode = (): string => {
       const bytes = Crypto.getRandomBytes(6);
@@ -225,7 +242,7 @@ export const useIncidentDraft = ({
         // Step 1: Copy to permanent documentDirectory
         if (!permanentUri) {
           setUploadProgress(10);
-          setUploadStatusText('Securing permanent local copy...');
+          setUploadStatusText('Saving a copy on this phone until it is sent...');
           const docDir = FileSystemLegacy.documentDirectory || '';
           permanentUri = `${docDir}evidence_${trackingCode}_${Date.now()}.${extension}`;
 
@@ -270,7 +287,7 @@ export const useIncidentDraft = ({
 
       // STEP A: INSERT REPORT INTO DATABASE FIRST (REPORT FIRST PROTOCOL)
       setUploadProgress(25);
-      setUploadStatusText('Transmitting incident dossier to Police CAD Dispatch...');
+      setUploadStatusText('Sending report...');
 
       const canonicalPublicUrl = fileName ? supabase.storage.from('evidence').getPublicUrl(fileName).data.publicUrl : '';
 
@@ -303,6 +320,19 @@ export const useIncidentDraft = ({
         : [];
 
       const effectiveLocationName = combinedLocation.trim() || (locationSource === 'UNAVAILABLE' ? 'Location pending' : 'Manual Location');
+      const receiptLocation = [
+        region && region !== 'UNKNOWN' ? region : effectiveLocationName,
+        coords ? `${coords.latitude.toFixed(3)}, ${coords.longitude.toFixed(3)}` : null,
+        typeof gpsAccuracy === 'number' && (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN') ? `±${Math.round(gpsAccuracy)} m` : null
+      ].filter(Boolean).join(' · ');
+      const buildReceipt = (status: SubmissionReceipt['status'], trustMessage?: string): SubmissionReceipt => ({
+        trackingCode,
+        status,
+        isAnonymous,
+        locationLabel: receiptLocation,
+        sentAt: new Date().toISOString(),
+        trustMessage: trustMessage || undefined
+      });
       const submitTime = Date.now();
       const effectiveSource = effectiveLocationSource(gpsFixTimestamp, gpsAccuracy, submitTime, locationSource);
       const effectiveFixAge = gpsFixTimestamp ? Math.max(0, Math.floor((submitTime - gpsFixTimestamp) / 1000)) : gpsFixAgeSeconds;
@@ -429,11 +459,7 @@ export const useIncidentDraft = ({
         setUploadStatusText('');
         safeHaptics.medium();
 
-        Alert.alert(
-          '📁 Saved to Offline Queue',
-          'No internet connection. Your report is securely preserved on this device and will transmit automatically once connectivity returns.',
-          [{ text: 'OK' }]
-        );
+        setLastSubmission(buildReceipt('SAVED_OFFLINE'));
 
         setTitle('');
         setDescription('');
@@ -452,7 +478,7 @@ export const useIncidentDraft = ({
           const trustRes = await awardPostSubmissionTrustBonus(citizen.id, citizen.trustScore);
           if (trustRes.bonusEarned) {
             onTrustScoreUpdated?.(trustRes.newScore);
-            trustBonusMessage = `\n\n${trustRes.message}`;
+            trustBonusMessage = trustRes.message;
           }
         } catch (tErr) {
           console.warn('[TrustBonus] Failed to award post bonus:', tErr);
@@ -464,15 +490,11 @@ export const useIncidentDraft = ({
         setIsSubmitting(false);
         setIsUploadingMedia(false);
         setUploadProgress(100);
-        setUploadStatusText('✅ Report Transmitted');
+        setUploadStatusText('Report sent');
         safeHaptics.success();
         announceAccessibility(`Report transmitted successfully. Tracking Code ${trackingCode}`);
 
-        Alert.alert(
-          '✅ Report Transmitted & Live',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nYour incident has been received by Police Command.${trustBonusMessage}`,
-          [{ text: 'OK' }]
-        );
+        setLastSubmission(buildReceipt('SENT', trustBonusMessage));
 
         setTitle('');
         setDescription('');
@@ -488,7 +510,7 @@ export const useIncidentDraft = ({
 
       // STEP C: UPLOAD MEDIA SEPARATELY (MEDIA SECOND PROTOCOL)
       setUploadProgress(40);
-      setUploadStatusText('Report delivered. Streaming evidence to Vault...');
+      setUploadStatusText('Report sent. Uploading evidence...');
 
       // Save to queue with reportInserted = true so that any crash/abort retries media only
       await savePendingReport({
@@ -550,11 +572,7 @@ export const useIncidentDraft = ({
         setUploadStatusText('');
         safeHaptics.medium();
 
-        Alert.alert(
-          '✅ Report Delivered • Video Queued in Background',
-          `Tracking Code: ${trackingCode}\n\nYour written report was successfully received by Police Command.\n\nThe video evidence is safely preserved on your device and will continue uploading in the background.${trustBonusMessage}`,
-          [{ text: 'OK' }]
-        );
+        setLastSubmission(buildReceipt('SENT_MEDIA_PENDING', trustBonusMessage));
 
         setTitle('');
         setDescription('');
@@ -629,27 +647,19 @@ export const useIncidentDraft = ({
 
       if (!attachSucceeded) {
         console.warn(`[ATTACH_MEDIA_FINAL_FAILURE] Case ${trackingCode}:`, attachErrorMsg);
-        setUploadStatusText('⚠️ Report sent, video pending attachment');
+        setUploadStatusText('Report sent. Evidence will finish uploading later.');
         safeHaptics.warning();
-        Alert.alert(
-          '⚠️ Evidence Attachment Pending',
-          `Your initial incident report (${trackingCode}) was received, but linking the video file is still pending.\n\nThe video is preserved safely in your offline queue and will automatically retry in the background.\n\nReason: ${attachErrorMsg}`,
-          [{ text: 'OK' }]
-        );
+        setLastSubmission(buildReceipt('SENT_MEDIA_PENDING', trustBonusMessage));
       } else {
         // Remove from offline queue and clean up cache only on confirmed success
         await removePendingReport(trackingCode, true);
         if (recordedUri) await cleanupCachedEvidence(recordedUri);
 
-        setUploadStatusText('✅ Report & Evidence Sealed');
+        setUploadStatusText('Report and evidence sent');
         safeHaptics.success();
         announceAccessibility(`Report and evidence transmitted successfully. Tracking Code ${trackingCode}`);
 
-        Alert.alert(
-          '✅ Report & Evidence Sealed',
-          `Tracking Code: ${trackingCode}\nAgency: ${payload.assigned_agency}\n\nIMPORTANT: Please write down or save your Tracking Code (${trackingCode}) for future reference and case corroboration.\n\nEvidence verified on National Vault and pinned on Command Map.${trustBonusMessage}`,
-          [{ text: 'OK' }]
-        );
+        setLastSubmission(buildReceipt('SENT', trustBonusMessage));
       }
 
       setTitle('');
@@ -720,6 +730,8 @@ export const useIncidentDraft = ({
     processAndAttachEvidence,
     clearAttachedMedia,
     saveEvidenceToGallery,
-    handleSubmitReport
+    handleSubmitReport,
+    lastSubmission,
+    clearLastSubmission
   };
 };

@@ -35,7 +35,7 @@ export function formatPlainLanguageUploadError(statusCode?: number, rawError?: s
     return 'Authentication notice with emergency vault. Your report is preserved locally.';
   }
   if (statusCode && statusCode >= 500) {
-    return 'Emergency Vault server is temporarily busy. Your evidence is safely preserved on device and will retry automatically.';
+    return 'The server is busy right now. Your evidence is saved on this phone and will retry automatically.';
   }
   if (rawError && /network|offline|internet|reach/i.test(rawError)) {
     return 'No internet connection. Evidence is safely stored on device and will transmit when connection returns.';
@@ -94,7 +94,7 @@ export async function uploadEvidenceStreaming({
       'Content-Type': mimeType
     };
 
-    onProgress?.(0.1, 'Securing direct channel to Evidence Vault...');
+    onProgress?.(0.1, 'Starting upload...');
 
     if (Platform.OS !== 'web') {
       // Native iOS & Android: createUploadTask with real-time byte progress reporting and timeout protection
@@ -116,7 +116,7 @@ export async function uploadEvidenceStreaming({
               const progressPct = 0.1 + Math.min(0.75, Math.max(0, ratio * 0.75));
               const mbSent = (progressData.totalBytesSent / (1024 * 1024)).toFixed(1);
               const mbTotal = (progressData.totalBytesExpectedToSend / (1024 * 1024)).toFixed(1);
-              onProgress?.(progressPct, `Streaming evidence to Vault (${mbSent}/${mbTotal} MB)...`);
+              onProgress?.(progressPct, `Uploading evidence (${mbSent}/${mbTotal} MB)...`);
             }
           }
         );
@@ -167,7 +167,7 @@ export async function uploadEvidenceStreaming({
 
       // 409 Conflict: a previous attempt already stored this object
       if (uploadStatus === 409 || /already exists|duplicate/i.test(uploadBody)) {
-        onProgress?.(1.0, 'Evidence already sealed in National Vault.');
+        onProgress?.(1.0, 'Evidence uploaded.');
         return {
           success: true,
           publicUrl: publicStorageUrl,
@@ -178,7 +178,7 @@ export async function uploadEvidenceStreaming({
 
       // 200-299: Supabase confirmed object creation
       if (uploadStatus >= 200 && uploadStatus < 300) {
-        onProgress?.(1.0, 'Evidence locked in National Vault.');
+        onProgress?.(1.0, 'Evidence uploaded.');
         return {
           success: true,
           publicUrl: publicStorageUrl,
@@ -196,11 +196,11 @@ export async function uploadEvidenceStreaming({
       };
     } else {
       // Web fallback: Supabase JS upload without upsert
-      onProgress?.(0.3, 'Reading evidence buffer for web transmission...');
+      onProgress?.(0.3, 'Preparing upload...');
       const file = new File(fileUri);
       const binaryArrayBuffer = await file.arrayBuffer();
 
-      onProgress?.(0.6, 'Transmitting evidence to National Vault...');
+      onProgress?.(0.6, 'Uploading evidence...');
       const { data, error } = await supabase.storage
         .from('evidence')
         .upload(fileName, binaryArrayBuffer, {
@@ -212,7 +212,7 @@ export async function uploadEvidenceStreaming({
       const alreadyStored = webStatus === 409 || /already exists|duplicate/i.test(error?.message || '');
 
       if ((!error && data) || alreadyStored) {
-        onProgress?.(1.0, 'Evidence sealed in National Vault.');
+        onProgress?.(1.0, 'Evidence uploaded.');
         return {
           success: true,
           publicUrl: publicStorageUrl,

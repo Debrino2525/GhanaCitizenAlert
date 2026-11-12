@@ -12,13 +12,15 @@ import {
 import {
   Radio,
   PhoneCall,
-  AlertOctagon,
-  XCircle,
   ShieldCheck,
   Flame,
-  Volume2,
   RefreshCw,
-  AlertTriangle
+  TriangleAlert,
+  MapPin,
+  LocateFixed,
+  CircleCheck,
+  Headset,
+  Ambulance
 } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import * as Crypto from 'expo-crypto';
@@ -350,7 +352,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     setIsActivating(true);
     setActivationError(null);
     safeHaptics.heavy();
-    announceAccessibility('Transmitting emergency distress beacon to Police Command...');
+    announceAccessibility('Sending SOS...');
 
     // 1. Acquire best available location without delay or timeout
     const bestGps = await getBestAvailableLocation(coords, gpsAccuracy, locationSource, gpsFixAgeSeconds);
@@ -393,7 +395,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
         tracking_code: trackingCodeUsed,
         category: 'CRIMINAL_OFFENSE',
         title: '🚨 EMERGENCY SOS BEACON (ACTIVE)',
-        description: `CITIZEN EMERGENCY DISTRESS BEACON ACTIVATED. ${descCoords} Sent to Police Command.`,
+        description: `CITIZEN EMERGENCY DISTRESS BEACON ACTIVATED. ${descCoords} Sent from the CitizenAlert app.`,
         location_name: effectiveLocationName,
         ghanapost_code: null,
         region: region || 'UNKNOWN',
@@ -461,7 +463,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       await AsyncStorage.setItem('@active_sos_tracking_code', trackingCodeUsed).catch(() => {});
       await AsyncStorage.setItem('@active_sos_incident_id', incidentId).catch(() => {});
       safeHaptics.success();
-      announceAccessibility('Emergency SOS distress beacon transmitted. Location sent to Police Command.');
+      announceAccessibility('SOS sent. Your location is being shared with the CitizenAlert command centre.');
 
       if (__DEV__) {
         console.log(
@@ -470,7 +472,7 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
       }
     } else {
       safeHaptics.warning();
-      setActivationError(`Failed to transmit distress beacon to Police Command: ${lastError || 'Network/Server Error'}. Please use the direct emergency call buttons below.`);
+      setActivationError(`SOS could not be sent (${lastError || 'no connection'}). Call 191 or 112 using the buttons below, then try again.`);
     }
   }, [coords, gpsAccuracy, locationSource, gpsFixAgeSeconds, landmark, locationName, region, isAnonymous, reporterPhone, citizen, startMovementWatcher, onSosStateChange]);
 
@@ -546,8 +548,8 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     }
 
     Alert.alert(
-      'Distress Beacon Stopped',
-      'Live location transmissions have stopped on this device. Note: If you are safe or this was triggered in error, please call 191 to advise operators.',
+      'SOS stopped',
+      'Location sharing has stopped. If this was a mistake, you can call 191 to let them know you are safe.',
       [{ text: 'OK' }]
     );
   };
@@ -559,83 +561,159 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
     });
   };
 
-  // SVG Progress Ring calculations
-  const buttonRadius = 75;
-  const strokeWidth = 6;
-  const normalizedRadius = buttonRadius - strokeWidth / 2;
+  // Hold progress ring geometry
+  const ringSize = 212;
+  const strokeWidth = 8;
+  const normalizedRadius = ringSize / 2 - strokeWidth / 2;
   const circumference = normalizedRadius * 2 * Math.PI;
   const strokeDashoffset = circumference - holdProgress * circumference;
 
-  return (
-    <View style={[styles.section, { alignItems: 'center' }]}>
-      {/* Top Banner */}
-      <View style={styles.bannerRow}>
-        <AlertOctagon color={tokens.colors.status.danger} size={20} />
-        <Text style={styles.sosHeadline}>NATIONAL EMERGENCY BEACON</Text>
+  const callbackNumber = citizen?.phone || reporterPhone || '';
+  const hasLiveFix = !!coords && (locationSource === 'LIVE' || locationSource === 'LAST_KNOWN');
+  const placeLine = [locationName, region && region !== 'UNKNOWN' ? region : null].filter(Boolean).join(', ');
+  const coordLine = (lat: number | null | undefined, lng: number | null | undefined, acc: number | null | undefined) =>
+    lat != null && lng != null
+      ? `${lat.toFixed(4)}, ${lng.toFixed(4)}${typeof acc === 'number' ? ` · ±${Math.round(acc)} m` : ''}`
+      : null;
+  const liveCoordLine = coordLine(coords?.latitude, coords?.longitude, gpsAccuracy);
+
+  const EmergencyGrid = (
+    <View style={styles.dialSection}>
+      <Text style={styles.dialTitle}>Call emergency services · toll-free</Text>
+      <View style={styles.dialGrid}>
+        {EMERGENCY_LINES.map((line) => {
+          const Icon = line.icon;
+          return (
+            <TouchableOpacity
+              key={line.number}
+              onPress={() => handleCallEmergency(line.number)}
+              style={[styles.dialButton, sosActive && line.number === '191' && styles.dialButtonHot]}
+              accessibilityRole="button"
+              accessibilityLabel={`Call ${line.number}, ${line.label}`}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dialNumber}>Call {line.number}</Text>
+                <Text style={styles.dialLabel}>{line.label}</Text>
+              </View>
+              <View style={styles.dialIcon}>
+                <Icon color={line.color} size={20} />
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
+    </View>
+  );
 
-      <Text style={styles.sosSubtext}>
-        Press and hold for 1.5 seconds to instantly transmit your live GPS coordinates to Police Command. The app must stay open while the beacon is active.
-      </Text>
-
-      {/* Act 843 Telecom Dispatch & Carrier Location Reassurance Card */}
-      <View style={styles.telecomConsentBanner}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <ShieldCheck color={tokens.colors.brand.gold} size={15} />
-          <Text style={styles.telecomConsentHeading}>
-            Act 843 Emergency Dispatch Link
+  /* ------------------------------ ACTIVE STATE ------------------------------ */
+  if (sosActive) {
+    const sent = activeCoords ? coordLine(activeCoords.latitude, activeCoords.longitude, activeCoords.accuracy) : null;
+    return (
+      <View style={styles.section}>
+        <View style={styles.activeBanner} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          <View style={styles.row}>
+            <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
+            <Text style={styles.activeTitle}>SOS active</Text>
+          </View>
+          <Text style={styles.activeText}>
+            Your location is being shared · {successfulPings} {successfulPings === 1 ? 'update' : 'updates'} sent
+            {failedPings > 0 ? ` · ${failedPings} retrying` : ''}
           </Text>
         </View>
-        <Text style={styles.telecomConsentText}>
-          {citizen?.phone || reporterPhone
-            ? `📞 Transmitting Callback: ${citizen?.phone || reporterPhone}\n📡 Carrier cell-tower triangulation authorized under Data Protection Act 843 (Sec 20). Responders will locate your network tower if GPS is blocked.`
-            : `⚠️ No emergency phone linked to account. Please add a phone number in your profile so dispatchers can call you and triangulate your carrier tower.`}
+
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <LocateFixed color={sent ? tokens.colors.text.emerald : tokens.colors.text.secondary} size={18} />
+            <Text style={styles.overline}>Last location sent</Text>
+          </View>
+          {sent ? (
+            <>
+              {!!placeLine && <Text style={styles.placeText}>{placeLine}</Text>}
+              <Text style={styles.monoText}>{sent}</Text>
+            </>
+          ) : (
+            <Text style={styles.bodyMuted}>
+              Waiting for GPS. Updates continue as soon as your phone finds a location.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={[styles.row, { alignItems: 'flex-start' }]}>
+            <ShieldCheck color={tokens.colors.brand.gold} size={20} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={styles.cardTitle}>Sent to the CitizenAlert command centre</Text>
+              <Text style={styles.bodyMuted}>
+                Keep this app open so location updates continue. If you can, also call 191.
+              </Text>
+              {!!callbackNumber && (
+                <Text style={styles.bodyMuted}>Callback number shared: {callbackNumber}</Text>
+              )}
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={handleCancelSos}
+            style={styles.safeButton}
+            accessibilityRole="button"
+            accessibilityLabel="I am safe, stop SOS"
+          >
+            <CircleCheck color={tokens.colors.text.emerald} size={20} />
+            <Text style={styles.safeButtonText}>I'm safe — stop SOS</Text>
+          </TouchableOpacity>
+        </View>
+
+        {EmergencyGrid}
+
+        {!!activeTrackingCode && (
+          <Text style={[styles.monoText, { textAlign: 'center' }]}>Reference {activeTrackingCode}</Text>
+        )}
+      </View>
+    );
+  }
+
+  /* ------------------------------ STANDBY STATE ----------------------------- */
+  return (
+    <View style={styles.section}>
+      <View style={{ alignItems: 'center', gap: tokens.spacing.sm }}>
+        <View style={[styles.gpsChip, !hasLiveFix && styles.gpsChipPending]}>
+          <View style={[styles.gpsDot, !hasLiveFix && { backgroundColor: tokens.colors.brand.gold }]} />
+          <Text style={styles.gpsChipText}>{hasLiveFix ? 'GPS ready' : 'Finding location…'}</Text>
+        </View>
+        <Text style={styles.title}>Emergency SOS</Text>
+        <Text style={styles.subtitle}>
+          Hold for 1.5 seconds to send your live location to the CitizenAlert command centre. If you can, also call 191.
         </Text>
       </View>
 
-      {/* Error state if transmission failed */}
-      {activationError && !sosActive && (
-        <View style={styles.errorBanner}>
-          <AlertTriangle color={tokens.colors.status.danger} size={20} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.errorBannerTitle}>Transmission Notice</Text>
-            <Text style={styles.errorBannerText}>{activationError}</Text>
-          </View>
+      {activationError && (
+        <View style={styles.errorBanner} accessibilityRole="alert">
+          <TriangleAlert color={tokens.colors.text.crimson} size={20} />
+          <Text style={[styles.bodyText, { flex: 1 }]}>{activationError}</Text>
           <TouchableOpacity
             onPress={triggerSosDispatch}
             disabled={isActivating}
-            style={styles.retryBtn}
+            style={styles.retryButton}
             accessibilityRole="button"
-            accessibilityLabel="Retry SOS transmission"
+            accessibilityLabel="Retry sending SOS"
           >
-            <RefreshCw color={tokens.colors.text.white} size={14} />
-            <Text style={styles.retryBtnText}>Retry</Text>
+            <RefreshCw color={tokens.colors.text.white} size={16} />
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Main Hold-to-Activate SOS Beacon Container */}
-      <View style={styles.beaconOuterRing}>
-        <Animated.View
-          style={[
-            styles.beaconMidRing,
-            sosActive && { transform: [{ scale: pulseAnim }] }
-          ]}
-        >
-          {/* Radial Progress Ring SVG */}
-          {isHolding && !sosActive && !isActivating && (
-            <Svg
-              height="170"
-              width="170"
-              style={StyleSheet.absoluteFill}
-            >
+      {/* Hold button */}
+      <View style={styles.holdArea}>
+        <View style={styles.holdHalo}>
+          {isHolding && !isActivating && (
+            <Svg height={ringSize} width={ringSize} style={StyleSheet.absoluteFill}>
               <Circle
-                stroke="rgba(255, 255, 255, 0.2)"
+                stroke="rgba(255, 255, 255, 0.15)"
                 fill="transparent"
                 strokeWidth={strokeWidth}
                 r={normalizedRadius}
-                cx="85"
-                cy="85"
+                cx={ringSize / 2}
+                cy={ringSize / 2}
               />
               <Circle
                 stroke={tokens.colors.brand.gold}
@@ -645,349 +723,189 @@ export const SosPanicScreen: React.FC<SosPanicScreenProps> = memo(({
                 strokeDashoffset={strokeDashoffset}
                 strokeLinecap="round"
                 r={normalizedRadius}
-                cx="85"
-                cy="85"
-                transform="rotate(-90 85 85)"
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
               />
             </Svg>
           )}
-
           <TouchableOpacity
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
-            disabled={sosActive || isActivating}
-            style={[
-              styles.sosBigBtn,
-              sosActive && styles.sosBigBtnActive,
-              isHolding && styles.sosBigBtnHolding,
-              isActivating && styles.sosBigBtnHolding
-            ]}
+            disabled={isActivating}
+            style={[styles.holdButton, (isHolding || isActivating) && styles.holdButtonPressed]}
             activeOpacity={0.9}
             accessibilityRole="button"
-            accessibilityLabel="Press and hold 1.5 seconds to send emergency location to Police Command"
-            accessibilityHint="Hold down until haptic buzz confirms location transmission"
+            accessibilityLabel="Emergency SOS. Press and hold for 1.5 seconds to send your location."
+            accessibilityHint="Keep holding until your phone vibrates"
           >
             {isActivating ? (
-              <ActivityIndicator size="large" color={tokens.colors.text.white} />
+              <>
+                <ActivityIndicator size="large" color={tokens.colors.text.white} />
+                <Text style={styles.holdSub}>SENDING…</Text>
+              </>
             ) : (
               <>
-                <Radio color={tokens.colors.text.white} size={32} style={{ marginBottom: 4 }} />
-                <Text style={styles.sosBigBtnText}>SOS</Text>
-                <Text style={styles.sosBigBtnSub}>
-                  {sosActive ? 'BEACON ACTIVE' : isHolding ? 'HOLDING...' : 'HOLD 1.5s'}
-                </Text>
+                <Radio color={tokens.colors.text.white} size={34} />
+                <Text style={styles.holdLabel}>SOS</Text>
+                <Text style={styles.holdSub}>{isHolding ? 'KEEP HOLDING' : 'HOLD 1.5S'}</Text>
               </>
             )}
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </View>
 
-      {/* Active Tracking Card */}
-      {sosActive && activeCoords && (
-        <View style={styles.sosActiveCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.xs }}>
-            <Radio color={tokens.colors.status.danger} size={16} />
-            <Text style={styles.sosActiveText}>LIVE LOCATION SENT TO POLICE COMMAND</Text>
+      {/* Location + callback, stacked so nothing gets clipped */}
+      <View style={styles.card}>
+        <View style={[styles.row, { alignItems: 'flex-start' }]}>
+          <MapPin color={tokens.colors.text.secondary} size={18} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.placeText}>{placeLine || 'Location not found yet'}</Text>
+            {!!liveCoordLine && <Text style={styles.monoText}>{liveCoordLine}</Text>}
           </View>
-
-          <Text style={styles.sosActiveSub}>
-            Tracking Code: {activeTrackingCode || 'SOS-ACTIVE'}
-          </Text>
-          <Text style={styles.sosActiveSub}>
-            Emergency Phone: {citizen?.phone || reporterPhone || 'Callback requested'}
-          </Text>
-          <Text style={styles.sosActiveSub}>
-            Carrier Triangulation: Authorized (Act 843) • Cell tower query active
-          </Text>
-          <Text style={styles.sosActiveSub}>
-            GPS: {activeCoords.latitude !== null && activeCoords.longitude !== null
-              ? `${activeCoords.latitude.toFixed(5)}, ${activeCoords.longitude.toFixed(5)} (${activeCoords.locationSource}) ${activeCoords.accuracy !== null ? `(±${activeCoords.accuracy.toFixed(1)}m)` : ''}`
-              : 'Location pending satellite lock (Tracking in background...)'}
-          </Text>
-          <Text style={styles.sosActiveSub}>
-            Live Pings Sent: {successfulPings} {failedPings > 0 ? `(${failedPings} failed)` : ''}
-          </Text>
-          <Text style={styles.sosKeepOpenNotice}>
-            ⚠️ Keep this app open to continue transmitting live location updates every 10 seconds.
-          </Text>
-
-          <TouchableOpacity
-            onPress={handleCancelSos}
-            style={styles.sosCancelBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Stop Distress Beacon"
-          >
-            <XCircle color={tokens.colors.text.white} size={16} />
-            <Text style={styles.sosCancelText}>Stop Distress Beacon</Text>
-          </TouchableOpacity>
         </View>
-      )}
-
-      {/* Always-visible Direct Telephone Emergency Hotlines */}
-      <View style={styles.hotlineSection}>
-        <Text style={styles.hotlineTitle}>DIRECT NATIONAL EMERGENCY DIALERS</Text>
-        <View style={styles.hotlineBtnRow}>
-          <TouchableOpacity
-            onPress={() => handleCallEmergency('191')}
-            style={styles.hotlineBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Call Ghana Police Service Emergency 191"
-          >
-            <ShieldCheck color={tokens.colors.brand.gold} size={18} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.hotlineBtnMain}>CALL 191</Text>
-              <Text style={styles.hotlineBtnSub} numberOfLines={1}>Police Emergency</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => handleCallEmergency('112')}
-            style={styles.hotlineBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Call National Emergency Command 112"
-          >
-            <PhoneCall color={tokens.colors.police.badge} size={18} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.hotlineBtnMain}>CALL 112</Text>
-              <Text style={styles.hotlineBtnSub} numberOfLines={1}>National Dispatch</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.hotlineBtnRow}>
-          <TouchableOpacity
-            onPress={() => handleCallEmergency('192')}
-            style={styles.hotlineBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Call Ghana National Fire Service 192"
-          >
-            <Flame color={tokens.colors.status.danger} size={18} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.hotlineBtnMain}>CALL 192</Text>
-              <Text style={styles.hotlineBtnSub} numberOfLines={1}>Fire Service</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => handleCallEmergency('193')}
-            style={styles.hotlineBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Call National Ambulance Service 193"
-          >
-            <Volume2 color={tokens.colors.brand.green} size={18} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.hotlineBtnMain}>CALL 193</Text>
-              <Text style={styles.hotlineBtnSub} numberOfLines={1}>Ambulance (NAS)</Text>
-            </View>
-          </TouchableOpacity>
+        <View style={styles.divider} />
+        <View style={[styles.row, { alignItems: 'flex-start' }]}>
+          <PhoneCall color={tokens.colors.text.secondary} size={18} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.overline}>Callback number</Text>
+            <Text style={styles.placeText}>
+              {callbackNumber || 'None yet. Add one in your Profile so responders can call you.'}
+            </Text>
+          </View>
         </View>
       </View>
+
+      {EmergencyGrid}
     </View>
   );
 });
 
+const EMERGENCY_LINES = [
+  { number: '191', label: 'Ghana Police', icon: ShieldCheck, color: tokens.colors.brand.gold },
+  { number: '112', label: 'National emergency', icon: Headset, color: tokens.colors.sos.text },
+  { number: '192', label: 'Fire Service', icon: Flame, color: tokens.colors.brand.gold },
+  { number: '193', label: 'Ambulance', icon: Ambulance, color: tokens.colors.text.emerald }
+];
+
+const f = tokens.typography.fontFamily;
+const c = tokens.colors;
+
 const styles = StyleSheet.create({
-  section: {
-    gap: tokens.spacing.lg
-  },
-  bannerRow: {
+  section: { gap: tokens.spacing.lg },
+  row: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm },
+  card: { backgroundColor: c.surface.card, borderRadius: tokens.radius.lg, padding: tokens.spacing.lg, gap: tokens.spacing.sm },
+  divider: { height: 1, backgroundColor: c.border.subtle, marginVertical: tokens.spacing.xs },
+  title: { color: c.text.primary, fontSize: tokens.typography.fontSize.xxl, lineHeight: 36, fontFamily: f.sansBold, textAlign: 'center' },
+  subtitle: { color: c.text.secondary, fontSize: tokens.typography.fontSize.lg, lineHeight: 24, fontFamily: f.sansRegular, textAlign: 'center' },
+  cardTitle: { color: c.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: f.sans },
+  bodyText: { color: c.text.primary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: f.sansRegular },
+  bodyMuted: { color: c.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: 20, fontFamily: f.sansRegular },
+  overline: { color: c.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.mono, textTransform: 'uppercase', letterSpacing: 0.5 },
+  placeText: { color: c.text.primary, fontSize: tokens.typography.fontSize.lg, lineHeight: 24, fontFamily: f.sans },
+  monoText: { color: c.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.mono },
+
+  gpsChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: tokens.spacing.xs,
-    marginTop: tokens.spacing.sm
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: tokens.radius.full,
+    backgroundColor: c.surface.cardHover
   },
-  sosHeadline: {
-    color: tokens.colors.status.danger,
-    fontSize: tokens.typography.fontSize.lg,
-    fontWeight: '900',
-    letterSpacing: 0.5
-  },
-  sosSubtext: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs,
-    textAlign: 'center',
-    lineHeight: tokens.typography.lineHeight.xs,
-    paddingHorizontal: tokens.spacing.lg
-  },
+  gpsChipPending: { backgroundColor: c.brand.goldMuted },
+  gpsDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.text.emerald },
+  gpsChipText: { color: c.text.primary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.mono },
+
   errorBanner: {
-    width: '100%',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: tokens.colors.status.danger,
-    borderRadius: tokens.radius.lg,
-    padding: tokens.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: tokens.spacing.sm
+    gap: tokens.spacing.sm,
+    backgroundColor: c.sos.soft,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.md
   },
-  errorBannerTitle: {
-    color: tokens.colors.status.danger,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
-  errorBannerText: {
-    color: tokens.colors.text.primary,
-    fontSize: tokens.typography.fontSize.xxs,
-    marginTop: 2
-  },
-  retryBtn: {
+  retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: tokens.colors.status.danger,
+    minHeight: tokens.touchTarget.minHeight,
     paddingHorizontal: tokens.spacing.md,
-    paddingVertical: tokens.spacing.xs,
-    borderRadius: tokens.radius.md
+    borderRadius: tokens.radius.md,
+    backgroundColor: c.sos.container
   },
-  retryBtnText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
-  beaconOuterRing: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  retryText: { color: c.text.white, fontFamily: f.sans, fontSize: tokens.typography.fontSize.md },
+
+  holdArea: { alignItems: 'center', paddingVertical: tokens.spacing.lg },
+  holdHalo: {
+    width: 212,
+    height: 212,
+    borderRadius: 106,
+    backgroundColor: c.sos.soft,
     alignItems: 'center',
     justifyContent: 'center'
   },
-  beaconMidRing: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(239, 68, 68, 0.18)',
+  holdButton: {
+    width: 176,
+    height: 176,
+    borderRadius: 88,
+    backgroundColor: c.sos.container,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative'
+    gap: 2,
+    borderWidth: 4,
+    borderColor: c.sos.ring,
+    ...tokens.elevation.high,
+    shadowColor: c.sos.container
   },
-  sosBigBtn: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: tokens.colors.status.danger,
-    borderWidth: 5,
-    borderColor: tokens.colors.status.emergencyRing,
+  holdButtonPressed: { backgroundColor: c.sos.containerPressed, transform: [{ scale: 0.97 }] },
+  holdLabel: { color: c.text.white, fontSize: 30, fontFamily: f.sansBold, letterSpacing: 1 },
+  holdSub: { color: c.sos.onContainer, fontSize: tokens.typography.fontSize.md, fontFamily: f.monoBold },
+
+  dialSection: { gap: tokens.spacing.sm },
+  dialTitle: { color: c.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.mono, textTransform: 'uppercase', letterSpacing: 0.5 },
+  dialGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.sm },
+  dialButton: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    ...tokens.elevation.high
+    minHeight: 64,
+    paddingHorizontal: tokens.spacing.md,
+    borderRadius: tokens.radius.lg,
+    backgroundColor: c.surface.card
   },
-  sosBigBtnHolding: {
-    backgroundColor: tokens.colors.status.emergencyDark,
-    transform: [{ scale: 0.98 }]
+  dialButtonHot: { backgroundColor: c.sos.container },
+  dialNumber: { color: c.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: f.sansBold },
+  dialLabel: { color: c.text.secondary, fontSize: tokens.typography.fontSize.sm, fontFamily: f.sansRegular },
+  dialIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: tokens.radius.md,
+    backgroundColor: c.surface.cardHover,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
-  sosBigBtnActive: {
-    backgroundColor: tokens.colors.status.emergencyDark,
-    borderColor: tokens.colors.status.danger
-  },
-  sosBigBtnText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.xxl,
-    fontWeight: '900'
-  },
-  sosBigBtnSub: {
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: 'bold',
-    letterSpacing: 1
-  },
-  sosActiveCard: {
-    width: '100%',
-    backgroundColor: tokens.colors.surface.card,
+
+  activeBanner: {
+    backgroundColor: c.sos.container,
+    borderRadius: tokens.radius.lg,
     padding: tokens.spacing.lg,
-    borderRadius: tokens.radius.xl,
-    borderWidth: 1.5,
-    borderColor: tokens.colors.status.danger,
-    alignItems: 'center',
-    gap: tokens.spacing.xs,
-    ...tokens.elevation.medium
-  },
-  sosActiveText: {
-    color: tokens.colors.status.danger,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
-  sosActiveSub: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xs
-  },
-  sosKeepOpenNotice: {
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xxs,
-    textAlign: 'center',
-    marginTop: tokens.spacing.xs
-  },
-  sosCancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: tokens.spacing.xs,
-    marginTop: tokens.spacing.sm,
-    backgroundColor: tokens.colors.border.subtle,
-    paddingHorizontal: tokens.spacing.lg,
-    paddingVertical: tokens.spacing.sm,
-    borderRadius: tokens.radius.md
-  },
-  sosCancelText: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: 'bold'
-  },
-  hotlineSection: {
-    width: '100%',
-    gap: tokens.spacing.sm,
-    marginTop: tokens.spacing.sm
-  },
-  hotlineTitle: {
-    color: tokens.colors.text.muted,
-    fontSize: tokens.typography.fontSize.xxs,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-    textAlign: 'center'
-  },
-  hotlineBtnRow: {
-    flexDirection: 'row',
-    gap: tokens.spacing.md
-  },
-  hotlineBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: tokens.spacing.sm,
-    backgroundColor: tokens.colors.surface.card,
-    borderWidth: 1,
-    borderColor: tokens.colors.border.subtle,
-    padding: tokens.spacing.md,
-    borderRadius: tokens.radius.lg,
-    minHeight: tokens.touchTarget.minHeight
-  },
-  hotlineBtnMain: {
-    color: tokens.colors.text.white,
-    fontSize: tokens.typography.fontSize.sm,
-    fontWeight: '900'
-  },
-  hotlineBtnSub: {
-    color: tokens.colors.text.muted,
-    fontSize: 9
-  },
-  telecomConsentBanner: {
-    width: '100%',
-    backgroundColor: 'rgba(250, 204, 21, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(250, 204, 21, 0.25)',
-    borderRadius: tokens.radius.lg,
-    padding: tokens.spacing.md,
-    marginTop: tokens.spacing.xs,
-    marginBottom: tokens.spacing.sm,
     gap: 4
   },
-  telecomConsentHeading: {
-    color: tokens.colors.brand.gold,
-    fontSize: tokens.typography.fontSize.xs,
-    fontWeight: '800'
+  liveDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: c.text.white },
+  activeTitle: { color: c.text.white, fontSize: tokens.typography.fontSize.xxl, lineHeight: 36, fontFamily: f.sansBold },
+  activeText: { color: c.sos.onContainer, fontSize: tokens.typography.fontSize.lg, lineHeight: 24, fontFamily: f.sansMedium },
+  safeButton: {
+    flexDirection: 'row',
+    gap: tokens.spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
+    marginTop: tokens.spacing.sm,
+    borderRadius: tokens.radius.lg,
+    backgroundColor: c.surface.cardHover
   },
-  telecomConsentText: {
-    color: tokens.colors.text.secondary,
-    fontSize: tokens.typography.fontSize.xxs,
-    lineHeight: tokens.typography.lineHeight.xs
-  }
+  safeButtonText: { color: c.text.primary, fontSize: tokens.typography.fontSize.lg, fontFamily: f.sansBold }
 });

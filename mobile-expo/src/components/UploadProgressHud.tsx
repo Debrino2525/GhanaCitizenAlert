@@ -37,7 +37,7 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
             <CheckCircle2 color={tokens.colors.status.success} size={16} />
           )}
           <Text style={styles.uploadTitle}>
-            {isActivelyWorking ? 'UPLOADING & ENCRYPTING EVIDENCE...' : 'EVIDENCE SECURELY ATTACHED & LOCKED'}
+            {isActivelyWorking ? 'Preparing evidence…' : 'Evidence attached'}
           </Text>
         </View>
         <Text style={styles.uploadPercentageText}>{displayProgress}%</Text>
@@ -59,7 +59,7 @@ export const UploadProgressHud: React.FC<UploadProgressHudProps> = memo(({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <ShieldCheck color={tokens.colors.text.muted} size={12} />
           <Text style={styles.uploadStatusSubtext}>
-            {uploadStatusText || 'Act 772 Forensic Chain of Custody'}
+            {uploadStatusText || 'Preparing evidence'}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
