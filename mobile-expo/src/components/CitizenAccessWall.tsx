@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Shield,
@@ -546,10 +547,14 @@ export const CitizenAccessWall: React.FC<CitizenAccessWallProps> = ({ onAuthenti
       }
 
       // Step B: WebBrowser OAuth (Supports Expo Go, Web, and universal deep links)
-      const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'citizenalert',
-        preferLocalhost: false
-      });
+      // In Expo Go, custom URL schemes (citizenalert://) are not supported — use exp:// instead
+      const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient || (Constants as any).appOwnership === 'expo';
+      const redirectUrl = AuthSession.makeRedirectUri(
+        isExpoGo
+          ? { preferLocalhost: false }   // Expo Go uses exp:// automatically
+          : { scheme: 'citizenalert', preferLocalhost: false }  // Standalone APK/IPA
+      );
+      console.log('[OAuth] isExpoGo =', isExpoGo, '| redirectUrl =', redirectUrl);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider,

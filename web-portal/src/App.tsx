@@ -707,7 +707,7 @@ export const App: React.FC = () => {
             📱 Return to CitizenAlert App ➔
           </a>
           <p className="text-xs text-slate-500">
-            If the app does not open automatically, tap the button above.
+            If you are previewing in Expo Go, return to the Expo Go app. Standalone app builds will open via the button above.
           </p>
         </div>
       </div>
