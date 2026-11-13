@@ -1092,7 +1092,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           key={`${selectedIncident.id}-${resolvedVideoUrl}`}
                           ref={videoRef}
                           src={resolvedVideoUrl}
-                          poster={(currentMedia as any)?.thumbnailUrl && !(currentMedia as any)?.thumbnailUrl?.startsWith('file://') ? (currentMedia as any).thumbnailUrl : undefined}
+                          poster={(() => {
+                            // A private evidence link (often the video itself) cannot be a poster.
+                            const t = (currentMedia as any)?.thumbnailUrl as string | undefined;
+                            return t && !t.startsWith('file://') && !evidencePathFromUrl(t) ? t : undefined;
+                          })()}
                           className="w-full h-full object-cover bg-black"
                           playsInline
                           preload="auto"

@@ -20,6 +20,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { evidencePathFromUrl } from './PoliceCommandDashboard';
 
 export interface StatutoryAppeal {
   id: string;
@@ -52,6 +53,8 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
   const [filterMode, setFilterMode] = useState<'PENDING' | 'PUBLISHED' | 'APPEALS' | 'ALL'>('PENDING');
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // Evidence is private: previews of evidence images need a signed URL.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Statutory Appeals State
   const [appeals, setAppeals] = useState<StatutoryAppeal[]>([]);
@@ -161,6 +164,22 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
       setIsProcessing(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const thumb = String(activeIncident?.media?.[0]?.thumbnailUrl || '');
+    const path = evidencePathFromUrl(thumb);
+    setPreviewUrl(null);
+    if (!thumb || thumb.startsWith('file://')) return;
+    if (!path) {
+      setPreviewUrl(thumb);
+      return;
+    }
+    supabase.storage.from('evidence').createSignedUrl(path, 3600).then(({ data }) => {
+      if (!cancelled && data?.signedUrl) setPreviewUrl(data.signedUrl);
+    });
+    return () => { cancelled = true; };
+  }, [activeIncident?.id]);
 
   // Sets an appeal's outcome and confirms the database changed exactly that row.
   // resolved_by is stamped server-side with the signed-in officer (migration
@@ -593,10 +612,16 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
 
               {/* Viewfinder Preview with Blurring Overlay */}
               <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[220px] flex items-center justify-center">
-                {activeIncident.media[0]?.thumbnailUrl ? (
+                {activeIncident.media[0] && /\.(mp4|mov|m4v|webm)(\?|$)/i.test(String(activeIncident.media[0]?.thumbnailUrl || (activeIncident.media[0] as any)?.rawS3Url || '')) ? (
+                  <div className="p-12 text-center text-slate-400 space-y-1">
+                    <Eye className="w-8 h-8 mx-auto text-slate-600" />
+                    <p className="text-sm font-bold">Video attached</p>
+                    <p className="text-xs">Watch it in the Command view before publishing. Videos are not shown on the public feed.</p>
+                  </div>
+                ) : previewUrl ? (
                   <img
-                    src={activeIncident.media[0]?.thumbnailUrl}
-                    alt="Moderator Preview"
+                    src={previewUrl}
+                    alt="Photo attached to this report"
                     className="w-full h-64 object-cover"
                   />
                 ) : (
