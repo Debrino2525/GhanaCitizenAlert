@@ -190,7 +190,7 @@ export const PublicWebFeed: React.FC = () => {
           <span>{errorMsg}</span>
           <button
             onClick={fetchPublicFeed}
-            className="px-3 py-1 bg-red-900/80 hover:bg-red-800 rounded-lg text-white font-bold text-[11px]"
+            className="px-3 py-1 bg-red-900/80 hover:bg-red-800 rounded-lg text-white font-bold text-xs"
           >
             Retry
           </button>
@@ -220,7 +220,7 @@ export const PublicWebFeed: React.FC = () => {
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
                       {inc.category.replace(/_/g, ' ')}
                     </span>
-                    <span className="text-[11px] text-emerald-400 font-bold flex items-center space-x-1">
+                    <span className="text-xs text-emerald-400 font-bold flex items-center space-x-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Approved by a moderator</span>
                     </span>
@@ -234,25 +234,25 @@ export const PublicWebFeed: React.FC = () => {
                       <span>{inc.location_name} • {inc.region}</span>
                     </p>
                     {inc.location_source === 'LIVE' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
                         LIVE
                       </span>
                     ) : inc.location_source === 'LAST_KNOWN' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
                         LAST KNOWN {inc.gps_fix_age_s ? `(${Math.max(1, Math.round(inc.gps_fix_age_s / 60))}m old)` : ''}
                       </span>
                     ) : inc.location_source === 'MANUAL' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
                         MANUAL
                       </span>
                     ) : inc.location_source === 'UNAVAILABLE' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-950/80 text-red-400 border border-red-800">
                         UNAVAILABLE
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800">
                         Location source not recorded
                       </span>
                     )}

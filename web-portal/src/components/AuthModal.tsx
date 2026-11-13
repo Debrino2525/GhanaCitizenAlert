@@ -94,19 +94,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-xl font-black text-white">LAW ENFORCEMENT CAD</h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-900/80 text-blue-300 font-bold border border-blue-700">
-                ACT 772
-              </span>
+              <h1 className="text-xl font-black text-white">Officer sign-in</h1>
             </div>
-            <p className="text-xs text-slate-400 font-medium">
-              Ghana Joint Security Operations Center & Emergency CAD
+            <p className="text-sm text-slate-400 font-medium">
+              CitizenAlert Ghana command portal
             </p>
           </div>
         </div>
 
         {displayedError && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex items-center space-x-2">
+          <div role="alert" className="mb-4 p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-sm flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{displayedError}</span>
           </div>
@@ -131,17 +128,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         ) : isResetMode ? (
           <form onSubmit={handlePasswordRecovery} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Official Agency Email Address
+              <label htmlFor="reset-email" className="block text-sm font-semibold text-slate-300 mb-1.5">
+                Work email
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" aria-hidden="true" />
                 <input
+                  id="reset-email"
                   type="email"
-                  placeholder="e.g. officer@police.gov.gh"
+                  autoComplete="email"
+                  placeholder="officer@police.gov.gh"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   required
                 />
               </div>
@@ -150,9 +149,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
             >
-              <KeyRound className="w-4 h-4" />
+              <KeyRound className="w-4 h-4" aria-hidden="true" />
               <span>{isLoading ? 'Sending Recovery Link...' : 'Send Password Reset Link'}</span>
             </button>
 
@@ -170,17 +169,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         ) : (
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Official Agency Email Address
+              <label htmlFor="login-email" className="block text-sm font-semibold text-slate-300 mb-1.5">
+                Work email
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" aria-hidden="true" />
                 <input
+                  id="login-email"
                   type="email"
-                  placeholder="e.g. officer@police.gov.gh"
+                  autoComplete="username"
+                  placeholder="officer@police.gov.gh"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   required
                 />
               </div>
@@ -188,8 +189,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-300">
-                  Password / Passphrase
+                <label htmlFor="login-password" className="block text-sm font-semibold text-slate-300">
+                  Password
                 </label>
                 <button
                   type="button"
@@ -197,27 +198,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setIsResetMode(true);
                     setErrorMsg('');
                   }}
-                  className="text-[11px] text-blue-400 hover:text-blue-300"
+                  className="text-xs text-blue-400 hover:text-blue-300"
                 >
                   Forgot password?
                 </button>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" aria-hidden="true" />
                 <input
+                  id="login-password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your CAD passphrase"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-10 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
                   className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                 </button>
               </div>
             </div>
@@ -225,16 +229,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
             >
-              <LogIn className="w-4 h-4" />
-              <span>{isLoading ? 'Verifying Credentials...' : 'Authenticate & Unlock CAD Station'}</span>
+              <LogIn className="w-4 h-4" aria-hidden="true" />
+              <span>{isLoading ? 'Signing in...' : 'Sign in'}</span>
             </button>
           </form>
         )}
 
         {/* Security Legal Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+        <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500 font-mono">
           <a href="/privacy" className="hover:text-amber-400 transition underline">
             Privacy Policy (Act 843)
           </a>

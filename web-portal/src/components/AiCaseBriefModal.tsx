@@ -95,11 +95,11 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-800">
+                <span className="text-xs font-black uppercase px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-800">
                   CASE SUMMARY · AUTOMATIC DRAFT
                 </span>
                 {brief && (
-                  <span className="text-[10px] font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                     {brief.dossierNumber}
                   </span>
                 )}
@@ -214,7 +214,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                 {/* Situation Assessment */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold uppercase text-amber-400 tracking-wider">
+                    <span className="text-xs font-extrabold uppercase text-amber-400 tracking-wider">
                       SITUATION ASSESSMENT & THREAT BRIEF
                     </span>
                     <span className="text-xs text-slate-500 font-mono">{brief.generatedAt}</span>
@@ -247,7 +247,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
 
                 {/* Directives */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
-                  <span className="text-[10px] font-extrabold uppercase text-blue-400 tracking-wider block">
+                  <span className="text-xs font-extrabold uppercase text-blue-400 tracking-wider block">
                     ⚡ IMMEDIATE CAD COMMAND DIRECTIVES
                   </span>
                   <div className="space-y-1.5 text-xs text-slate-300">
@@ -267,7 +267,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                       <Shield className="w-5 h-5 text-blue-400 shrink-0" />
                       <div>
                         <p className="text-white font-bold">Suggested agency: <span className="text-amber-400">{triage.recommendedAgency}</span></p>
-                        <p className="text-slate-400 text-[11px]">Suggested by keyword rules. An officer must confirm.</p>
+                        <p className="text-slate-400 text-xs">Suggested by keyword rules. An officer must confirm.</p>
                       </div>
                     </div>
                     <button
@@ -292,7 +292,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                   <div className="space-y-2">
                     {brief.legalFramework.map((statute, idx) => (
                       <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs flex items-start space-x-2.5">
-                        <span className="px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/30 font-mono font-bold shrink-0 text-[10px]">
+                        <span className="px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/30 font-mono font-bold shrink-0 text-xs">
                           §{idx + 1}
                         </span>
                         <span className="text-slate-200 font-medium">{statute}</span>
@@ -319,7 +319,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                       <ListChecks className="w-4 h-4 text-emerald-400" />
                       <span>CID Tactical Field Checklist</span>
                     </span>
-                    <span className="text-[10px] text-slate-500 font-mono">5 Steps Required</span>
+                    <span className="text-xs text-slate-500 font-mono">5 Steps Required</span>
                   </div>
                   <div className="space-y-2">
                     {brief.investigativeChecklist.map((task, idx) => (
@@ -343,11 +343,11 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                   </div>
                   <div className="space-y-2">
                     <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-slate-500 text-[10px] uppercase font-bold block">SHA-256 recorded by reporter's device</span>
-                      <p className="font-mono text-emerald-400 break-all text-[11px]">{brief.forensicEvidenceAudit.sha256Seal}</p>
+                      <span className="text-slate-500 text-xs uppercase font-bold block">SHA-256 recorded by reporter's device</span>
+                      <p className="font-mono text-emerald-400 break-all text-xs">{brief.forensicEvidenceAudit.sha256Seal}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-slate-500 text-[10px] uppercase font-bold block">Integrity note</span>
+                      <span className="text-slate-500 text-xs uppercase font-bold block">Integrity note</span>
                       <p className="text-slate-300 text-xs leading-relaxed">{brief.forensicEvidenceAudit.chainOfCustodySummary}</p>
                     </div>
                   </div>

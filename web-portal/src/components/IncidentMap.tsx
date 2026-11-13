@@ -301,8 +301,12 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       minZoom: 5,
       maxZoom: 20,
       zoomControl: false,
-      scrollWheelZoom: true
+      // Scrolling the page must scroll the page. Wheel-zoom turns on once the
+      // officer clicks the map, and off again when the pointer leaves it.
+      scrollWheelZoom: false
     });
+    map.on('click', () => map.scrollWheelZoom.enable());
+    map.on('mouseout', () => map.scrollWheelZoom.disable());
 
     // Custom repositioned zoom control
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -700,7 +704,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       <div ref={mapContainerRef} className="w-full h-full z-map" />
 
       {/* TOP-LEFT CORNER OVERLAY CONTAINER */}
-      <div className="absolute top-3 left-3 z-map-ui pointer-events-none flex flex-col gap-2 max-w-[min(24rem,calc(100%-1.5rem))]">
+      <div className="absolute top-16 lg:top-3 left-3 z-map-ui pointer-events-none flex flex-col gap-2 max-w-[min(24rem,calc(100%-1.5rem))]">
         {selectedIncident && activeRoute && (
           <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-3 sm:p-3.5 text-xs shadow-2xl space-y-2.5 transition-all">
             {/* Header / Collapse Bar */}
@@ -714,13 +718,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <span className="font-extrabold text-white text-[11px] tracking-wide truncate">
+                <span className="font-extrabold text-white text-xs tracking-wide truncate">
                   TACTICAL CAD DISPATCH
                 </span>
               </div>
 
               <div className="flex items-center space-x-1.5 shrink-0">
-                <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
+                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
                   {selectedIncident.trackingCode}
                 </span>
                 <button 
@@ -734,7 +738,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
             {/* Collapsed One-Line Summary */}
             {isHudCollapsed ? (
-              <div className="flex items-center justify-between text-[11px] text-slate-300 font-medium">
+              <div className="flex items-center justify-between text-xs text-slate-300 font-medium">
                 <span className="text-amber-400 font-bold font-mono">Est. ~{activeRoute.emergencySirensEtaMinutes} min</span>
                 <span className="text-blue-400 font-mono">({activeRoute.distanceKm} km)</span>
                 <span className="text-slate-400 truncate max-w-[130px] font-mono">{activeRoute.originStation.name}</span>
@@ -743,7 +747,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
               <>
                 {/* Station Selector Dropdown */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                  <label className="text-xs font-bold text-slate-400 block mb-1">
                     POLICE COMMAND ORIGIN:
                   </label>
                   <select
@@ -769,7 +773,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                       <Radio className="w-3.5 h-3.5 animate-pulse" />
                     </div>
                     <div>
-                      <p className="text-[9px] text-slate-400 font-bold">SIRENS ETA</p>
+                      <p className="text-xs text-slate-400 font-bold">SIRENS ETA</p>
                       <p className="text-xs font-extrabold text-white font-mono">
                         {activeRoute.emergencySirensEtaMinutes} mins
                       </p>
@@ -781,7 +785,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                       <Navigation className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <p className="text-[9px] text-slate-400 font-bold">DISTANCE</p>
+                      <p className="text-xs text-slate-400 font-bold">DISTANCE</p>
                       <p className="text-xs font-extrabold text-blue-400 font-mono">
                         {activeRoute.distanceKm} km
                       </p>
@@ -790,14 +794,14 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                 </div>
 
                 {/* Corridor & Quick Narrow Controls */}
-                <div className="flex items-center justify-between text-[11px] text-slate-300 font-medium">
+                <div className="flex items-center justify-between text-xs text-slate-300 font-medium">
                   <p className="flex items-center space-x-1 truncate">
                     <Car className="w-3 h-3 text-amber-400 shrink-0" />
                     <span className="truncate">{activeRoute.primaryHighway}</span>
                   </p>
                   <button
                     onClick={handleFitRouteBounds}
-                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold shrink-0 ml-2"
+                    className="text-xs text-blue-400 hover:text-blue-300 font-bold shrink-0 ml-2"
                     title="Zoom Out to Full Police Dispatch Corridor"
                   >
                     🛣️ View Route
@@ -843,7 +847,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       </div>
 
       {/* TOP-RIGHT CORNER OVERLAY CONTAINER (Layer Selector, Locate Me, & Fullscreen Controls) */}
-      <div className="absolute top-3 right-3 z-map-ui pointer-events-none flex items-center gap-2">
+      <div className="absolute top-3 right-3 left-3 lg:left-auto z-map-ui pointer-events-none flex flex-wrap items-center justify-end gap-2">
         {/* Quick Narrow to Evidence Coordinates Button */}
         {selectedIncident && (
           <button
@@ -900,7 +904,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           >
             <Layers className="w-3.5 h-3.5 text-ghana-gold" />
             <span className="hidden sm:inline font-bold">{currentLayerObj.label}</span>
-            <span className="font-mono text-[10px] bg-slate-800 text-amber-400 px-1.5 py-0.5 rounded sm:hidden">{currentLayerObj.badge}</span>
+            <span className="font-mono text-xs bg-slate-800 text-amber-400 px-1.5 py-0.5 rounded sm:hidden">{currentLayerObj.badge}</span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
@@ -920,7 +924,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                   }`}
                 >
                   <span>{opt.label}</span>
-                  <span className={`text-[9px] font-mono px-1 py-0.2 rounded ${
+                  <span className={`text-xs font-mono px-1 py-0.2 rounded ${
                     currentStyle === opt.id ? 'bg-slate-950 text-amber-300 font-bold' : 'bg-slate-800 text-slate-400'
                   }`}>
                     {opt.badge}
@@ -947,13 +951,13 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         <div className="absolute top-14 right-3 z-map-ui pointer-events-auto bg-amber-950/95 backdrop-blur-md border border-amber-600/70 rounded-xl p-2.5 max-w-xs text-xs text-amber-200 shadow-2xl animate-fade-in flex items-start space-x-2">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1.5 flex-1">
-            <p className="text-[11px] leading-tight font-medium">
+            <p className="text-xs leading-tight font-medium">
               Mapbox tile service rate-limited or unavailable. Automatically switched to OpenStreetMap fallback.
             </p>
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowTileErrorNotice(false)}
-                className="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[10px]"
+                className="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs"
               >
                 Dismiss
               </button>
@@ -962,7 +966,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                   setShowTileErrorNotice(false);
                   setCurrentStyle('mapbox-dark');
                 }}
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-semibold flex items-center space-x-1"
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold flex items-center space-x-1"
               >
                 <RefreshCw className="w-2.5 h-2.5" />
                 <span>Retry Mapbox</span>
@@ -980,7 +984,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             className="flex items-center justify-between cursor-pointer select-none pb-1 border-b border-slate-800 gap-2"
             title="Toggle Map Radar Legend"
           >
-            <span className="font-extrabold text-slate-200 tracking-wider text-[10px] uppercase">
+            <span className="font-extrabold text-slate-200 tracking-wider text-xs uppercase">
               GHANA GEOSPATIAL RADAR
             </span>
             <button aria-label="Toggle Legend" className="text-slate-400 hover:text-white">
@@ -989,7 +993,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           </div>
 
           {!isLegendCollapsed && (
-            <div className="max-h-40 overflow-y-auto scrollbar-thin space-y-1 text-[11px] pr-1">
+            <div className="max-h-40 overflow-y-auto scrollbar-thin space-y-1 text-xs pr-1">
               <div className="flex items-center space-x-2 text-slate-300">
                 <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444] shrink-0" />
                 <span className="truncate">Crime / Robbery (CID)</span>
@@ -1010,7 +1014,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                 <span className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_6px_#8b5cf6] shrink-0" />
                 <span className="truncate">Sanitation (MMDA)</span>
               </div>
-              <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-slate-400 text-[10px]">
+              <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-slate-400 text-xs">
                 <span className="text-cyan-400 font-bold flex items-center space-x-1">
                   <span>🚔</span>
                   <span>Straight line to station</span>

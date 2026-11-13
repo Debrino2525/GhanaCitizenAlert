@@ -54,7 +54,7 @@ export const renderLocationSourceBadge = (
 
   if (cancelledByReporter || closedByOfficer) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-300 border border-slate-700">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-slate-800 text-slate-300 border border-slate-700">
         <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1" />
         {cancelledByReporter ? 'CANCELLED BY REPORTER' : 'CLOSED'}
       </span>
@@ -71,7 +71,7 @@ export const renderLocationSourceBadge = (
     // A live GPS fix is only truly live if fresh within 90 seconds (1.5 minutes)
     if (elapsedSec > 90) {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="No fresh location from the device">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="No fresh location from the device">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
           LAST KNOWN ({formatAgo(elapsedSec)})
         </span>
@@ -79,7 +79,7 @@ export const renderLocationSourceBadge = (
     }
 
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
         LIVE
       </span>
@@ -87,7 +87,7 @@ export const renderLocationSourceBadge = (
   }
   if (locationSource === 'LAST_KNOWN') {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
         LAST KNOWN ({formatAgo(elapsedSec)})
       </span>
@@ -95,20 +95,20 @@ export const renderLocationSourceBadge = (
   }
   if (locationSource === 'MANUAL') {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
         MANUAL
       </span>
     );
   }
   if (locationSource === 'UNAVAILABLE') {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-950/80 text-red-400 border border-red-800">
         UNAVAILABLE
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800">
       Location source not recorded
     </span>
   );
@@ -123,6 +123,11 @@ interface PoliceCommandDashboardProps {
   onOpenCertificateModal: (cert: CourtCertificate) => void;
   onApprovePublicPublish?: (incidentId: string) => void;
   onRejectPublicPublish?: (incidentId: string) => void;
+}
+
+/** Resolved, dismissed, or cancelled by the reporter: no longer an emergency on screen. */
+export function isCaseClosed(inc: Pick<IncidentReport, 'status' | 'title'>): boolean {
+  return inc.status === 'RESOLVED' || inc.status === 'DISMISSED' || /STAND DOWN|CANCELLED/i.test(inc.title || '');
 }
 
 export function formatPingAge(dateStr: string): string {
@@ -614,13 +619,13 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             <div className="flex items-center space-x-2 min-w-0">
               <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 shrink-0" />
               <span className="text-xs sm:text-sm font-bold text-white truncate">CAD Dispatch Queue</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 font-mono font-bold shrink-0">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 font-mono font-bold shrink-0">
                 {filteredIncidents.length}
               </span>
             </div>
 
             <div className="flex items-center space-x-1.5 shrink-0">
-              <span className="hidden xl:inline text-[10px] font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+              <span className="hidden xl:inline text-xs font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                 [J / K]
               </span>
               <select
@@ -650,13 +655,13 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-10 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500"
             />
-            <span className="absolute right-2.5 top-2 text-[10px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 pointer-events-none hidden sm:inline">
+            <span className="absolute right-2.5 top-2 text-xs font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 pointer-events-none hidden sm:inline">
               /
             </span>
           </div>
 
-          {/* Single Row Flex-Nowrap Status Chips */}
-          <div className="flex flex-nowrap overflow-x-auto scrollbar-thin gap-1.5 pt-0.5 pb-1 snap-x">
+          {/* Status chips wrap instead of scrolling off the edge */}
+          <div className="flex flex-wrap gap-1.5 pt-0.5 pb-1">
             {statusFilterList.map((item) => {
               const count = item.id === 'ALL' ? incidents.length : (statusCounts[item.id] || 0);
               const isSelected = filterStatus === item.id;
@@ -664,14 +669,14 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 <button
                   key={item.id}
                   onClick={() => setFilterStatus(item.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition whitespace-nowrap shrink-0 snap-start flex items-center space-x-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase transition whitespace-nowrap flex items-center space-x-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     isSelected
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
                   }`}
                 >
                   <span>{item.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded font-mono text-[9px] ${
+                  <span className={`px-1.5 py-0.2 rounded font-mono text-xs ${
                     isSelected ? 'bg-blue-900 text-blue-100' : 'bg-slate-800 text-slate-300'
                   }`}>
                     {count}
@@ -689,8 +694,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               No matching incidents found in CAD queue.
             </div>
           ) : (
-            filteredIncidents.map(inc => {
+            [...filteredIncidents]
+              .sort((a, b) => Number(isCaseClosed(a)) - Number(isCaseClosed(b)))
+              .map(inc => {
               const isSelected = selectedIncident?.id === inc.id;
+              const closed = isCaseClosed(inc);
               return (
                 <div
                   key={inc.id}
@@ -699,7 +707,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     isSelected
                       ? 'bg-slate-800/90 border-blue-500 shadow-lg shadow-blue-500/15 ring-1 ring-blue-500'
                       : 'bg-slate-900/80 border-slate-800 hover:bg-slate-850 hover:border-slate-700'
-                  }`}
+                  } ${closed && !isSelected ? 'opacity-60 hover:opacity-100' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <div className="flex items-center space-x-2 min-w-0">
@@ -714,18 +722,20 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         {inc.trackingCode}
                       </span>
                     </div>
-                    <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded shrink-0 ${
-                      inc.severity === 'RED'
+                    <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded shrink-0 ${
+                      closed
+                        ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                        : inc.severity === 'RED'
                         ? 'bg-red-900/60 text-red-300 border border-red-800'
                         : inc.severity === 'HIGH'
                         ? 'bg-amber-900/60 text-amber-300 border border-amber-800'
                         : 'bg-blue-900/60 text-blue-300 border border-blue-800'
                     }`}>
-                      {inc.severity}
+                      {closed ? 'Closed' : inc.severity}
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-bold text-white line-clamp-1 mb-1">{sosDisplayTitle(inc.title, getSosState(inc, latestPings[inc.id]?.created_at))}</h3>
+                  <h3 className={`text-sm font-bold line-clamp-1 mb-1 ${closed ? 'text-slate-300' : 'text-white'}`}>{sosDisplayTitle(inc.title, getSosState(inc, latestPings[inc.id]?.created_at))}</h3>
                   <p className="text-xs text-slate-400 line-clamp-2 mb-2">{inc.description}</p>
                   
                   {latestPings[inc.id] && (() => {
@@ -734,7 +744,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     const isSignalLost = sosState === 'SIGNAL_LOST';
 
                     return (
-                      <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono my-2 shadow-inner ${
+                      <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono my-2 shadow-inner ${
                         isPingActive
                           ? 'bg-red-950/80 border-red-800 text-red-300'
                           : isSignalLost
@@ -751,10 +761,10 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
                   <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80 gap-2">
                     <div className="min-w-0">
-                      <span className="font-mono text-blue-400 font-bold text-[11px] truncate block">
+                      <span className="font-mono text-blue-400 font-bold text-xs truncate block">
                         📍 {inc.coordinates ? `${inc.coordinates[0].toFixed(4)}° N, ${inc.coordinates[1].toFixed(4)}° W` : 'Location unavailable'}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                      <span className="text-xs text-slate-500 font-mono block mt-0.5">
                         🕒 {new Date(inc.createdAt).toLocaleString(undefined, {
                           month: 'short',
                           day: 'numeric',
@@ -852,7 +862,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                             isPingActive ? 'border-red-500' : 'border-slate-600 grayscale'
                           }`}
                         />
-                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border border-slate-900 flex items-center justify-center text-[10px] ${
+                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border border-slate-900 flex items-center justify-center text-xs ${
                           isPingActive ? 'bg-red-600' : 'bg-slate-700'
                         }`}>
                           {isPingActive ? '🚨' : '🛑'}
@@ -869,7 +879,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     )}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded shadow-md ${
+                        <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded shadow-md ${
                           isPingActive
                             ? 'bg-red-600 text-white'
                             : 'bg-slate-800 text-slate-300 border border-slate-700'
@@ -948,7 +958,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     </div>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-800">
+                        <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-800">
                           🚔 {route.originStation.name}
                         </span>
                         <span className="text-xs font-mono font-bold text-amber-400 flex items-center space-x-1">
@@ -998,12 +1008,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   <button
                     onClick={handleForceRefreshMedia}
                     title="Force refresh signed media streams from National Vault"
-                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold flex items-center space-x-1 transition border border-slate-700/60"
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center space-x-1 transition border border-slate-700/60"
                   >
                     <RotateCcw className="w-3 h-3 text-blue-400" />
                     <span>Refresh Media</span>
                   </button>
-                  <span className="text-slate-400 font-mono text-[11px]">
+                  <span className="text-slate-400 font-mono text-xs">
                     {currentMedia
                       ? `${currentMedia.durationSeconds ? `${currentMedia.durationSeconds}s • ` : ''}${currentMedia.type}`
                       : 'No evidence attached'}
@@ -1186,7 +1196,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 )}
 
                 {/* Tamper-Proof Cryptographic Watermark HUD Overlay */}
-                <div className="absolute top-3 left-3 z-30 bg-black/85 backdrop-blur-md p-2 rounded-xl border border-slate-700/80 text-[10px] sm:text-[11px] font-mono text-white space-y-0.5 shadow-2xl pointer-events-none">
+                <div className="absolute top-3 left-3 z-30 bg-black/85 backdrop-blur-md p-2 rounded-xl border border-slate-700/80 text-xs font-mono text-white space-y-0.5 shadow-2xl pointer-events-none">
                   <p className="text-ghana-gold font-black flex items-center space-x-1">
                     <span>🇬🇭</span>
                     <span>REPORTED LOCATION (FROM DEVICE)</span>
@@ -1227,7 +1237,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     href={`https://www.google.com/maps?q=${selectedIncident.coordinates[0]},${selectedIncident.coordinates[1]}&ll=${selectedIncident.coordinates[0]},${selectedIncident.coordinates[1]}&z=20&t=k`}
                     target="_blank"
                     rel="noreferrer"
-                    className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-lg backdrop-blur-md transition"
+                    className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white text-xs font-bold flex items-center space-x-1 shadow-lg backdrop-blur-md transition"
                   >
                     <ExternalLink className="w-3 h-3" />
                     <span>Satellite</span>
@@ -1240,7 +1250,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs">
                   {/* Timeline Scrubber */}
                   <div className="flex items-center space-x-3">
-                    <span className="font-mono text-blue-400 text-[11px] font-bold w-10">
+                    <span className="font-mono text-blue-400 text-xs font-bold w-10">
                       {String(Math.floor(currentTime / 60)).padStart(2, '0')}:{String(Math.floor(currentTime % 60)).padStart(2, '0')}
                     </span>
                     <input
@@ -1252,7 +1262,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       onChange={(e) => handleSeek(Number(e.target.value))}
                       className="flex-1 accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                     />
-                    <span className="font-mono text-slate-400 text-[11px] w-10 text-right">
+                    <span className="font-mono text-slate-400 text-xs w-10 text-right">
                       {String(Math.floor((duration || 15) / 60)).padStart(2, '0')}:{String(Math.floor((duration || 15) % 60)).padStart(2, '0')}
                     </span>
                   </div>
@@ -1285,12 +1295,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
                     <div className="flex items-center space-x-2">
                       <div className="flex items-center space-x-1.5">
-                        <span className="text-slate-400 text-[11px] font-bold">Speed:</span>
+                        <span className="text-slate-400 text-xs font-bold">Speed:</span>
                         {[0.5, 1.0, 1.5, 2.0].map(speed => (
                           <button
                             key={speed}
                             onClick={() => handleSpeedChange(speed)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            className={`px-1.5 py-0.5 rounded text-xs font-mono font-bold ${
                               playbackSpeed === speed
                                 ? 'bg-amber-400 text-slate-950 shadow'
                                 : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -1317,13 +1327,13 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               {/* SHA-256 Cryptographic Seal */}
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                  <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">
                     SHA-256 of evidence file (computed on reporter's device)
                   </span>
                   {evidenceHash && (
                   <button
                     onClick={() => handleCopyHash(evidenceHash)}
-                    className="text-amber-400 hover:text-amber-300 text-[11px] font-bold flex items-center space-x-1"
+                    className="text-amber-400 hover:text-amber-300 text-xs font-bold flex items-center space-x-1"
                   >
                     {copiedHash ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedHash ? 'Hash Copied' : 'Copy Hash'}</span>
@@ -1331,15 +1341,15 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   )}
                 </div>
                 {evidenceHash ? (
-                  <p className="font-mono text-[11px] text-slate-300 break-all bg-slate-900 p-2 rounded border border-slate-800">
+                  <p className="font-mono text-xs text-slate-300 break-all bg-slate-900 p-2 rounded border border-slate-800">
                     {evidenceHash}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-amber-300 bg-slate-900 p-2 rounded border border-slate-800">
+                  <p className="text-xs text-amber-300 bg-slate-900 p-2 rounded border border-slate-800">
                     {currentMedia ? 'No hash was recorded for this file, so its integrity cannot be checked.' : 'No evidence file, so there is nothing to hash.'}
                   </p>
                 )}
-                <p className="text-[10px] text-slate-500">A device-side hash shows whether the file changed after capture. It is not a court certificate or a legal seal.</p>
+                <p className="text-xs text-slate-500">A device-side hash shows whether the file changed after capture. It is not a court certificate or a legal seal.</p>
               </div>
             </div>
 
@@ -1364,7 +1374,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       />
                     ) : null}
                     <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">REPORTER IDENTITY</span>
+                      <span className="text-slate-500 block text-xs font-bold">REPORTER IDENTITY</span>
                       <span className="text-white font-bold text-xs">
                         {selectedIncident.reporter.isAnonymous
                           ? '🛡️ Whistleblower (Act 720)'
@@ -1384,34 +1394,34 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       </a>
                     </div>
                   ) : (
-                    <span className="text-[10px] text-slate-400 block">
+                    <span className="text-xs text-slate-400 block">
                       {selectedIncident.reporter.isAnonymous ? 'Protected identity (Act 720)' : 'No phone linked'}
                     </span>
                   )}
                   {selectedIncident.reporter?.carrierTriangulationAuthorized && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9px] font-semibold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded px-1.5 py-0.5">
+                    <div className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded px-1.5 py-0.5">
                       <span>📡 Carrier Triangulation Authorized (Act 843 Sec 20)</span>
                     </div>
                   )}
                   {selectedIncident.reporter?.ghanaCardId && !selectedIncident.reporter?.isAnonymous && (
-                    <span className="text-[9px] text-amber-400 font-mono block mt-0.5">
+                    <span className="text-xs text-amber-400 font-mono block mt-0.5">
                       🇬🇭 {selectedIncident.reporter.ghanaCardId}
                     </span>
                   )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block text-[10px] font-bold">CIVIC TRUST SCORE</span>
+                  <span className="text-slate-500 block text-xs font-bold">CIVIC TRUST SCORE</span>
                   <span className="text-emerald-400 font-black text-sm mt-0.5 block">
                     {typeof selectedIncident.reporter.trustScore === 'number' ? selectedIncident.reporter.trustScore : 0}% Civic Trust
                   </span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-xs text-slate-400">
                     {(selectedIncident.reporter as any)?.isGoogleVerified ? 'Google Identity Verified' : 'Registered Citizen'}
                   </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 col-span-2 sm:col-span-1">
-                  <span className="text-slate-500 block text-[10px] font-bold">RE-ASSIGN AGENCY</span>
+                  <span className="text-slate-500 block text-xs font-bold">RE-ASSIGN AGENCY</span>
                   <select
                     value={selectedIncident.assignedAgency}
                     onChange={(e) => onReassignAgency(selectedIncident.id, e.target.value as AgencyType)}
@@ -1445,7 +1455,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               <div className="space-y-2 pt-2 border-t border-slate-800">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">CAD Action Triage</h4>
-                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800">
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800">
                     STATUS: {selectedIncident.status.replace(/_/g, ' ')}
                   </span>
                 </div>
@@ -1499,8 +1509,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 {/* Public Civic Feed Quick Toggle */}
                 <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Civic Public Feed:</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Civic Public Feed:</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                       selectedIncident.isPublicPublished
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                         : selectedIncident.isPublicEligible
@@ -1519,7 +1529,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           onRejectPublicPublish?.(selectedIncident.id);
                           setActionToast({ type: 'warning', message: `🚫 Incident ${selectedIncident.trackingCode} revoked from Civic Feed.` });
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 text-red-400 hover:text-red-300 font-bold text-[11px] transition border border-red-500/20 flex items-center space-x-1 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 text-red-400 hover:text-red-300 font-bold text-xs transition border border-red-500/20 flex items-center space-x-1 cursor-pointer"
                       >
                         <span>🚫</span>
                         <span>Revoke Public Feed</span>
@@ -1531,7 +1541,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           onApprovePublicPublish?.(selectedIncident.id);
                           setActionToast({ type: 'success', message: `✅ Incident ${selectedIncident.trackingCode} published live to Civic Feed.` });
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition shadow-sm flex items-center space-x-1 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-sm flex items-center space-x-1 cursor-pointer"
                       >
                         <span>📢</span>
                         <span>Publish to Public Feed</span>
@@ -1654,7 +1664,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               className="max-w-full max-h-[85vh] object-contain rounded-xl select-none"
             />
             {/* Watermark in bottom left */}
-            <div className="absolute bottom-3 left-3 bg-black/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-700/80 text-[11px] font-mono text-white shadow-2xl pointer-events-none">
+            <div className="absolute bottom-3 left-3 bg-black/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-700/80 text-xs font-mono text-white shadow-2xl pointer-events-none">
               <p className="text-ghana-gold font-bold">🇬🇭 CITIZEN-ALERT FORENSIC TELEMETRY</p>
               <p className="text-slate-300">
                 {selectedIncident?.coordinates ? `LAT: ${selectedIncident.coordinates[0].toFixed(5)}° N | LNG: ${selectedIncident.coordinates[1].toFixed(5)}° W` : 'LOCATION UNAVAILABLE'}

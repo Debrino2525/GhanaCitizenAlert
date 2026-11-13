@@ -50,11 +50,11 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
         <div className="space-y-4 text-xs md:text-sm">
           <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono">
             <div>
-              <span className="text-slate-500 block text-[11px]">CASE TRACKING CODE</span>
+              <span className="text-slate-500 block text-xs">CASE TRACKING CODE</span>
               <span className="font-bold text-white">{certificate.trackingCode}</span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">INCIDENT LOCATION</span>
+              <span className="text-slate-500 block text-xs">INCIDENT LOCATION</span>
               <span className="font-bold text-amber-400 truncate block">
                 {certificate.locationName || 'Location pending'}
                 {certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}° N, ${certificate.coordinates[1].toFixed(4)}° W)` : ' (GPS unavailable)'}
@@ -67,7 +67,7 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
               <div key={idx} className="p-3 rounded-lg bg-slate-950 border border-slate-800">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-xs font-bold text-blue-300">Attachment #{idx + 1} ({item.type})</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
                     item.isVerifiedHex
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
@@ -75,7 +75,7 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
                     {item.isVerifiedHex ? 'Device hash recorded' : 'No valid hash'}
                   </span>
                 </div>
-                <p className="font-mono text-[11px] text-slate-400 break-all bg-slate-900 p-2 rounded mt-1">
+                <p className="font-mono text-xs text-slate-400 break-all bg-slate-900 p-2 rounded mt-1">
                   SHA-256: {item.sha256Hash}
                 </p>
               </div>

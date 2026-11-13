@@ -77,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
             <div className="flex items-center space-x-2 min-w-0 flex-1">
               <Radio className="w-3.5 h-3.5 animate-spin shrink-0" />
-              <span className="font-extrabold tracking-wider uppercase shrink-0 text-[11px] sm:text-xs">
+              <span className="font-extrabold tracking-wider uppercase shrink-0 text-xs">
                 [{activeAmberOrRed.alertType} ALERT GEOFENCE BROADCAST]:
               </span>
               <span className="truncate" title={activeAmberOrRed.title}>{activeAmberOrRed.title}</span>
@@ -102,11 +102,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-base sm:text-lg font-black tracking-tight text-white whitespace-nowrap">
                   CITIZEN<span className="text-ghana-gold">ALERT</span>
                 </span>
-                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 uppercase whitespace-nowrap hidden sm:inline-block">
+                <span className="text-xs font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 uppercase whitespace-nowrap hidden lg:inline-block">
                   GHANA 🇬🇭
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate hidden sm:block">National Command Center & Portals</p>
+              <p className="text-xs text-slate-400 font-medium truncate hidden lg:block">National Command Center & Portals</p>
             </div>
           </div>
 
@@ -122,6 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     onClick={() => setActiveTab(item.id)}
                     title={item.label}
                     aria-label={item.label}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                       isActive
                         ? item.activeColor
@@ -129,7 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                    <span className={isActive ? 'inline' : 'hidden xl:inline'}>
+                    <span className={isActive ? 'inline' : 'hidden md:inline'}>
                       {item.label}
                     </span>
                   </button>

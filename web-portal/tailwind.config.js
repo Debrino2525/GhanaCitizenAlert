@@ -1,3 +1,19 @@
+import defaultColors from 'tailwindcss/colors';
+
+/**
+ * Surfaces and borders follow the mobile app's "Humane Civic Guard" tokens
+ * (mobile-expo/src/theme/tokens.ts) so both apps share one palette. Only the dark
+ * slate shades are remapped; text shades keep Tailwind's slate.
+ */
+const civicSurfaces = {
+  950: '#0B1326', // tokens.colors.bg.base
+  900: '#171F33', // tokens.colors.surface.card
+  850: '#1C2438',
+  800: '#222A3D', // tokens.colors.surface.cardHover
+  750: '#283046',
+  700: '#2D3449', // tokens.colors.surface.highest
+};
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -7,6 +23,17 @@ export default {
   theme: {
     extend: {
       colors: {
+        slate: { ...defaultColors.slate, ...civicSurfaces },
+        civic: {
+          base: '#0B1326',
+          input: '#060E20',
+          textPrimary: '#DAE2FD',
+          textSecondary: '#D0C6AB',
+          gold: '#FCD116',
+          sos: '#A40217',
+          sosText: '#FFB3AD',
+          success: '#5FEDB0',
+        },
         ghana: {
           red: '#CE1126',
           gold: '#FCD116',

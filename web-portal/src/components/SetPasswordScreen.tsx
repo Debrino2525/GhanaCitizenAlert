@@ -148,7 +148,7 @@ export const SetPasswordScreen: React.FC<SetPasswordScreenProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <h2 className="text-lg font-black text-white">SET SECURE CAD PASSPHRASE</h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/80 text-amber-300 font-bold border border-amber-700">
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-amber-900/80 text-amber-300 font-bold border border-amber-700">
                 ACT 772
               </span>
             </div>
@@ -196,7 +196,7 @@ export const SetPasswordScreen: React.FC<SetPasswordScreenProps> = ({
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 font-mono">
+            <p className="text-xs text-slate-400 mt-1 font-mono">
               {password.length >= 12 ? (
                 <span className="text-emerald-400 font-bold">✓ Length requirement met ({password.length}/12 chars)</span>
               ) : (
@@ -222,7 +222,7 @@ export const SetPasswordScreen: React.FC<SetPasswordScreenProps> = ({
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 space-y-1">
             <p className="font-semibold text-slate-300">Security Standards:</p>
             <p>• Must be at least 12 characters long</p>
             <p>• Common words, sequential numbers, and dictionary phrases are rejected</p>

@@ -329,7 +329,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                 <div className="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-slate-500 space-y-2">
                   <Scale className="w-8 h-8 text-slate-600 mx-auto" />
                   <p className="text-xs font-bold text-slate-400">No statutory appeals filed.</p>
-                  <p className="text-[11px]">All published civic bulletins remain uncontested.</p>
+                  <p className="text-xs">All published civic bulletins remain uncontested.</p>
                 </div>
               ) : (
                 appeals.map(app => {
@@ -351,7 +351,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                         <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                           {app.tracking_code}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
                           app.status === 'GRANTED'
                             ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
                             : app.status === 'REJECTED'
@@ -365,7 +365,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                       <p className="text-xs text-slate-400 line-clamp-2 mt-1">
                         <span className="text-slate-300 font-semibold">{app.applicant_name}:</span> {app.reason}
                       </p>
-                      <div className="mt-2 pt-2 border-t border-slate-800 text-[11px] flex justify-between text-slate-400">
+                      <div className="mt-2 pt-2 border-t border-slate-800 text-xs flex justify-between text-slate-400">
                         <span>📞 {app.contact_info}</span>
                         <span className="text-slate-500">{new Date(app.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
@@ -377,7 +377,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
               <div className="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-slate-500 space-y-2">
                 <ShieldCheck className="w-8 h-8 text-slate-600 mx-auto" />
                 <p className="text-xs font-bold text-slate-400">No cases in this queue.</p>
-                <p className="text-[11px]">No reports are waiting for review.</p>
+                <p className="text-xs">No reports are waiting for review.</p>
               </div>
             ) : (
               displayedQueue.map(inc => {
@@ -399,7 +399,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                       <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                         {inc.trackingCode}
                       </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                         inc.isPublicPublished
                           ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                           : inc.isPublicEligible
@@ -411,7 +411,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                     </div>
                     <h4 className="text-sm font-bold text-white truncate">{inc.title}</h4>
                     <p className="text-xs text-slate-400 line-clamp-2 mt-1">{inc.description}</p>
-                    <div className="mt-2 pt-2 border-t border-slate-800 text-[11px] flex justify-between text-slate-400">
+                    <div className="mt-2 pt-2 border-t border-slate-800 text-xs flex justify-between text-slate-400">
                       <span>📍 {inc.locationName || 'Location pending'}</span>
                       <span className="font-semibold text-slate-300">
                         Severity: <span className={inc.severity === 'RED' || inc.severity === 'CRITICAL' ? 'text-red-400 font-bold' : 'text-amber-400'}>{inc.severity}</span>
@@ -435,7 +435,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                       <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                         {activeAppeal.tracking_code}
                       </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
                         activeAppeal.status === 'GRANTED'
                           ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
                           : activeAppeal.status === 'REJECTED'
@@ -475,11 +475,11 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
 
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Applicant Identity</span>
+                        <span className="text-slate-500 block text-xs uppercase font-bold">Applicant Identity</span>
                         <span className="text-white font-bold">{activeAppeal.applicant_name}</span>
                       </div>
                       <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Contact / Verification</span>
+                        <span className="text-slate-500 block text-xs uppercase font-bold">Contact / Verification</span>
                         <span className="text-white font-mono">{activeAppeal.contact_info}</span>
                       </div>
                     </div>
@@ -500,7 +500,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                       <ShieldCheck className="w-4 h-4 text-blue-400" />
                       <span>Legal Compliance Protocol (Act 843 vs Act 772)</span>
                     </div>
-                    <p className="text-[11px] text-blue-300/80 leading-relaxed">
+                    <p className="text-xs text-blue-300/80 leading-relaxed">
                       Granting takedown will instantaneously retract the bulletin from public mobile and web feeds. The encrypted incident dossier is permanently quarantined in the internal police archives to satisfy Section 35 statutory public safety exemptions and Act 772 chain of custody.
                     </p>
                   </div>
@@ -512,7 +512,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                         <span>{activeAppeal.resolved_at ? new Date(activeAppeal.resolved_at).toLocaleString() : ''}</span>
                       </div>
                       {activeAppeal.dpo_notes && (
-                        <p className="text-[11px] text-slate-400 mt-1 italic">Notes: {activeAppeal.dpo_notes}</p>
+                        <p className="text-xs text-slate-400 mt-1 italic">Notes: {activeAppeal.dpo_notes}</p>
                       )}
                     </div>
                   )}
@@ -571,7 +571,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                     <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                       {activeIncident.trackingCode}
                     </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                       activeIncident.isPublicPublished
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                         : 'bg-blue-950 text-blue-300 border border-blue-800'
@@ -603,7 +603,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                   <div className="p-12 text-center text-slate-500 space-y-1">
                     <Eye className="w-8 h-8 mx-auto text-slate-600" />
                     <p className="text-xs font-bold text-slate-400">No Image Attachment</p>
-                    <p className="text-[10px]">Text-only report. Location comes from the reporter's phone and is not verified.</p>
+                    <p className="text-xs">Text-only report. Location comes from the reporter's phone and is not verified.</p>
                   </div>
                 )}
 

@@ -764,13 +764,13 @@ export const App: React.FC = () => {
         {activeTab === 'COMMAND' && (
           <div className="space-y-4">
             {/* Slim KPI Command Strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5">
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold shrink-0">
                   🚨
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Active Queue</p>
+                  <p className="text-xs text-slate-400 font-semibold leading-tight">Open cases</p>
                   <p className="text-base sm:text-lg font-black font-mono text-white tracking-tight">{activeCount}</p>
                 </div>
               </div>
@@ -780,7 +780,7 @@ export const App: React.FC = () => {
                   ⚡
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Units Dispatched</p>
+                  <p className="text-xs text-slate-400 font-semibold leading-tight">Dispatched</p>
                   <p className="text-base sm:text-lg font-black font-mono text-emerald-400 tracking-tight">{dispatchedCount}</p>
                 </div>
               </div>
@@ -790,7 +790,7 @@ export const App: React.FC = () => {
                   🔍
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Investigating</p>
+                  <p className="text-xs text-slate-400 font-semibold leading-tight">Investigating</p>
                   <p className="text-base sm:text-lg font-black font-mono text-indigo-300 tracking-tight">{investigatingCount}</p>
                 </div>
               </div>
@@ -800,17 +800,17 @@ export const App: React.FC = () => {
                   ⚖️
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Hashed evidence files</p>
+                  <p className="text-xs text-slate-400 font-semibold leading-tight">Hashed evidence files</p>
                   <p className="text-base sm:text-lg font-black font-mono text-purple-300 tracking-tight">{hashedEvidenceCount}</p>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3 col-span-2 sm:col-span-1">
+              <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3 col-span-2 md:col-span-1">
                 <div className="w-9 h-9 rounded-xl bg-amber-600/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shrink-0">
                   ✅
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Resolved Today</p>
+                  <p className="text-xs text-slate-400 font-semibold leading-tight">Resolved today</p>
                   <p className="text-base sm:text-lg font-black font-mono text-amber-400 tracking-tight">{resolvedTodayCount}</p>
                 </div>
               </div>

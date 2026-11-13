@@ -459,11 +459,11 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
   const approvalBadge = (a: EmergencyAlert) => {
     switch (a.approvalStatus) {
       case 'PENDING_APPROVAL':
-        return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700">WAITING FOR APPROVAL</span>;
+        return <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700">WAITING FOR APPROVAL</span>;
       case 'REJECTED':
-        return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">REJECTED</span>;
+        return <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">REJECTED</span>;
       case 'SELF_APPROVED_NO_SECOND_OFFICER':
-        return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-700">SELF-APPROVED</span>;
+        return <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-700">SELF-APPROVED</span>;
       default:
         return null;
     }
@@ -527,7 +527,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
           <span>{alertsError}</span>
           <button
             onClick={fetchAlerts}
-            className="px-3 py-1 bg-red-900/80 hover:bg-red-800 rounded-lg text-white font-bold text-[11px]"
+            className="px-3 py-1 bg-red-900/80 hover:bg-red-800 rounded-lg text-white font-bold text-xs"
           >
             Retry
           </button>
@@ -575,7 +575,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                           className="w-16 h-16 rounded-xl object-cover border border-slate-700 shrink-0 bg-slate-950"
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-600 shrink-0 text-[10px]">
+                        <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-600 shrink-0 text-xs">
                           <ImageIcon className="w-5 h-5 mb-0.5" />
                           <span>No Photo</span>
                         </div>
@@ -584,7 +584,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2 mb-1">
                           <span
-                            className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                            className={`text-xs font-extrabold uppercase px-2 py-0.5 rounded ${
                               alert.alertType === 'AMBER'
                                 ? 'bg-amber-500 text-black'
                                 : 'bg-red-600 text-white'
@@ -594,22 +594,22 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                           </span>
                           {approvalBadge(alert)}
                           {!alert.isActive && (alert.approvalStatus === 'APPROVED' || alert.approvalStatus === 'SELF_APPROVED_NO_SECOND_OFFICER') && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold">
+                            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold">
                               DEACTIVATED
                             </span>
                           )}
-                          <span className="text-[11px] font-mono text-slate-400">Radius: {alert.radiusKm}km</span>
+                          <span className="text-xs font-mono text-slate-400">Radius: {alert.radiusKm}km</span>
                         </div>
 
                         <h4 className="text-xs font-bold text-white truncate">{alert.title}</h4>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{alert.lastSeenLocation}</p>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">{alert.lastSeenLocation}</p>
 
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-slate-500 font-mono">
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80 text-xs text-slate-500 font-mono">
                           <span>{alert.issuedByAgency} • {alert.badgeNumber}</span>
                           <span className="text-emerald-400 font-bold">{alert.sightingsCount} Tips</span>
                         </div>
 
-                        <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400 font-mono">
+                        <div className="flex items-center justify-between mt-1 text-xs text-slate-400 font-mono">
                           <span>
                             🕒 Issued: {new Date(alert.createdAt).toLocaleString(undefined, {
                               month: 'short',
@@ -740,21 +740,21 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
               {/* Alert Meta Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Last Seen Scene</span>
+                  <span className="text-slate-500 block text-xs uppercase font-bold">Last Seen Scene</span>
                   <span className="text-white font-semibold">{selectedAlert.lastSeenLocation}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Coordinates</span>
+                  <span className="text-slate-500 block text-xs uppercase font-bold">Coordinates</span>
                   <span className="text-amber-400 font-mono">
                     {selectedAlert.centerCoordinates[0].toFixed(4)}, {selectedAlert.centerCoordinates[1].toFixed(4)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Approving commander (as typed)</span>
+                  <span className="text-slate-500 block text-xs uppercase font-bold">Approving commander (as typed)</span>
                   <span className="text-white font-semibold">{selectedAlert.approvingCommanderName || 'Not recorded'}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Broadcast Issued (UTC)</span>
+                  <span className="text-slate-500 block text-xs uppercase font-bold">Broadcast Issued (UTC)</span>
                   <span className="text-blue-300 font-mono">
                     {new Date(selectedAlert.createdAt).toLocaleString(undefined, {
                       year: 'numeric',
@@ -766,7 +766,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Geofence Expiry</span>
+                  <span className="text-slate-500 block text-xs uppercase font-bold">Geofence Expiry</span>
                   <span className={`font-mono ${new Date(selectedAlert.activeUntil).getTime() < Date.now() ? 'text-red-400' : 'text-emerald-400'}`}>
                     {new Date(selectedAlert.activeUntil).toLocaleString(undefined, {
                       year: 'numeric',
@@ -778,7 +778,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Geofence Radius</span>
+                  <span className="text-slate-500 block text-xs uppercase font-bold">Geofence Radius</span>
                   <span className="text-white font-semibold">{selectedAlert.radiusKm} km</span>
                 </div>
               </div>
@@ -830,7 +830,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                   <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
                     {sightings.map((tip) => (
                       <div key={tip.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-emerald-400 flex items-center space-x-1">
                             <MapPin className="w-3.5 h-3.5 text-red-400" />
                             <span>{tip.locationName}</span>
@@ -839,7 +839,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                         </div>
                         <p className="text-slate-200">{tip.comment}</p>
                         {tip.reporterPhone && (
-                          <p className="text-[10px] text-slate-400 font-mono">Contact: {tip.reporterPhone}</p>
+                          <p className="text-xs text-slate-400 font-mono">Contact: {tip.reporterPhone}</p>
                         )}
                       </div>
                     ))}

@@ -35,7 +35,7 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
               </div>
               <div>
                 <h1 className="text-sm sm:text-base font-black text-white tracking-tight">CitizenAlert Ghana</h1>
-                <p className="text-[10px] text-slate-400">National Privacy & Telemetry Governance</p>
+                <p className="text-xs text-slate-400">National Privacy & Telemetry Governance</p>
               </div>
             </div>
           </div>
@@ -176,7 +176,7 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
         {/* Footer info */}
         <div className="text-center pt-4 border-t border-slate-800 text-xs text-slate-500">
           <p>© 2026 Republic of Ghana • Ministry of the Interior & Ghana Police Service CID</p>
-          <p className="mt-1 font-mono text-[10px]">Data Controller Registration: DPC-GH-2026-ACT843</p>
+          <p className="mt-1 font-mono text-xs">Data Controller Registration: DPC-GH-2026-ACT843</p>
         </div>
       </main>
     </div>

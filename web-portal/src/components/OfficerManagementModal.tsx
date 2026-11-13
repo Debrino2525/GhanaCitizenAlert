@@ -240,7 +240,7 @@ export const OfficerManagementModal: React.FC<OfficerManagementModalProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-xl font-black text-white">OFFICER DIRECTORY & PROVISIONING</h2>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/80 text-amber-300 font-bold border border-amber-700">
+                <span className="text-xs font-mono px-2 py-0.5 rounded bg-amber-900/80 text-amber-300 font-bold border border-amber-700">
                   ADMIN ONLY
                 </span>
               </div>
@@ -454,22 +454,22 @@ export const OfficerManagementModal: React.FC<OfficerManagementModalProps> = ({
                               {off.full_name || off.name}
                             </span>
                             {off.is_active === false ? (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 font-bold">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 font-bold">
                                 DEACTIVATED
                               </span>
                             ) : (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
                                 ACTIVE
                               </span>
                             )}
                             {off.must_change_password && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-bold">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-bold">
                                 PENDING SETUP
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-amber-400 font-semibold truncate">{off.rank} • {off.role}</p>
-                          <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono mt-0.5">
+                          <p className="text-xs text-amber-400 font-semibold truncate">{off.rank} • {off.role}</p>
+                          <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono mt-0.5">
                             <span className="text-blue-300 font-bold">{off.service_id || off.badge_number}</span>
                             <span>•</span>
                             <span className="text-emerald-400">{off.agency}</span>

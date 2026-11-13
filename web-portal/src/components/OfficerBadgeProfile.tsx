@@ -68,7 +68,7 @@ export const OfficerBadgeProfile: React.FC<OfficerBadgeProfileProps> = ({
         ) : (
           <span
             aria-hidden="true"
-            className="w-7 h-7 rounded-full border border-amber-400 bg-slate-800 text-amber-300 text-[11px] font-bold flex items-center justify-center shrink-0"
+            className="w-7 h-7 rounded-full border border-amber-400 bg-slate-800 text-amber-300 text-xs font-bold flex items-center justify-center shrink-0"
           >
             {(officer.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?'}
           </span>
@@ -78,11 +78,11 @@ export const OfficerBadgeProfile: React.FC<OfficerBadgeProfileProps> = ({
             <span className="text-xs font-bold text-white truncate">
               {officer.name}
             </span>
-            <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-blue-900 text-blue-200 font-bold shrink-0">
+            <span className="text-xs font-mono px-1 py-0.2 rounded bg-blue-900 text-blue-200 font-bold shrink-0">
               {officer.agency}
             </span>
           </div>
-          <p className="text-[10px] text-amber-400 font-mono font-semibold truncate">
+          <p className="text-xs text-amber-400 font-mono font-semibold truncate">
             {officer.badgeNumber} • {officer.clearanceLevel}
           </p>
         </div>
