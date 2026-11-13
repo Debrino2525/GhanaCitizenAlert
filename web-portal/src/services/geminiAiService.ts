@@ -1,7 +1,10 @@
 /**
- * Gemini AI Case Brief & CAD Triage Service
- * Provides automated forensic case dossier synthesis, statutory legal mapping (Act 29 / Act 720 / Act 772 / Act 843),
- * threat scoring, and command directives for Ghana Police Service & Emergency Dispatch Command.
+ * Rule-based case summary & triage suggestions.
+ *
+ * HONESTY NOTE: this module does NOT call Gemini or any AI/ML model. It matches
+ * keywords in the report text and fills a template. Everything it returns must be
+ * presented to officers as an automatic draft / suggestion, never as AI analysis,
+ * verification, or a forensic finding. (File name kept to avoid churn in imports.)
  */
 
 import { IncidentReport, AgencyType, SeverityLevel } from '../types';
@@ -39,7 +42,8 @@ export interface PoliceCaseBrief {
     sha256Seal: string;
     tamperProofStatus: string;
     chainOfCustodySummary: string;
-    deepfakeAuditScore: number;
+    /** null = never analysed. No deepfake analysis exists in this system today. */
+    deepfakeAuditScore: number | null;
   };
   suspectAndVehicleIntelligence: string;
   investigativeChecklist: string[];
@@ -47,14 +51,12 @@ export interface PoliceCaseBrief {
 }
 
 /**
- * Performs heuristic & Gemini-powered multimodal triage analysis on an incident report
+ * Keyword-based triage suggestion for an incident report (no AI model involved).
+ * confidenceScore is a fixed per-rule value, not a statistical confidence; do not display it.
  */
 export async function performAiTriageAnalysis(
   incident: IncidentReport
 ): Promise<AiTriageResult> {
-  // Simulate AI processing delay for realism
-  await new Promise((res) => setTimeout(res, 600));
-
   let recommendedAgency: AgencyType = incident.assignedAgency || 'GPS_CID';
   let assessedSeverity: SeverityLevel = incident.severity || 'HIGH';
   let confidenceScore = 94;
@@ -169,12 +171,11 @@ export async function performAiTriageAnalysis(
 export async function generatePoliceCaseBrief(
   incident: IncidentReport
 ): Promise<PoliceCaseBrief> {
-  // Simulate AI model synthesis
-  await new Promise((res) => setTimeout(res, 850));
-
   const triage = await performAiTriageAnalysis(incident);
-  const media0 = incident.media?.[0];
-  const shaSeal = media0?.sha256Hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const media = incident.media || [];
+  const media0 = media[0];
+  const rawHash = String(media0?.sha256Checksum || media0?.sha256Hash || '');
+  const deviceHash = /^[a-f0-9]{64}$/i.test(rawHash) ? rawHash.toLowerCase() : null;
 
   // Calculate nearest station
   let closestStation = GHANA_COMMAND_STATIONS[0];
@@ -206,11 +207,11 @@ export async function generatePoliceCaseBrief(
   });
 
   return {
-    dossierNumber: `GPS-CID-AI-2026-${incident.trackingCode.replace(/[^0-9A-Z]/gi, '')}`,
+    dossierNumber: `SUMMARY-${incident.trackingCode.replace(/[^0-9A-Z]/gi, '')}`,
     generatedAt: `${dateStr} • ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} UTC`,
     incidentTrackingCode: incident.trackingCode,
     title: incident.title,
-    executiveSummary: `On ${dateStr}, evidence was captured and transmitted via the Ghana CitizenAlert Emergency CAD Network. ${triage.threatSummary} Primary triage recommends ${triage.recommendedAgency} operational jurisdiction under statutory mandate with an assessed severity rating of ${triage.assessedSeverity}.`,
+    executiveSummary: `Report received on ${dateStr} through the CitizenAlert app. ${triage.threatSummary} Keyword rules suggest ${triage.recommendedAgency} with severity ${triage.assessedSeverity}; an officer must confirm both.`,
     legalFramework: triage.statutoryViolations,
     geospatialAssessment: {
       ghanaPostCode: '',
@@ -221,15 +222,17 @@ export async function generatePoliceCaseBrief(
       estimatedEtaMinutes: estimatedEta
     },
     forensicEvidenceAudit: {
-      evidenceCount: incident.media?.length || 1,
-      sha256Seal: shaSeal,
-      tamperProofStatus: 'VERIFIED_TAMPER_PROOF_ACT_772',
-      chainOfCustodySummary: `Cryptographic SHA-256 binary hash matched with on-device hardware watermark. GPS timestamp verified via NTP atomic clock synchronization. Reporter identity protected under Whistleblower Act (Act 720).`,
-      deepfakeAuditScore: media0?.deepfakeScore ?? 0.02
+      evidenceCount: media.length,
+      sha256Seal: deviceHash || (media.length ? 'Not recorded' : 'No evidence file'),
+      tamperProofStatus: deviceHash ? 'DEVICE_HASH_RECORDED_NOT_INDEPENDENTLY_VERIFIED' : (media.length ? 'NO_HASH_RECORDED' : 'NO_EVIDENCE'),
+      chainOfCustodySummary: deviceHash
+        ? "The reporter's phone recorded a SHA-256 hash of the file at capture. Re-hashing the stored file and comparing shows whether it changed; this has not been done automatically. Timestamps and GPS come from the phone and are not independently verified."
+        : 'No device hash is available, so file integrity cannot be checked. Timestamps and GPS come from the phone and are not independently verified.',
+      deepfakeAuditScore: typeof media0?.deepfakeScore === 'number' ? media0.deepfakeScore : null
     },
     suspectAndVehicleIntelligence: incident.description.length > 30 
-      ? `Extracted intelligence from field dispatch narrative: "${incident.description}". Cross-referenced against Police CID Central Database.`
-      : 'No detailed suspect or vehicle descriptions filed in initial citizen transmission. Field interrogation required.',
+      ? `From the reporter's description: "${incident.description}". Not checked against any police database.`
+      : 'The report contains no detailed suspect or vehicle description.',
     investigativeChecklist: [
       'Dispatch field detective team to scene coordinates with mobile CAD terminal',
       'Verify GhanaPost GPS boundary and interview potential eyewitnesses in 500m radius',

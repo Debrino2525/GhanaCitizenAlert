@@ -50,9 +50,6 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
 }) => {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'PENDING' | 'PUBLISHED' | 'APPEALS' | 'ALL'>('PENDING');
-  const [blurIntensity, setBlurIntensity] = useState<number>(51);
-  const [isFaceBlurActive, setIsFaceBlurActive] = useState<boolean>(true);
-  const [isPlateBlurActive, setIsPlateBlurActive] = useState<boolean>(true);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
@@ -129,7 +126,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
       await onApprovePublicPublish(incident.id);
       setActionFeedback({
         type: 'success',
-        message: `✅ Incident ${incident.trackingCode} approved & published live to the Civic Public Feed (Act 843 compliant).`
+        message: `✅ Incident ${incident.trackingCode} published to the public feed (text and approximate location only).`
       });
     } catch (e: any) {
       setActionFeedback({
@@ -257,7 +254,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
               National Moderator & Privacy Console
             </h2>
             <p className="text-xs text-slate-400">
-              Ghana Data Protection Act (Act 843) Verification & Automated Blurring Review
+              Decide which reports appear on the public feed (Data Protection Act, 2012, Act 843)
             </p>
           </div>
         </div>
@@ -391,7 +388,7 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
               <div className="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-slate-500 space-y-2">
                 <ShieldCheck className="w-8 h-8 text-slate-600 mx-auto" />
                 <p className="text-xs font-bold text-slate-400">No cases in this queue.</p>
-                <p className="text-[11px]">All reports are sanitized and up to date.</p>
+                <p className="text-[11px]">No reports are waiting for review.</p>
               </div>
             ) : (
               displayedQueue.map(inc => {
@@ -600,10 +597,8 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                 </div>
 
                 <div className="text-right text-xs">
-                  <span className="text-slate-500 block">Deepfake Score</span>
-                  <span className="text-emerald-400 font-mono font-bold">
-                    {activeIncident.media[0]?.deepfakeScore ?? 0.02} (Authentic)
-                  </span>
+                  <span className="text-slate-500 block">Deepfake check</span>
+                  <span className="text-slate-400 font-mono font-bold">Not available</span>
                 </div>
               </div>
 
@@ -619,70 +614,20 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                   <div className="p-12 text-center text-slate-500 space-y-1">
                     <Eye className="w-8 h-8 mx-auto text-slate-600" />
                     <p className="text-xs font-bold text-slate-400">No Image Attachment</p>
-                    <p className="text-[10px]">Text report verified with GPS coordinates</p>
+                    <p className="text-[10px]">Text-only report. Location comes from the reporter's phone and is not verified.</p>
                   </div>
                 )}
 
-                {/* Simulated AI Blurring Overlays */}
-                {isFaceBlurActive && activeIncident.media[0]?.thumbnailUrl && (
-                  <div className="absolute top-12 left-28 w-16 h-16 rounded-full bg-slate-900/80 backdrop-blur-lg border border-white/40 flex items-center justify-center text-[10px] font-bold text-white shadow-lg">
-                    <span>BLURRED FACE</span>
-                  </div>
-                )}
-
-                {isPlateBlurActive && activeIncident.media[0]?.thumbnailUrl && (
-                  <div className="absolute bottom-12 right-32 w-28 h-8 rounded-md bg-slate-900/80 backdrop-blur-lg border border-white/40 flex items-center justify-center text-[10px] font-bold text-white shadow-lg">
-                    <span>BLURRED PLATE</span>
-                  </div>
-                )}
-
-                <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-700 text-[10px] font-mono text-emerald-400 flex items-center space-x-1.5">
-                  <Lock className="w-3 h-3" />
-                  <span>Act 843 Privacy Filter Active</span>
-                </div>
               </div>
 
-              {/* Blurring Controls */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-white flex items-center space-x-2">
-                    <Sliders className="w-4 h-4 text-blue-400" />
-                    <span>Gaussian Blur Intensity (Kernel Size: {blurIntensity}px)</span>
-                  </span>
-                  <span className="font-mono text-blue-400 font-bold">{blurIntensity}px</span>
-                </div>
-
-                <input
-                  type="range"
-                  min="21"
-                  max="91"
-                  step="2"
-                  value={blurIntensity}
-                  onChange={(e) => setBlurIntensity(Number(e.target.value))}
-                  className="w-full accent-blue-500 cursor-pointer"
-                />
-
-                <div className="flex space-x-4 pt-1">
-                  <label className="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={isFaceBlurActive}
-                      onChange={(e) => setIsFaceBlurActive(e.target.checked)}
-                      className="accent-blue-500 rounded"
-                    />
-                    <span>Blur Bystander Faces</span>
-                  </label>
-
-                  <label className="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={isPlateBlurActive}
-                      onChange={(e) => setIsPlateBlurActive(e.target.checked)}
-                      className="accent-blue-500 rounded"
-                    />
-                    <span>Blur License Plates</span>
-                  </label>
-                </div>
+              {/* No redaction exists yet: say so plainly. */}
+              <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 space-y-1.5 text-xs">
+                <p className="font-bold text-amber-300">Photos and videos are not blurred</p>
+                <p className="text-slate-300">
+                  This system cannot blur faces or number plates yet. Publishing shares the report's title,
+                  description and an approximate location. Photos and videos stay internal and are not shown
+                  on the public feed.
+                </p>
               </div>
 
               {/* Action Feedback Banner */}
@@ -726,8 +671,8 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
                   )}
                   <span>
                     {activeIncident.isPublicPublished
-                      ? '✅ Re-Publish / Update Sanitized Feed'
-                      : 'Approve & Publish Sanitized Feed'}
+                      ? '✅ Re-publish text to public feed'
+                      : 'Approve & publish text to public feed'}
                   </span>
                 </button>
               </div>

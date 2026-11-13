@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { IncidentReport, EmergencyAlert, SosPing } from '../types';
 import L from 'leaflet';
+import { escapeHtml } from '../utils/printDocument';
 import {
   Navigation,
   Compass,
@@ -423,7 +424,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         weight: 2
       }).addTo(markersGroup);
 
-      circle.bindTooltip(`<b>${alert.alertType} ALERT GEOFENCE</b><br/>${alert.title}<br/>Radius: ${alert.radiusKm} km`, {
+      circle.bindTooltip(`<b>${escapeHtml(alert.alertType)} ALERT GEOFENCE</b><br/>${escapeHtml(alert.title)}<br/>Radius: ${escapeHtml(alert.radiusKm)} km`, {
         sticky: true
       });
 
@@ -438,9 +439,9 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
         .addTo(markersGroup)
         .bindPopup(`
           <div style="font-family: sans-serif; font-size: 12px; color: #0f172a; min-width: 220px; padding: 4px;">
-            <span style="background: ${color}; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${alert.alertType} ALERT</span>
-            <h4 style="margin: 6px 0 3px 0; font-weight: bold; font-size: 13px;">${alert.title}</h4>
-            <p style="margin: 0; color: #475569;">Last seen: ${alert.lastSeenLocation || 'Location unavailable'}</p>
+            <span style="background: ${color}; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${escapeHtml(alert.alertType)} ALERT</span>
+            <h4 style="margin: 6px 0 3px 0; font-weight: bold; font-size: 13px;">${escapeHtml(alert.title)}</h4>
+            <p style="margin: 0; color: #475569;">Last seen: ${escapeHtml(alert.lastSeenLocation || 'Location unavailable')}</p>
           </div>
         `);
     });
@@ -456,7 +457,8 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
     visibleIncidents.forEach(inc => {
       const livePing = latestPings?.[inc.id];
-      const isTerminated = inc.status === 'RESOLVED' || inc.status === 'DISMISSED' || inc.locationSource === 'LAST_KNOWN' || inc.title.includes('STAND DOWN') || inc.title.includes('CANCELLED');
+      const cancelledByReporter = inc.title.includes('STAND DOWN') || inc.title.includes('CANCELLED');
+      const isTerminated = inc.status === 'RESOLVED' || inc.status === 'DISMISSED' || cancelledByReporter;
       const pingAgeSec = livePing
         ? Math.max(0, Math.floor((Date.now() - new Date(livePing.created_at).getTime()) / 1000))
         : 999999;
@@ -570,7 +572,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             </p>
           ` : isTerminated ? `
             <div style="background: #334155; color: white; padding: 2px 7px; border-radius: 4px; font-weight: 900; font-size: 10px; display: inline-block; margin-bottom: 5px; letter-spacing: 0.5px;">
-              🛑 SOS BEACON TERMINATED (STAND DOWN)
+              ${cancelledByReporter ? 'SOS CANCELLED BY REPORTER' : 'CASE CLOSED'}
             </div>
             <p style="margin: 0 0 4px 0; color: #64748b; font-family: monospace; font-weight: bold; font-size: 10.5px;">
               GPS: ${effectiveCoords[0].toFixed(5)}° N, ${effectiveCoords[1].toFixed(5)}° W
@@ -581,11 +583,11 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             </p>
           `}
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-            <span style="background: #0B1E38; color: #FCD116; padding: 2px 7px; border-radius: 6px; font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 10px;">${inc.trackingCode}</span>
-            <span style="color: #475569; font-size: 11px; font-weight: 700;">${inc.assignedAgency}</span>
+            <span style="background: #0B1E38; color: #FCD116; padding: 2px 7px; border-radius: 6px; font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 10px;">${escapeHtml(inc.trackingCode)}</span>
+            <span style="color: #475569; font-size: 11px; font-weight: 700;">${escapeHtml(inc.assignedAgency)}</span>
           </div>
-          <h4 style="margin: 7px 0 4px 0; font-weight: 800; font-size: 13px; line-height: 1.3;">${inc.title}</h4>
-          <p style="margin: 0; color: #475569; font-size: 11px;">${inc.locationName}</p>
+          <h4 style="margin: 7px 0 4px 0; font-weight: 800; font-size: 13px; line-height: 1.3;">${escapeHtml(inc.title)}</h4>
+          <p style="margin: 0; color: #475569; font-size: 11px;">${escapeHtml(inc.locationName)}</p>
           <div style="margin-top: 4px; font-size: 10px; color: #64748b; font-family: monospace;">
             🕒 Reported: ${new Date(inc.createdAt).toLocaleString(undefined, {
               month: 'short',
@@ -596,7 +598,6 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
           </div>
           <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
             ${sourceBadgeHtml}
-            <span style="color: #059669; font-weight: 700; font-size: 10px; background: #ecfdf5; padding: 1px 5px; border-radius: 4px;">Act 772 Sealed</span>
           </div>
           <div style="margin-top: 8px; display: flex; gap: 4px;">
             <button onclick="window.__cadNarrowToCoords && window.__cadNarrowToCoords(${effectiveCoords[0]}, ${effectiveCoords[1]})" style="flex: 1; background: #0284c7; color: white; border: none; border-radius: 6px; padding: 5px 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">

@@ -40,6 +40,7 @@ import {
   AiTriageResult
 } from '../services/geminiAiService';
 import { AiCaseBriefModal } from './AiCaseBriefModal';
+import { getSosState, sosDisplayTitle, formatAgo, SOS_STATE_LABEL } from '../utils/sosState';
 
 export const renderLocationSourceBadge = (
   locationSource?: LocationSource | null,
@@ -48,13 +49,14 @@ export const renderLocationSourceBadge = (
   title?: string | null,
   status?: string | null
 ) => {
-  const isTerminated = status === 'RESOLVED' || status === 'DISMISSED' || (title && (title.includes('STAND DOWN') || title.includes('CANCELLED')));
+  const cancelledByReporter = Boolean(title && (title.includes('STAND DOWN') || title.includes('CANCELLED')));
+  const closedByOfficer = status === 'RESOLVED' || status === 'DISMISSED';
 
-  if (isTerminated) {
+  if (cancelledByReporter || closedByOfficer) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-300 border border-slate-700" title="Distress beacon stopped or case resolved">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-300 border border-slate-700">
         <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1" />
-        STAND DOWN (CANCELLED)
+        {cancelledByReporter ? 'CANCELLED BY REPORTER' : 'CLOSED'}
       </span>
     );
   }
@@ -68,11 +70,10 @@ export const renderLocationSourceBadge = (
   if (locationSource === 'LIVE') {
     // A live GPS fix is only truly live if fresh within 90 seconds (1.5 minutes)
     if (elapsedSec > 90) {
-      const ageMin = Math.max(1, Math.round(elapsedSec / 60));
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="Beacon stopped or device offline">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="No fresh location from the device">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
-          LAST KNOWN ({ageMin}m old)
+          LAST KNOWN ({formatAgo(elapsedSec)})
         </span>
       );
     }
@@ -85,11 +86,10 @@ export const renderLocationSourceBadge = (
     );
   }
   if (locationSource === 'LAST_KNOWN') {
-    const ageMin = Math.max(1, Math.round(elapsedSec / 60));
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
-        LAST KNOWN ({ageMin}m old)
+        LAST KNOWN ({formatAgo(elapsedSec)})
       </span>
     );
   }
@@ -127,12 +127,7 @@ interface PoliceCommandDashboardProps {
 
 export function formatPingAge(dateStr: string): string {
   if (!dateStr) return '';
-  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000));
-  if (diffSec < 60) return `${diffSec}s ago`;
-  const mins = Math.floor(diffSec / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  return `${hours}h ago`;
+  return formatAgo(dateStr);
 }
 
 export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
@@ -303,14 +298,14 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     onUpdateStatus(selectedIncident.id, 'COURT_EVIDENCE_PACKAGED');
     const note = {
       author: 'Evidence Custodian (Act 772)',
-      text: `⚖️ Court Evidence Dossier generated & sealed under Section 7 of the Electronic Transactions Act (Act 772).`,
+      text: `⚖️ Case marked as court-packaged. Evidence summary generated (not a certified or signed document).`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setCaseNotes(prev => ({
       ...prev,
       [selectedIncident.id]: [...(prev[selectedIncident.id] || []), note]
     }));
-    setActionToast({ message: '⚖️ Court Evidence Pack Generated & Sealed under Act 772!', type: 'success' });
+    setActionToast({ message: '⚖️ Evidence summary generated', type: 'success' });
     // Automatically open the Court Certificate Modal
     onOpenCertificateModal(generateCourtCertificate(selectedIncident));
     setTimeout(() => setActionToast(null), 3500);
@@ -555,6 +550,12 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   };
 
   const currentMedia = (selectedIncident?.media || []).find((m: any) => m.type === 'VIDEO') || selectedIncident?.media?.[0];
+  // SHA-256 digest computed on the reporter's device at capture time. Never substitute a placeholder:
+  // a missing digest must read as missing, not as a seal.
+  const evidenceHash = (() => {
+    const raw = String(currentMedia?.sha256Checksum || currentMedia?.sha256Hash || '');
+    return /^[a-f0-9]{64}$/i.test(raw) ? raw.toLowerCase() : null;
+  })();
   const isVideo = currentMedia?.type === 'VIDEO' || resolvedVideoUrl?.includes('.mp4') || (currentMedia as any)?.rawS3Url?.includes('.mp4');
 
   const statusFilterList = [
@@ -724,23 +725,25 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-bold text-white line-clamp-1 mb-1">{inc.title}</h3>
+                  <h3 className="text-sm font-bold text-white line-clamp-1 mb-1">{sosDisplayTitle(inc.title, getSosState(inc, latestPings[inc.id]?.created_at))}</h3>
                   <p className="text-xs text-slate-400 line-clamp-2 mb-2">{inc.description}</p>
                   
                   {latestPings[inc.id] && (() => {
-                    const pingAgeSec = Math.max(0, Math.floor((Date.now() - new Date(latestPings[inc.id].created_at).getTime()) / 1000));
-                    const isTerminatedByIncident = inc.locationSource === 'LAST_KNOWN' || inc.title.includes('STAND DOWN') || inc.title.includes('CANCELLED');
-                    const isPingActive = pingAgeSec <= 120 && !isTerminatedByIncident; // Active within 2 minutes AND not canceled
+                    const sosState = getSosState(inc, latestPings[inc.id].created_at);
+                    const isPingActive = sosState === 'LIVE';
+                    const isSignalLost = sosState === 'SIGNAL_LOST';
 
                     return (
                       <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono my-2 shadow-inner ${
                         isPingActive
                           ? 'bg-red-950/80 border-red-800 text-red-300'
+                          : isSignalLost
+                          ? 'bg-amber-950/70 border-amber-700 text-amber-300'
                           : 'bg-slate-900 border-slate-800 text-slate-400'
                       }`}>
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${isPingActive ? 'bg-red-500 animate-ping' : 'bg-slate-500'}`} />
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isPingActive ? 'bg-red-500 animate-ping' : isSignalLost ? 'bg-amber-400' : 'bg-slate-500'}`} />
                         <span className="font-bold truncate">
-                          {isPingActive ? '📡 LIVE BEACON:' : '🛑 BEACON TERMINATED:'} {latestPings[inc.id].lat.toFixed(4)}, {latestPings[inc.id].lng.toFixed(4)} (±{latestPings[inc.id].accuracy}m) • {formatPingAge(latestPings[inc.id].created_at)}
+                          {SOS_STATE_LABEL[sosState]} · last position {latestPings[inc.id].lat.toFixed(4)}, {latestPings[inc.id].lng.toFixed(4)} (±{latestPings[inc.id].accuracy}m) • {formatPingAge(latestPings[inc.id].created_at)}
                         </span>
                       </div>
                     );
@@ -809,8 +812,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     onClick={handleOpenAiDossier}
                     className="px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-blue-500/20 to-purple-500/20 hover:from-amber-500/30 hover:to-blue-500/30 border border-amber-400/40 text-amber-300 font-bold text-xs flex items-center space-x-1.5 transition shadow-lg shadow-amber-500/10"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>AI Case Brief</span>
+                    <FileCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Case summary (draft)</span>
                   </button>
 
                   <button
@@ -818,7 +821,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     className="px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs flex items-center space-x-1.5 transition shadow-lg shadow-amber-500/10"
                   >
                     <FileCheck className="w-3.5 h-3.5" />
-                    <span>Evidence Vault (Act 772)</span>
+                    <span>Evidence summary</span>
                   </button>
                 </div>
               </div>
@@ -826,14 +829,16 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
             {/* CARD 0: LIVE SOS BEACON TRACKING BANNER (If Active Pings Exist) */}
             {latestPings[selectedIncident.id] && (() => {
-              const pingAgeSec = Math.max(0, Math.floor((Date.now() - new Date(latestPings[selectedIncident.id].created_at).getTime()) / 1000));
-              const isTerminatedByIncident = selectedIncident.locationSource === 'LAST_KNOWN' || selectedIncident.title.includes('STAND DOWN') || selectedIncident.title.includes('CANCELLED');
-              const isPingActive = pingAgeSec <= 120 && !isTerminatedByIncident; // Active within 2 minutes AND not canceled
+              const sosState = getSosState(selectedIncident, latestPings[selectedIncident.id].created_at);
+              const isPingActive = sosState === 'LIVE';
+              const isSignalLost = sosState === 'SIGNAL_LOST';
 
               return (
                 <div className={`border-2 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-wrap items-center justify-between gap-4 ${
                   isPingActive
                     ? 'bg-red-950/60 border-red-500'
+                    : isSignalLost
+                    ? 'bg-amber-950/40 border-amber-500'
                     : 'bg-slate-900 border-slate-700'
                 }`}>
                   <div className="flex items-center space-x-3.5 min-w-0">
@@ -869,7 +874,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                             ? 'bg-red-600 text-white'
                             : 'bg-slate-800 text-slate-300 border border-slate-700'
                         }`}>
-                          {isPingActive ? '🚨 LIVE SOS DISTRESS BEACON' : '🛑 SOS BEACON TERMINATED (STAND DOWN)'}
+                          {isPingActive ? '🚨 LIVE SOS' : isSignalLost ? '⚠️ SOS: NO SIGNAL, NOT CANCELLED' : `SOS: ${SOS_STATE_LABEL[sosState].toUpperCase()}`}
                         </span>
                         {selectedIncident.reporter?.name && !selectedIncident.reporter?.isAnonymous && (
                           <span className="text-xs font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
@@ -999,7 +1004,9 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     <span>Refresh Media</span>
                   </button>
                   <span className="text-slate-400 font-mono text-[11px]">
-                    {currentMedia?.durationSeconds || 15}s • {currentMedia?.type || 'VIDEO'}
+                    {currentMedia
+                      ? `${currentMedia.durationSeconds ? `${currentMedia.durationSeconds}s • ` : ''}${currentMedia.type}`
+                      : 'No evidence attached'}
                   </span>
                 </div>
               </div>
@@ -1026,10 +1033,10 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                           </p>
                           <p className="text-slate-400 text-xs mt-1 max-w-sm">
                             {(currentMedia as any)?.uploadStatus === 'UPLOAD_FAILED'
-                              ? 'Upload failed during transmission. Evidence sealed on citizen device under Act 720 Whistleblower Vault awaiting sync.'
+                              ? "Upload failed. The file is still on the reporter's phone; the app retries when it has a connection."
                               : (currentMedia as any)?.uploadStatus === 'UPLOADED'
-                              ? 'Evidence confirmed uploaded in National Vault. Resolving direct stream...'
-                              : 'Citizen device is streaming video evidence to National Vault. Playback will activate automatically once sealed.'}
+                              ? 'Upload finished. Loading the video...'
+                              : "The video is still uploading from the reporter's phone. Playback starts when the upload finishes."}
                           </p>
                         </div>
                         <div className="flex items-center space-x-2 pt-1">
@@ -1173,7 +1180,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                   ) : (
                     <div className="w-full h-80 bg-slate-950 flex flex-col items-center justify-center text-slate-400 text-xs">
                       <ShieldCheck className="w-8 h-8 text-slate-600 mb-2" />
-                      <span>Photo evidence recorded and sealed under Act 772</span>
+                      <span>{currentMedia ? 'Evidence file cannot be previewed here' : 'No photo or video was attached to this report'}</span>
                     </div>
                   )
                 )}
@@ -1182,7 +1189,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 <div className="absolute top-3 left-3 z-30 bg-black/85 backdrop-blur-md p-2 rounded-xl border border-slate-700/80 text-[10px] sm:text-[11px] font-mono text-white space-y-0.5 shadow-2xl pointer-events-none">
                   <p className="text-ghana-gold font-black flex items-center space-x-1">
                     <span>🇬🇭</span>
-                    <span>CITIZEN-ALERT EVIDENCE LOCK (ACT 772)</span>
+                    <span>REPORTED LOCATION (FROM DEVICE)</span>
                   </p>
                   {selectedIncident.coordinates ? (
                     <>
@@ -1191,15 +1198,16 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       </p>
                       <p className="text-emerald-400 font-bold">
                         {(() => {
-                          const isTerminated = selectedIncident.status === 'RESOLVED' || selectedIncident.status === 'DISMISSED' || selectedIncident.title.includes('STAND DOWN') || selectedIncident.title.includes('CANCELLED');
+                          const cancelledByReporter = selectedIncident.title.includes('STAND DOWN') || selectedIncident.title.includes('CANCELLED');
+                          const closedByOfficer = selectedIncident.status === 'RESOLVED' || selectedIncident.status === 'DISMISSED';
                           const elapsedSec = selectedIncident.updatedAt
                             ? Math.max(0, Math.floor((Date.now() - new Date(selectedIncident.updatedAt).getTime()) / 1000))
                             : (selectedIncident.gpsFixAgeSeconds ?? 9999);
-                          if (isTerminated) return 'STAND DOWN (CANCELLED)';
+                          if (cancelledByReporter) return 'CANCELLED BY REPORTER';
+                          if (closedByOfficer) return 'CASE CLOSED';
                           if (selectedIncident.locationSource === 'LIVE' && elapsedSec <= 90) return 'GPS LIVE FIX';
                           if (selectedIncident.locationSource === 'LIVE' || selectedIncident.locationSource === 'LAST_KNOWN') {
-                            const ageMin = Math.max(1, Math.round(elapsedSec / 60));
-                            return `LAST KNOWN FIX (${ageMin}m old)`;
+                            return `LAST KNOWN FIX (${formatAgo(elapsedSec)})`;
                           }
                           return 'MANUAL LOCATION';
                         })()}
@@ -1310,19 +1318,28 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-                    SHA-256 Cryptographic Seal (Section 7, Act 772)
+                    SHA-256 of evidence file (computed on reporter's device)
                   </span>
+                  {evidenceHash && (
                   <button
-                    onClick={() => handleCopyHash(currentMedia?.sha256Checksum || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')}
+                    onClick={() => handleCopyHash(evidenceHash)}
                     className="text-amber-400 hover:text-amber-300 text-[11px] font-bold flex items-center space-x-1"
                   >
                     {copiedHash ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedHash ? 'Hash Copied' : 'Copy Hash'}</span>
                   </button>
+                  )}
                 </div>
-                <p className="font-mono text-[11px] text-slate-300 break-all bg-slate-900 p-2 rounded border border-slate-800">
-                  {currentMedia?.sha256Checksum || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
-                </p>
+                {evidenceHash ? (
+                  <p className="font-mono text-[11px] text-slate-300 break-all bg-slate-900 p-2 rounded border border-slate-800">
+                    {evidenceHash}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-amber-300 bg-slate-900 p-2 rounded border border-slate-800">
+                    {currentMedia ? 'No hash was recorded for this file, so its integrity cannot be checked.' : 'No evidence file, so there is nothing to hash.'}
+                  </p>
+                )}
+                <p className="text-[10px] text-slate-500">A device-side hash shows whether the file changed after capture. It is not a court certificate or a legal seal.</p>
               </div>
             </div>
 

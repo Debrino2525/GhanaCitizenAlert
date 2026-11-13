@@ -4,7 +4,7 @@
  * completely avoiding browser modal backdrop / overflow print preview hangs.
  */
 
-function escapeHtml(str: any): string {
+export function escapeHtml(str: any): string {
   if (str === null || str === undefined) return '';
   return String(str)
     .replace(/&/g, '&amp;')
@@ -210,7 +210,7 @@ function writePrintContent(doc: Document, title: string, bodyHtml: string) {
       ${bodyHtml}
       <div class="footer">
         <span>GHANA POLICE SERVICE • EMERGENCY CAD & FORENSIC EVIDENCE VAULT</span>
-        <span>ELECTRONICALLY SIGNED & VERIFIED UNDER ACT 772 (SECTION 7)</span>
+        <span>PRINTED FROM CITIZENALERT · NOT SIGNED OR CERTIFIED</span>
       </div>
     </body>
     </html>
@@ -227,9 +227,8 @@ export function buildPoliceBriefHtml(brief: any): string {
       <div>
         <div style="margin-bottom: 4px;">
           <span class="badge badge-gold">🇬🇭 REPUBLIC OF GHANA</span>
-          <span class="badge badge-blue">ACT 772 CERTIFIED</span>
         </div>
-        <h1 class="doc-title">GHANA POLICE SERVICE INVESTIGATION BRIEF</h1>
+        <h1 class="doc-title">CASE SUMMARY (AUTOMATIC DRAFT)</h1>
         <div class="doc-subtitle">Criminal Investigation Department (CID) • Case Intelligence Report</div>
       </div>
       <div style="text-align: right; font-family: monospace; font-size: 11px;">
@@ -276,9 +275,9 @@ export function buildPoliceBriefHtml(brief: any): string {
           <strong>Tactical Sector:</strong> ${escapeHtml(brief.geospatialAssessment?.tacticalSector) || 'Accra Command'}
         </div>
         <div class="box">
-          <strong>Evidence Assets:</strong> ${escapeHtml(brief.forensicEvidenceAudit?.evidenceCount) || 1} Sealed File(s)<br/>
-          <strong>Integrity Status:</strong> <span style="color: #16a34a; font-weight: bold;">VERIFIED TAMPER-PROOF</span><br/>
-          <strong>SHA-256 Digest:</strong> <span style="font-family: monospace; font-size: 9.5px;">${escapeHtml(brief.forensicEvidenceAudit?.sha256Seal) || 'N/A'}</span>
+          <strong>Evidence files:</strong> ${escapeHtml(brief.forensicEvidenceAudit?.evidenceCount) || 0}<br/>
+          <strong>Integrity status:</strong> ${escapeHtml(brief.forensicEvidenceAudit?.tamperProofStatus) || 'NOT CHECKED'}<br/>
+          <strong>Device SHA-256:</strong> <span style="font-family: monospace; font-size: 9.5px;">${escapeHtml(brief.forensicEvidenceAudit?.sha256Seal) || 'N/A'}</span>
         </div>
       </div>
     </div>
@@ -296,7 +295,7 @@ export function buildPoliceBriefHtml(brief: any): string {
     </div>
 
     <div class="statutory-seal">
-      <strong>Statutory Evidence Certification (Act 772):</strong> This intelligence brief is generated from cryptographically sealed citizen telemetric data under the Electronic Transactions Act, 2008 (Act 772) and Whistleblower Act, 2006 (Act 720).
+      <strong>About this document:</strong> An automatic draft built from the citizen's report text using keyword rules. It is not AI analysis, has not been verified, and is not a certificate under the Electronic Transactions Act, 2008 (Act 772).
     </div>
   `;
 }
@@ -310,10 +309,9 @@ export function buildCourtCertificateHtml(certificate: any): string {
       <div>
         <div style="margin-bottom: 4px;">
           <span class="badge badge-gold">🇬🇭 REPUBLIC OF GHANA</span>
-          <span class="badge badge-blue">OFFICIAL EVIDENCE VAULT</span>
         </div>
-        <h1 class="doc-title">DIGITAL EVIDENCE CERTIFICATE OF AUTHENTICITY</h1>
-        <div class="doc-subtitle">Section 7, Electronic Transactions Act, 2008 (Act 772)</div>
+        <h1 class="doc-title">DIGITAL EVIDENCE SUMMARY</h1>
+        <div class="doc-subtitle">Not a certificate of authenticity. Certification under Act 772 must be made separately by an authorised person.</div>
       </div>
       <div style="text-align: right; font-family: monospace; font-size: 11px;">
         <div style="font-weight: 800; color: #0f172a;">CERTIFICATE ID</div>
@@ -331,13 +329,13 @@ export function buildCourtCertificateHtml(certificate: any): string {
         <span>${escapeHtml(certificate.locationName) || 'Location pending'}${certificate.coordinates ? ` (${certificate.coordinates[0].toFixed(4)}°, ${certificate.coordinates[1].toFixed(4)}°)` : ''}</span>
       </div>
       <div class="meta-item">
-        <label>Date Sealed (UTC)</label>
+        <label>Printed</label>
         <span>${escapeHtml(new Date().toLocaleString())}</span>
       </div>
     </div>
 
     <div class="section">
-      <div class="section-title">Chain of Custody & Cryptographic Evidence Ledger</div>
+      <div class="section-title">Evidence files and device hashes</div>
       <div class="box">
         ${(certificate.mediaItems || []).map((item: any, idx: number) => `
           <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
@@ -351,8 +349,8 @@ export function buildCourtCertificateHtml(certificate: any): string {
     </div>
 
     <div class="statutory-seal">
-      <strong>⚖️ Statutory Evidentiary Certificate:</strong><br/>
-      ${escapeHtml(certificate.statutoryNotice) || 'This certificate constitutes primary electronic evidence in compliance with Section 7 of the Electronic Transactions Act (Act 772). All media hashes are verifiable against the immutable cryptographic ledger.'}
+      <strong>About this document:</strong><br/>
+      ${escapeHtml(certificate.statutoryNotice)}
     </div>
   `;
 }

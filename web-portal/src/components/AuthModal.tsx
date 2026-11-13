@@ -238,7 +238,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <a href="/privacy" className="hover:text-amber-400 transition underline">
             Privacy Policy (Act 843)
           </a>
-          <span className="text-emerald-400 font-bold">256-BIT ENCRYPTION</span>
+          <span className="text-slate-400">Authorised officers only</span>
         </div>
       </div>
     </div>

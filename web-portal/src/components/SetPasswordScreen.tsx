@@ -226,7 +226,6 @@ export const SetPasswordScreen: React.FC<SetPasswordScreenProps> = ({
             <p className="font-semibold text-slate-300">Security Standards:</p>
             <p>• Must be at least 12 characters long</p>
             <p>• Common words, sequential numbers, and dictionary phrases are rejected</p>
-            <p>• Cryptographically signed under Ghana Electronic Transactions Act (Act 772)</p>
           </div>
 
           <button

@@ -40,8 +40,8 @@ export const AiCaseBriefModal: React.FC<AiCaseBriefModalProps> = ({
   const handleCopy = () => {
     if (!brief) return;
     const text = `
-=== GHANA POLICE SERVICE CID - AI CASE DOSSIER ===
-Dossier No: ${brief.dossierNumber}
+=== CASE SUMMARY (AUTOMATIC DRAFT - KEYWORD RULES, NOT AI, NOT VERIFIED) ===
+Summary No: ${brief.dossierNumber}
 Incident: ${brief.incidentTrackingCode} - ${brief.title}
 Generated: ${brief.generatedAt}
 
@@ -56,10 +56,10 @@ Location: ${brief.geospatialAssessment.locationName}
 GPS: ${brief.geospatialAssessment.coordinates}
 Nearest Station: ${brief.geospatialAssessment.closestStationName} (ETA ~${brief.geospatialAssessment.estimatedEtaMinutes} mins)
 
-FORENSIC EVIDENCE AUDIT:
-SHA-256 Seal: ${brief.forensicEvidenceAudit.sha256Seal}
+EVIDENCE FILES:
+Device SHA-256: ${brief.forensicEvidenceAudit.sha256Seal}
 Status: ${brief.forensicEvidenceAudit.tamperProofStatus}
-Chain of Custody: ${brief.forensicEvidenceAudit.chainOfCustodySummary}
+Integrity note: ${brief.forensicEvidenceAudit.chainOfCustodySummary}
 
 COMMAND ACTION DIRECTIVES:
 ${brief.commandActionDirectives.map((d, i) => `• ${d}`).join('\n')}
@@ -96,7 +96,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-800">
-                  AI INVESTIGATION DOSSIER
+                  CASE SUMMARY · AUTOMATIC DRAFT
                 </span>
                 {brief && (
                   <span className="text-[10px] font-mono font-bold text-amber-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
@@ -105,7 +105,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                 )}
               </div>
               <h2 className="text-base sm:text-lg font-black text-white mt-1 truncate">
-                {brief ? brief.title : 'Generating Forensic Case Brief...'}
+                {brief ? brief.title : 'Building case summary...'}
               </h2>
             </div>
           </div>
@@ -116,7 +116,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                 <button
                   onClick={handleCopy}
                   className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition text-xs font-bold flex items-center space-x-1"
-                  title="Copy Dossier to Clipboard"
+                  title="Copy summary to clipboard"
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
@@ -146,16 +146,16 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
           <div className="py-16 text-center space-y-4">
             <div className="w-12 h-12 border-3 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
             <div className="space-y-1">
-              <h3 className="text-base font-bold text-white">Synthesizing AI Forensic Dossier...</h3>
+              <h3 className="text-base font-bold text-white">Building case summary...</h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Auditing Act 772 cryptographic checksums, analyzing geospatial corridors, and cross-referencing Ghana Criminal Code statutes.
+                Filling a template from the report text using keyword rules. No AI model is used.
               </p>
             </div>
           </div>
         ) : !brief ? (
           <div className="py-12 text-center space-y-3">
             <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
-            <p className="text-sm font-bold text-white">Could not generate AI case brief.</p>
+            <p className="text-sm font-bold text-white">Could not build the case summary.</p>
             <p className="text-xs text-slate-400">Please verify network connectivity or select an incident.</p>
           </div>
         ) : (
@@ -204,7 +204,7 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                 }`}
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Act 772 Chain of Custody</span>
+                <span>Evidence integrity</span>
               </button>
             </div>
 
@@ -266,8 +266,8 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                     <div className="flex items-center space-x-2.5">
                       <Shield className="w-5 h-5 text-blue-400 shrink-0" />
                       <div>
-                        <p className="text-white font-bold">Recommended Jurisdiction: <span className="text-amber-400">{triage.recommendedAgency}</span></p>
-                        <p className="text-slate-400 text-[11px]">AI Confidence Score: {triage.confidenceScore}%</p>
+                        <p className="text-white font-bold">Suggested agency: <span className="text-amber-400">{triage.recommendedAgency}</span></p>
+                        <p className="text-slate-400 text-[11px]">Suggested by keyword rules. An officer must confirm.</p>
                       </div>
                     </div>
                     <button
@@ -343,11 +343,11 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                   </div>
                   <div className="space-y-2">
                     <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-slate-500 text-[10px] uppercase font-bold block">SHA-256 Checksum Seal</span>
+                      <span className="text-slate-500 text-[10px] uppercase font-bold block">SHA-256 recorded by reporter's device</span>
                       <p className="font-mono text-emerald-400 break-all text-[11px]">{brief.forensicEvidenceAudit.sha256Seal}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-slate-500 text-[10px] uppercase font-bold block">Chain of Custody Certificate</span>
+                      <span className="text-slate-500 text-[10px] uppercase font-bold block">Integrity note</span>
                       <p className="text-slate-300 text-xs leading-relaxed">{brief.forensicEvidenceAudit.chainOfCustodySummary}</p>
                     </div>
                   </div>
@@ -359,12 +359,12 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
 
         {/* Modal Footer */}
         <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs shrink-0">
-          <span className="text-slate-500 font-mono">Ghana CAD AI Engine • Act 772 Verified</span>
+          <span className="text-slate-500 font-mono">Automatic draft from keyword rules · not AI · not verified</span>
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition"
           >
-            Close Dossier
+            Close summary
           </button>
         </div>
       </div>

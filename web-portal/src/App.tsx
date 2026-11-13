@@ -732,8 +732,14 @@ export const App: React.FC = () => {
   const activeCount = incidents.filter(i => i.status !== 'RESOLVED' && i.status !== 'DISMISSED').length;
   const dispatchedCount = incidents.filter(i => i.status === 'DISPATCHED').length;
   const investigatingCount = incidents.filter(i => i.status === 'UNDER_ACTIVE_INVESTIGATION').length;
-  const resolvedCount = incidents.filter(i => i.status === 'RESOLVED').length;
-  const sealedEvidenceCount = incidents.reduce((sum, i) => sum + (i.media?.length || 1), 0);
+  // "Today" = the officer's local calendar day, judged by when the case was last updated to RESOLVED.
+  const todayKey = new Date().toDateString();
+  const resolvedTodayCount = incidents.filter(i =>
+    i.status === 'RESOLVED' && i.updatedAt && new Date(i.updatedAt).toDateString() === todayKey
+  ).length;
+  // Only evidence files that actually carry a SHA-256 digest from the reporting device count as hashed.
+  const hashedEvidenceCount = incidents.reduce((sum, i) =>
+    sum + (i.media || []).filter(m => /^[a-f0-9]{64}$/i.test(String(m.sha256Checksum || m.sha256Hash || ''))).length, 0);
 
   return (
     <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(30,58,138,0.15),rgba(255,255,255,0))] text-slate-100 flex flex-col font-sans selection:bg-ghana-gold selection:text-black">
@@ -788,8 +794,8 @@ export const App: React.FC = () => {
                   ⚖️
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Act 772 Sealed</p>
-                  <p className="text-base sm:text-lg font-black font-mono text-purple-300 tracking-tight">{sealedEvidenceCount}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Hashed evidence files</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-purple-300 tracking-tight">{hashedEvidenceCount}</p>
                 </div>
               </div>
 
@@ -799,7 +805,7 @@ export const App: React.FC = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">Resolved Today</p>
-                  <p className="text-base sm:text-lg font-black font-mono text-amber-400 tracking-tight">{resolvedCount}</p>
+                  <p className="text-base sm:text-lg font-black font-mono text-amber-400 tracking-tight">{resolvedTodayCount}</p>
                 </div>
               </div>
             </div>

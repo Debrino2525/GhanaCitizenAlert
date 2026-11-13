@@ -239,7 +239,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
         return;
       }
       if (!approvingCommander.trim()) {
-        setCreateError('Approving Commander Name is required under Two-Man Rule.');
+        setCreateError('Enter the name of the commander who approved this alert.');
         return;
       }
     }
@@ -419,7 +419,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
               National Emergency Broadcast Engine
             </h2>
             <p className="text-xs text-slate-400">
-              Two-Man Authorized Amber Alerts (Missing Children) & Red Threat Geofences
+              Amber alerts (missing children) and red threat alerts
             </p>
           </div>
         </div>
@@ -647,8 +647,8 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Authorizing Commander</span>
-                  <span className="text-white font-semibold">{selectedAlert.approvingCommanderName || 'Division Command'}</span>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Approving commander (as typed)</span>
+                  <span className="text-white font-semibold">{selectedAlert.approvingCommanderName || 'Not recorded'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold">Broadcast Issued (UTC)</span>
@@ -717,7 +717,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                 {isLoadingSightings ? (
                   <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                    <span>Loading verified tips from citizens...</span>
+                    <span>Loading tips from citizens...</span>
                   </div>
                 ) : sightings.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
@@ -769,7 +769,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-white">AUTHORIZE EMERGENCY BROADCAST</h2>
-                  <p className="text-xs text-slate-400">Two-Man Rule Geofence Dispatch under Act 772</p>
+                  <p className="text-xs text-slate-400">Goes live as soon as you submit. The approving commander's name is recorded as typed; the system does not ask them to confirm.</p>
                 </div>
               </div>
 
@@ -973,7 +973,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Approving Commander *</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Approving commander (name as typed) *</label>
                   <input
                     type="text"
                     placeholder="e.g. Chief Supt. Emmanuel Arthur"

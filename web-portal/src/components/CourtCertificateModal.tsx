@@ -41,7 +41,7 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
               REPUBLIC OF GHANA • EVIDENCE VAULT
             </span>
             <h2 className="text-lg font-bold text-white mt-0.5">
-              Digital Evidence Certificate (Chain of Custody)
+              Digital evidence summary (not a certificate)
             </h2>
             <p className="text-xs text-slate-400 font-mono">Ref: {certificate.certificateId}</p>
           </div>
@@ -72,7 +72,7 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                   }`}>
-                    {item.isVerifiedHex ? 'SHA-256 Validated' : 'Unverified Hash'}
+                    {item.isVerifiedHex ? 'Device hash recorded' : 'No valid hash'}
                   </span>
                 </div>
                 <p className="font-mono text-[11px] text-slate-400 break-all bg-slate-900 p-2 rounded mt-1">
@@ -99,7 +99,7 @@ export const CourtCertificateModal: React.FC<CourtCertificateModalProps> = ({
           <button
             onClick={() => {
               if (certificate) {
-                printHtmlDocument('Evidence Vault Certificate - ' + certificate.trackingCode, buildCourtCertificateHtml(certificate));
+                printHtmlDocument('Evidence summary - ' + certificate.trackingCode, buildCourtCertificateHtml(certificate));
               }
             }}
             className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-2 shadow-lg shadow-amber-500/20"

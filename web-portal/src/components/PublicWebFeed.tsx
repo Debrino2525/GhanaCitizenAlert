@@ -202,7 +202,7 @@ export const PublicWebFeed: React.FC = () => {
         {loading ? (
           <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
             <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-            <span>Loading verified public safety bulletins...</span>
+            <span>Loading public safety bulletins...</span>
           </div>
         ) : incidents.length === 0 ? (
           <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-500 text-xs">
@@ -222,7 +222,7 @@ export const PublicWebFeed: React.FC = () => {
                     </span>
                     <span className="text-[11px] text-emerald-400 font-bold flex items-center space-x-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Verified Safety Bulletin</span>
+                      <span>Approved by a moderator</span>
                     </span>
                   </div>
                   <h3 className="text-base font-bold text-white mt-1">

@@ -41,9 +41,6 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-              Act 843 Certified
-            </span>
           </div>
         </div>
       </header>
@@ -91,7 +88,7 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
                 <strong className="text-slate-200">Foreground High-Accuracy GPS:</strong> Coordinates (Latitude, Longitude) and accuracy error radius (meters) are sampled only while the user explicitly interacts with the capture viewfinder or holds the SOS beacon.
               </li>
               <li>
-                <strong className="text-slate-200">Forensic Embedding:</strong> Location telemetry is cryptographically sealed into evidence dossiers under Act 772 standards for court admissibility.
+                <strong className="text-slate-200">Location with evidence:</strong> The location your phone reports is stored with your report and its photos or videos so officers can respond. It is not independently verified.
               </li>
               <li>
                 <strong className="text-slate-200">No Continuous Background Tracking:</strong> CitizenAlert does not track your location in the background when the application is closed. SOS coordinate updates occur only while the screen remains active on the beacon view.
@@ -104,7 +101,7 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
         <section className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
           <h3 className="text-base font-bold text-white flex items-center space-x-2">
             <Video className="w-5 h-5 text-blue-400" />
-            <span>3. Camera, Microphone & Raw Byte Cryptography</span>
+            <span>3. Camera, microphone and file hashes</span>
           </h3>
           <div className="text-sm text-slate-300 space-y-2 leading-relaxed">
             <p>
@@ -115,7 +112,7 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
                 <strong className="text-slate-200">60-Second Statutory Limit:</strong> Camera captures are constrained to a maximum of 60 seconds to prevent unnecessary surveillance.
               </li>
               <li>
-                <strong className="text-slate-200">Raw Byte SHA-256 Hashing:</strong> Every media recording has its raw binary bytes hashed on-device using SHA-256 prior to vault transmission, guaranteeing tamper detection.
+                <strong className="text-slate-200">File hashes:</strong> The app tries to compute a SHA-256 hash of each recording on your phone before uploading it. When this succeeds, officers can check whether the file changed afterwards. Some files may have no hash.
               </li>
               <li>
                 <strong className="text-slate-200">Sandboxed Storage:</strong> Local evidence is stored in app-sandboxed directories and purged upon verified cloud vault delivery or upon manual queue removal.
@@ -159,9 +156,9 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">How to Delete Your Account:</h4>
               <ol className="list-decimal pl-5 space-y-1 text-xs text-slate-400">
                 <li>Open the <strong>CitizenAlert Ghana</strong> mobile app.</li>
-                <li>Tap your profile avatar in the upper right corner to open the <strong>Citizen Profile & Trust Vault</strong>.</li>
-                <li>Tap <strong className="text-rose-400">"Delete Account & Purge Data"</strong> and confirm your request.</li>
-                <li>Your profile credentials, authentication tokens, and local offline queue will be immediately and permanently erased from the device and identity directory.</li>
+                <li>Tap your profile picture in the upper right corner to open your <strong>Profile</strong>.</li>
+                <li>Tap <strong className="text-rose-400">"Delete my account"</strong> and confirm twice.</li>
+                <li>Your sign-in account and profile photo are deleted. Your name, email, phone number and Ghana Card number are removed from reports you sent; the reports stay with officers but are no longer linked to you. Reports still waiting to send are removed from the phone.</li>
               </ol>
             </div>
             <p className="text-xs text-slate-400">
