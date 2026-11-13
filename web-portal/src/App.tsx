@@ -15,7 +15,7 @@ import { TwoStepChallenge, TwoStepSetupModal } from './components/TwoStepSignIn'
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser, SosPing } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
-import { Shield, ShieldCheck, Loader2 } from 'lucide-react';
+import { Shield, ShieldCheck, Loader2, Siren, Zap, Search, FileCheck, CheckCircle2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -767,7 +767,7 @@ export const App: React.FC = () => {
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5">
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold shrink-0">
-                  🚨
+                  <Siren className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-slate-400 font-semibold leading-tight">Open cases</p>
@@ -777,7 +777,7 @@ export const App: React.FC = () => {
 
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-600/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold shrink-0">
-                  ⚡
+                  <Zap className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-slate-400 font-semibold leading-tight">Dispatched</p>
@@ -787,7 +787,7 @@ export const App: React.FC = () => {
 
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-indigo-600/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold shrink-0">
-                  🔍
+                  <Search className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-slate-400 font-semibold leading-tight">Investigating</p>
@@ -797,7 +797,7 @@ export const App: React.FC = () => {
 
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold shrink-0">
-                  ⚖️
+                  <FileCheck className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-slate-400 font-semibold leading-tight">Hashed evidence files</p>
@@ -807,7 +807,7 @@ export const App: React.FC = () => {
 
               <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-lg flex items-center space-x-3 col-span-2 md:col-span-1">
                 <div className="w-9 h-9 rounded-xl bg-amber-600/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shrink-0">
-                  ✅
+                  <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-slate-400 font-semibold leading-tight">Resolved today</p>

@@ -42,77 +42,9 @@ import {
 import { AiCaseBriefModal } from './AiCaseBriefModal';
 import { getSosState, sosDisplayTitle, formatAgo, SOS_STATE_LABEL } from '../utils/sosState';
 
-export const renderLocationSourceBadge = (
-  locationSource?: LocationSource | null,
-  fixAgeSeconds?: number | null,
-  updatedAt?: string | null,
-  title?: string | null,
-  status?: string | null
-) => {
-  const cancelledByReporter = Boolean(title && (title.includes('STAND DOWN') || title.includes('CANCELLED')));
-  const closedByOfficer = status === 'RESOLVED' || status === 'DISMISSED';
-
-  if (cancelledByReporter || closedByOfficer) {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-slate-800 text-slate-300 border border-slate-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1" />
-        {cancelledByReporter ? 'CANCELLED BY REPORTER' : 'CLOSED'}
-      </span>
-    );
-  }
-
-  // Calculate actual elapsed wall-clock time since the incident was created or updated
-  const elapsedSec = updatedAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 1000))
-    : (fixAgeSeconds ?? 9999);
-
-  // If locationSource was recorded as LIVE, verify its freshness
-  if (locationSource === 'LIVE') {
-    // A live GPS fix is only truly live if fresh within 90 seconds (1.5 minutes)
-    if (elapsedSec > 90) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80" title="No fresh location from the device">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
-          LAST KNOWN ({formatAgo(elapsedSec)})
-        </span>
-      );
-    }
-
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-green-950/80 text-green-400 border border-green-700/80">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
-        LIVE
-      </span>
-    );
-  }
-  if (locationSource === 'LAST_KNOWN') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold bg-amber-950/80 text-amber-400 border border-amber-700/80">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1" />
-        LAST KNOWN ({formatAgo(elapsedSec)})
-      </span>
-    );
-  }
-  if (locationSource === 'MANUAL') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
-        MANUAL
-      </span>
-    );
-  }
-  if (locationSource === 'UNAVAILABLE') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-950/80 text-red-400 border border-red-800">
-        UNAVAILABLE
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800">
-      Location source not recorded
-    </span>
-  );
-};
+export { renderLocationSourceBadge, evidencePathFromUrl, isCaseClosed, formatPingAge } from './dashboard/caseHelpers';
+import { renderLocationSourceBadge, evidencePathFromUrl, isCaseClosed, formatPingAge } from './dashboard/caseHelpers';
+import { CaseQueue } from './dashboard/CaseQueue';
 
 interface PoliceCommandDashboardProps {
   incidents: IncidentReport[];
@@ -123,22 +55,6 @@ interface PoliceCommandDashboardProps {
   onOpenCertificateModal: (cert: CourtCertificate) => void;
   onApprovePublicPublish?: (incidentId: string) => void;
   onRejectPublicPublish?: (incidentId: string) => void;
-}
-
-/** Object path inside the 'evidence' bucket from a Supabase storage URL, or null. */
-export function evidencePathFromUrl(url: string): string | null {
-  const m = /\/storage\/v1\/object\/(?:public|sign|authenticated)\/evidence\/([^?#]+)/.exec(url || '');
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-/** Resolved, dismissed, or cancelled by the reporter: no longer an emergency on screen. */
-export function isCaseClosed(inc: Pick<IncidentReport, 'status' | 'title'>): boolean {
-  return inc.status === 'RESOLVED' || inc.status === 'DISMISSED' || /STAND DOWN|CANCELLED/i.test(inc.title || '');
-}
-
-export function formatPingAge(dateStr: string): string {
-  if (!dateStr) return '';
-  return formatAgo(dateStr);
 }
 
 export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
@@ -587,178 +503,23 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* LEFT COLUMN: Agency CAD Dispatch Queue */}
-      <div className="lg:col-span-5 space-y-4">
-        {/* Unified Sticky Search, Filter, and Status Block */}
-        <div className="sticky top-[calc(var(--header-h)+0.5rem)] z-10 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-xl space-y-3 transition-all">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center space-x-2 min-w-0">
-              <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 shrink-0" />
-              <span className="text-xs sm:text-sm font-bold text-white truncate">CAD Dispatch Queue</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 font-mono font-bold shrink-0">
-                {filteredIncidents.length}
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-1.5 shrink-0">
-              <span className="hidden xl:inline text-xs font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                [J / K]
-              </span>
-              <select
-                value={filterAgency}
-                onChange={(e) => setFilterAgency(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 font-semibold focus:outline-none focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0"
-                aria-label="Filter by Agency"
-              >
-                <option value="ALL">All Agencies</option>
-                <option value="GPS_CID">GPS / CID (Crime)</option>
-                <option value="DOVVSU">DOVVSU (Abuse)</option>
-                <option value="EPA">EPA (Galamsey)</option>
-                <option value="MTTD">MTTD (Traffic)</option>
-                <option value="MMDA_SANITATION">MMDA (Sanitation)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Quick Search Bar with Shortcut Badge */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search tracking code, GPS, landmark... (Press '/' to focus)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-10 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500"
-            />
-            <span className="absolute right-2.5 top-2 text-xs font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 pointer-events-none hidden sm:inline">
-              /
-            </span>
-          </div>
-
-          {/* Status chips wrap instead of scrolling off the edge */}
-          <div className="flex flex-wrap gap-1.5 pt-0.5 pb-1">
-            {statusFilterList.map((item) => {
-              const count = item.id === 'ALL' ? incidents.length : (statusCounts[item.id] || 0);
-              const isSelected = filterStatus === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setFilterStatus(item.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase transition whitespace-nowrap flex items-center space-x-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                    isSelected
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded font-mono text-xs ${
-                    isSelected ? 'bg-blue-900 text-blue-100' : 'bg-slate-800 text-slate-300'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Incidents List Container (Single Scroll Container) */}
-        <div className="space-y-3 lg:max-h-[calc(100vh-var(--header-h)-3.5rem)] lg:overflow-y-auto scrollbar-thin pr-1">
-          {filteredIncidents.length === 0 ? (
-            <div className="p-8 text-center bg-slate-900/80 border border-slate-800 rounded-2xl text-slate-500 text-xs">
-              No matching incidents found in CAD queue.
-            </div>
-          ) : (
-            [...filteredIncidents]
-              .sort((a, b) => Number(isCaseClosed(a)) - Number(isCaseClosed(b)))
-              .map(inc => {
-              const isSelected = selectedIncident?.id === inc.id;
-              const closed = isCaseClosed(inc);
-              return (
-                <div
-                  key={inc.id}
-                  onClick={() => onSelectIncident(inc)}
-                  className={`cursor-pointer p-3.5 sm:p-4 rounded-xl border transition-all ${
-                    isSelected
-                      ? 'bg-slate-800/90 border-blue-500 shadow-lg shadow-blue-500/15 ring-1 ring-blue-500'
-                      : 'bg-slate-900/80 border-slate-800 hover:bg-slate-850 hover:border-slate-700'
-                  } ${closed && !isSelected ? 'opacity-60 hover:opacity-100' : ''}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <div className="flex items-center space-x-2 min-w-0">
-                      {inc.reporter?.avatarUrl && !inc.reporter?.isAnonymous ? (
-                        <img
-                          src={inc.reporter.avatarUrl}
-                          alt="Citizen"
-                          className="w-5 h-5 rounded-full object-cover border border-slate-700 shrink-0"
-                        />
-                      ) : null}
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-ghana-gold border border-slate-800">
-                        {inc.trackingCode}
-                      </span>
-                    </div>
-                    <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded shrink-0 ${
-                      closed
-                        ? 'bg-slate-800 text-slate-400 border border-slate-700'
-                        : inc.severity === 'RED'
-                        ? 'bg-red-900/60 text-red-300 border border-red-800'
-                        : inc.severity === 'HIGH'
-                        ? 'bg-amber-900/60 text-amber-300 border border-amber-800'
-                        : 'bg-blue-900/60 text-blue-300 border border-blue-800'
-                    }`}>
-                      {closed ? 'Closed' : inc.severity}
-                    </span>
-                  </div>
-
-                  <h3 className={`text-sm font-bold line-clamp-1 mb-1 ${closed ? 'text-slate-300' : 'text-white'}`}>{sosDisplayTitle(inc.title, getSosState(inc, latestPings[inc.id]?.created_at))}</h3>
-                  <p className="text-xs text-slate-400 line-clamp-2 mb-2">{inc.description}</p>
-                  
-                  {latestPings[inc.id] && (() => {
-                    const sosState = getSosState(inc, latestPings[inc.id].created_at);
-                    const isPingActive = sosState === 'LIVE';
-                    const isSignalLost = sosState === 'SIGNAL_LOST';
-
-                    return (
-                      <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono my-2 shadow-inner ${
-                        isPingActive
-                          ? 'bg-red-950/80 border-red-800 text-red-300'
-                          : isSignalLost
-                          ? 'bg-amber-950/70 border-amber-700 text-amber-300'
-                          : 'bg-slate-900 border-slate-800 text-slate-400'
-                      }`}>
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${isPingActive ? 'bg-red-500 animate-ping' : isSignalLost ? 'bg-amber-400' : 'bg-slate-500'}`} />
-                        <span className="font-bold truncate">
-                          {SOS_STATE_LABEL[sosState]} · last position {latestPings[inc.id].lat.toFixed(4)}, {latestPings[inc.id].lng.toFixed(4)} (±{latestPings[inc.id].accuracy}m) • {formatPingAge(latestPings[inc.id].created_at)}
-                        </span>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80 gap-2">
-                    <div className="min-w-0">
-                      <span className="font-mono text-blue-400 font-bold text-xs truncate block">
-                        📍 {inc.coordinates ? `${inc.coordinates[0].toFixed(4)}° N, ${inc.coordinates[1].toFixed(4)}° W` : 'Location unavailable'}
-                      </span>
-                      <span className="text-xs text-slate-500 font-mono block mt-0.5">
-                        🕒 {new Date(inc.createdAt).toLocaleString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {renderLocationSourceBadge(inc.locationSource, inc.gpsFixAgeSeconds, inc.updatedAt, inc.title, inc.status)}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
+      {/* LEFT COLUMN: case queue */}
+      <CaseQueue
+        incidents={incidents}
+        filteredIncidents={filteredIncidents}
+        selectedIncident={selectedIncident}
+        onSelectIncident={onSelectIncident}
+        latestPings={latestPings}
+        filterAgency={filterAgency}
+        setFilterAgency={setFilterAgency}
+        filterStatus={filterStatus}
+        setFilterStatus={setFilterStatus}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        searchInputRef={searchInputRef}
+        statusFilterList={statusFilterList}
+        statusCounts={statusCounts}
+      />
 
       {/* RIGHT COLUMN: Forensic Review Player & Investigation Command Hub */}
       <div className="lg:col-span-7">
@@ -976,9 +737,9 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
             {/* CARD 2: FORENSIC VIDEO EVIDENCE REVIEW PLAYER */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Digital Evidence Review & Forensic Telemetry</span>
+                <span className="font-semibold text-white flex items-center space-x-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                  <span>Evidence</span>
                 </span>
                 <div className="flex items-center space-x-2">
                   <button
@@ -1307,7 +1068,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               {/* SHA-256 Cryptographic Seal */}
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">
+                  <span className="text-slate-400 font-semibold text-xs">
                     SHA-256 of evidence file (computed on reporter's device)
                   </span>
                   {evidenceHash && (
@@ -1335,7 +1096,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
             {/* CARD 3: SITUATION DETAILS & OFFENDER INFO */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-2">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Situation & Offender Details</h4>
+              <h4 className="text-sm font-semibold text-slate-300">What was reported</h4>
               <p className="text-xs sm:text-sm text-slate-200 bg-slate-950 p-3.5 rounded-xl border border-slate-800 leading-relaxed">
                 {selectedIncident.description}
               </p>
@@ -1354,7 +1115,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       />
                     ) : null}
                     <div>
-                      <span className="text-slate-500 block text-xs font-bold">REPORTER IDENTITY</span>
+                      <span className="text-slate-400 block text-xs font-semibold">Reporter</span>
                       <span className="text-white font-bold text-xs">
                         {selectedIncident.reporter.isAnonymous
                           ? '🛡️ Whistleblower (Act 720)'
@@ -1401,7 +1162,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 col-span-2 sm:col-span-1">
-                  <span className="text-slate-500 block text-xs font-bold">RE-ASSIGN AGENCY</span>
+                  <span className="text-slate-400 block text-xs font-semibold">Assigned agency</span>
                   <select
                     value={selectedIncident.assignedAgency}
                     onChange={(e) => onReassignAgency(selectedIncident.id, e.target.value as AgencyType)}
@@ -1434,7 +1195,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
               {/* Dispatch Action Panel */}
               <div className="space-y-2 pt-2 border-t border-slate-800">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">CAD Action Triage</h4>
+                  <h4 className="text-sm font-semibold text-slate-300">Case status</h4>
                   <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800">
                     STATUS: {selectedIncident.status.replace(/_/g, ' ')}
                   </span>
@@ -1489,7 +1250,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                 {/* Public Civic Feed Quick Toggle */}
                 <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Civic Public Feed:</span>
+                    <span className="text-xs font-semibold text-slate-400">Public feed:</span>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                       selectedIncident.isPublicPublished
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
@@ -1534,8 +1295,8 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
 
             {/* CARD 5: INVESTIGATOR CASE LOG */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Investigator Case Log ({caseNotes[selectedIncident.id]?.length || 0})
+              <h4 className="text-sm font-semibold text-slate-300">
+                Case notes ({caseNotes[selectedIncident.id]?.length || 0})
               </h4>
 
               <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin pr-1">

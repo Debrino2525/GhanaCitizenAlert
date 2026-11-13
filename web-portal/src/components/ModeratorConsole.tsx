@@ -20,7 +20,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
-import { evidencePathFromUrl } from './PoliceCommandDashboard';
+import { evidencePathFromUrl } from './dashboard/caseHelpers';
 
 export interface StatutoryAppeal {
   id: string;

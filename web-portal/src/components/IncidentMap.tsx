@@ -77,7 +77,10 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
 
   // Responsive and collapsible overlay states
   const [isHudCollapsed, setIsHudCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
-  const [isLegendCollapsed, setIsLegendCollapsed] = useState<boolean>(false);
+  // Collapsed by default below desktop width so it does not cover the dispatch card.
+  const [isLegendCollapsed, setIsLegendCollapsed] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024
+  );
   const [isLayerDropdownOpen, setIsLayerDropdownOpen] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showTileErrorNotice, setShowTileErrorNotice] = useState<boolean>(false);
@@ -719,7 +722,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <span className="font-extrabold text-white text-xs tracking-wide truncate">
-                  TACTICAL CAD DISPATCH
+                  Nearest station
                 </span>
               </div>
 
@@ -979,18 +982,19 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
       {/* BOTTOM-LEFT CORNER OVERLAY CONTAINER (Ghana Geospatial Radar Legend) */}
       <div className="absolute bottom-3 left-3 z-map-ui pointer-events-none flex flex-col gap-2">
         <div className="pointer-events-auto bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl p-2.5 text-xs shadow-2xl space-y-1.5 max-w-[260px] transition-all">
-          <div 
+          <button
+            type="button"
             onClick={() => setIsLegendCollapsed(!isLegendCollapsed)}
-            className="flex items-center justify-between cursor-pointer select-none pb-1 border-b border-slate-800 gap-2"
-            title="Toggle Map Radar Legend"
+            aria-expanded={!isLegendCollapsed}
+            className="w-full flex items-center justify-between cursor-pointer select-none pb-1 border-b border-slate-800 gap-2 text-left"
           >
-            <span className="font-extrabold text-slate-200 tracking-wider text-xs uppercase">
-              GHANA GEOSPATIAL RADAR
+            <span className="font-semibold text-slate-200 text-xs">
+              Map key
             </span>
-            <button aria-label="Toggle Legend" className="text-slate-400 hover:text-white">
+            <span aria-hidden="true" className="text-slate-400">
               {isLegendCollapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-          </div>
+            </span>
+          </button>
 
           {!isLegendCollapsed && (
             <div className="max-h-40 overflow-y-auto scrollbar-thin space-y-1 text-xs pr-1">
