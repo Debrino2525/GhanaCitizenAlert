@@ -10,7 +10,7 @@ export function ensureGoogleSigninConfigured() {
   try {
     GoogleSigninInstance.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '360721223201-tdr0166i26q1d5tupnlp4mluebjncq9b.apps.googleusercontent.com',
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || undefined,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '360721223201-nd82a902ukl2l853vtantufo21nfajat.apps.googleusercontent.com',
       scopes: ['profile', 'email']
     });
     isConfigured = true;

@@ -8,7 +8,12 @@
     "icon": "./assets/icon.png",
     "plugins": [
       "expo-video",
-      "@react-native-google-signin/google-signin",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.360721223201-nd82a902ukl2l853vtantufo21nfajat"
+        }
+      ],
       "expo-font",
       "expo-secure-store",
       "expo-status-bar",
