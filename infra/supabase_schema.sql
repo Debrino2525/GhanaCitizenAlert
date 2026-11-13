@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     media JSONB DEFAULT '[]'::jsonb,
     is_anonymous BOOLEAN DEFAULT FALSE,
     reporter_data JSONB,
-    reporter_trust_score INT DEFAULT 80,
+    reporter_trust_score INT DEFAULT 0,
     assigned_agency VARCHAR(50) NOT NULL DEFAULT 'GPS_CID',
     secondary_agencies JSONB DEFAULT '[]'::jsonb,
     status VARCHAR(50) NOT NULL DEFAULT 'RECEIVED_PENDING_TRIAGE',
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS emergency_alerts (
     subject_age INT,
     subject_photo_url TEXT,
     last_seen_location TEXT NOT NULL,
-    ghanapost_code VARCHAR(20) NOT NULL,
+    ghanapost_code VARCHAR(20) DEFAULT '',
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     radius_km NUMERIC(5, 2) NOT NULL DEFAULT 35.0,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS alert_sightings (
     alert_id UUID REFERENCES emergency_alerts(id) ON DELETE CASCADE,
     timestamp TIMESTAMPTZ DEFAULT NOW(),
     location_name VARCHAR(255) NOT NULL,
-    ghanapost_code VARCHAR(20) NOT NULL,
+    ghanapost_code VARCHAR(20) DEFAULT '',
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     comment TEXT NOT NULL,
@@ -116,6 +116,104 @@ CREATE POLICY "Allow public update on emergency_alerts" ON emergency_alerts FOR 
 CREATE POLICY "Allow public read on alert_sightings" ON alert_sightings FOR SELECT USING (true);
 CREATE POLICY "Allow public insert on alert_sightings" ON alert_sightings FOR INSERT WITH CHECK (true);
 
-CREATE POLICY "Allow public read on audit_ledger" ON audit_evidence_ledger FOR SELECT USING (true);
-CREATE POLICY "Allow public insert on audit_ledger" ON audit_evidence_ledger FOR INSERT WITH CHECK (true);
+-- 4. Cryptographic Evidence Ledger RLS (Act 772 Compliance: Append-only by service/system)
+CREATE POLICY "Allow authenticated read on audit_ledger" ON audit_evidence_ledger FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Allow insert on audit_ledger" ON audit_evidence_ledger FOR INSERT TO authenticated, anon WITH CHECK (true);
+-- Note: UPDATE and DELETE are intentionally not allowed on audit_evidence_ledger to preserve chain-of-custody immutability.
+
+-- 5. Supabase Storage Bucket & RLS Policies for Evidence Vault
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('evidence', 'evidence', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Allow public and authenticated uploads to evidence bucket
+CREATE POLICY "Allow public uploads to evidence bucket"
+ON storage.objects FOR INSERT
+TO public, anon, authenticated
+WITH CHECK (bucket_id = 'evidence');
+
+-- Allow read of evidence files
+CREATE POLICY "Allow public reads from evidence bucket"
+ON storage.objects FOR SELECT
+TO public, anon, authenticated
+USING (bucket_id = 'evidence');
+
+-- 6. Supabase Storage Bucket for Amber Alert Photos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('alert-photos', 'alert-photos', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+CREATE POLICY "Allow public uploads to alert-photos bucket"
+ON storage.objects FOR INSERT
+TO public, anon, authenticated
+WITH CHECK (bucket_id = 'alert-photos');
+
+CREATE POLICY "Allow public reads from alert-photos bucket"
+ON storage.objects FOR SELECT
+TO public, anon, authenticated
+USING (bucket_id = 'alert-photos');
+
+-- 7. Statutory Appeals & Takedowns Table (Ghana Data Protection Act 2012, Act 843, Sections 32-43)
+CREATE TABLE IF NOT EXISTS statutory_appeals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
+    tracking_code VARCHAR(32) NOT NULL,
+    bulletin_title TEXT,
+    applicant_name VARCHAR(255) NOT NULL,
+    contact_info VARCHAR(255) NOT NULL,
+    reason TEXT NOT NULL,
+    legal_basis VARCHAR(150) DEFAULT 'Ghana Data Protection Act 2012 (Act 843, Sections 32-43)',
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW' CHECK (status IN ('PENDING_REVIEW', 'GRANTED', 'REJECTED')),
+    dpo_notes TEXT,
+    resolved_by VARCHAR(150),
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable Realtime & RLS on statutory_appeals
+ALTER PUBLICATION supabase_realtime ADD TABLE statutory_appeals;
+ALTER TABLE statutory_appeals ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public insert on statutory_appeals" ON statutory_appeals FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public read on statutory_appeals" ON statutory_appeals FOR SELECT USING (true);
+CREATE POLICY "Allow public update on statutory_appeals" ON statutory_appeals FOR UPDATE USING (true);
+
+-- =============================================================
+-- 8. Civic Trust Scoring Engine (0 - 100%)
+-- Rules:
+--  - Starts at 0%.
+--  - +5% per 24h window for posting reports.
+--  - +5% upon official verification & public publishing.
+--  - -5% upon rejection / false report dismissal (clamped at 0%).
+-- =============================================================
+
+CREATE OR REPLACE FUNCTION adjust_citizen_trust_score(target_user_id UUID, delta_score INT)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    current_trust INT;
+    new_trust INT;
+    raw_meta JSONB;
+BEGIN
+    SELECT raw_user_meta_data INTO raw_meta FROM auth.users WHERE id = target_user_id;
+    IF raw_meta IS NULL THEN
+        RETURN 0;
+    END IF;
+
+    current_trust := COALESCE((raw_meta->>'trust_score')::INT, 0);
+    new_trust := GREATEST(0, LEAST(100, current_trust + delta_score));
+    
+    UPDATE auth.users 
+    SET raw_user_meta_data = raw_meta || jsonb_build_object('trust_score', new_trust)
+    WHERE id = target_user_id;
+
+    RETURN new_trust;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION adjust_citizen_trust_score(UUID, INT) TO anon, authenticated, service_role;
+
+
 

@@ -1,20 +1,34 @@
 {
   "expo": {
     "name": "CitizenAlert Ghana",
-    "slug": "ghana-citizen-alert",
+    "slug": "ghanacitizenalert",
     "scheme": "citizenalert",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "plugins": [
-      "@react-native-google-signin/google-signin"
+      "expo-video",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.360721223201-nd82a902ukl2l853vtantufo21nfajat"
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#FFFFFF",
+          "resizeMode": "contain",
+          "imageWidth": 200
+        }
+      ]
     ],
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070B13"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "gh.gov.safety.citizenalert",
@@ -28,7 +42,7 @@
       "package": "gh.gov.safety.citizenalert",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#070B13"
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
         "CAMERA",

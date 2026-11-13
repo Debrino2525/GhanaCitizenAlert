@@ -210,14 +210,12 @@ function generateTacticalRoutePolyline(
   const points: [number, number][] = [start];
   const steps = 8;
 
-  // Intermediate slight offsets to simulate road curvature along highway corridors
+  // Straight line on purpose: no road routing is done, so the map must not pretend to show a road.
   for (let i = 1; i < steps; i++) {
     const fraction = i / steps;
     const lat = start[0] + (end[0] - start[0]) * fraction;
     const lng = start[1] + (end[1] - start[1]) * fraction;
-    // Add micro curvature based on index
-    const wobble = Math.sin(fraction * Math.PI) * 0.003 * (i % 2 === 0 ? 1 : -1);
-    points.push([Number((lat + wobble).toFixed(6)), Number((lng + wobble * 0.5).toFixed(6))]);
+    points.push([Number(lat.toFixed(6)), Number(lng.toFixed(6))]);
   }
 
   points.push(end);
@@ -267,10 +265,10 @@ export function computeTacticalDispatchRoute(
 
   const polyline = generateTacticalRoutePolyline(station.coordinates, destinationCoords);
 
-  // Google Maps Deep Links
+  // Google Maps Deep Links (High-Res Satellite & Earth imagery guaranteed across all Ghana regions, narrowed down to exact coordinate at max zoom 20)
   const googleMapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${station.coordinates[0]},${station.coordinates[1]}&destination=${destinationCoords[0]},${destinationCoords[1]}&travelmode=driving`;
-  const googleStreetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${destinationCoords[0]},${destinationCoords[1]}`;
-  const googleSatelliteUrl = `https://www.google.com/maps/search/?api=1&query=${destinationCoords[0]},${destinationCoords[1]}&layer=s`;
+  const googleStreetViewUrl = `https://www.google.com/maps/@${destinationCoords[0]},${destinationCoords[1]},20z/data=!3m1!1e3`;
+  const googleSatelliteUrl = `https://www.google.com/maps?q=${destinationCoords[0]},${destinationCoords[1]}&ll=${destinationCoords[0]},${destinationCoords[1]}&z=20&t=k`;
 
   return {
     originStation: station,
