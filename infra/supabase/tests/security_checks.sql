@@ -64,17 +64,29 @@ begin
   exception when insufficient_privilege then null;
   end;
 
-  begin
-    insert into public.incidents (title, description, category, status, is_public_published, is_public_eligible)
-    values ('security-check', 'x', 'CRIMINAL_OFFENSE', 'RESOLVED', true, true);
-    -- Insert is allowed (citizens report anonymously) but must be sanitised:
-    if exists (select 1 from public.incidents where title = 'security-check' and (is_public_published or status <> 'RECEIVED_PENDING_TRIAGE')) then
-      raise exception 'FAIL: anon insert was not sanitised (self-published or status set)';
-    end if;
-  exception when insufficient_privilege then null; -- anon cannot read it back; that is fine too
-  end;
+  -- Citizens may report anonymously, so this insert is allowed. It tries to
+  -- self-publish and self-resolve; the sanitise trigger must undo that
+  -- (checked below as the table owner, because anon cannot read it back).
+  insert into public.incidents
+    (tracking_code, category, title, description, location_name, region, latitude, longitude,
+     status, is_public_published, is_public_eligible, public_corroborations, is_anonymous, media)
+  values
+    ('SEC-CHECK-0001', 'CRIMINAL_OFFENSE', 'security-check', 'x', 'x', 'x', 0, 0,
+     'RESOLVED', true, true, 99, true, '[]'::jsonb);
 end $$;
 reset role;
+
+do $$
+begin
+  if exists (select 1 from public.incidents where tracking_code = 'SEC-CHECK-0001'
+             and (is_public_published or is_public_eligible or public_corroborations <> 0
+                  or status <> 'RECEIVED_PENDING_TRIAGE')) then
+    raise exception 'FAIL: anon insert was not sanitised (self-published, self-resolved or fake corroborations)';
+  end if;
+  if not exists (select 1 from public.incidents where tracking_code = 'SEC-CHECK-0001') then
+    raise exception 'FAIL: anonymous citizen report could not be inserted';
+  end if;
+end $$;
 
 -- ---------- as an active officer ----------
 select set_config('request.jwt.claims', json_build_object(
