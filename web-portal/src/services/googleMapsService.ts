@@ -210,14 +210,12 @@ function generateTacticalRoutePolyline(
   const points: [number, number][] = [start];
   const steps = 8;
 
-  // Intermediate slight offsets to simulate road curvature along highway corridors
+  // Straight line on purpose: no road routing is done, so the map must not pretend to show a road.
   for (let i = 1; i < steps; i++) {
     const fraction = i / steps;
     const lat = start[0] + (end[0] - start[0]) * fraction;
     const lng = start[1] + (end[1] - start[1]) * fraction;
-    // Add micro curvature based on index
-    const wobble = Math.sin(fraction * Math.PI) * 0.003 * (i % 2 === 0 ? 1 : -1);
-    points.push([Number((lat + wobble).toFixed(6)), Number((lng + wobble * 0.5).toFixed(6))]);
+    points.push([Number(lat.toFixed(6)), Number(lng.toFixed(6))]);
   }
 
   points.push(end);

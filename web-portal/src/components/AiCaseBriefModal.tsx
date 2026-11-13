@@ -238,10 +238,10 @@ ${brief.investigativeChecklist.map((c, i) => `[ ] ${c}`).join('\n')}
                   <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
                     <span className="text-slate-400 font-bold block flex items-center space-x-1">
                       <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Command Station & Sirens ETA</span>
+                      <span>Nearest station (straight-line)</span>
                     </span>
                     <p className="text-blue-400 font-bold text-xs truncate">{brief.geospatialAssessment.closestStationName}</p>
-                    <p className="text-emerald-400 font-mono font-bold">~{brief.geospatialAssessment.estimatedEtaMinutes} mins Emergency Response ETA</p>
+                    <p className="text-emerald-400 font-mono font-bold">~{brief.geospatialAssessment.estimatedEtaMinutes} min estimated (not a road route)</p>
                   </div>
                 </div>
 

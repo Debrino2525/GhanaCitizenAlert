@@ -800,7 +800,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                       })}
                     </span>
                   </div>
-                  <h2 className="text-base sm:text-lg font-bold text-white mt-1.5 leading-snug">{selectedIncident.title}</h2>
+                  <h2 className="text-base sm:text-lg font-bold text-white mt-1.5 leading-snug">{sosDisplayTitle(selectedIncident.title, getSosState(selectedIncident, latestPings[selectedIncident.id]?.created_at))}</h2>
                   <p className="text-xs text-slate-300 mt-0.5 font-medium flex items-center space-x-1">
                     <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span className="truncate">{selectedIncident.locationName}</span>
@@ -953,11 +953,11 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                         </span>
                         <span className="text-xs font-mono font-bold text-amber-400 flex items-center space-x-1">
                           <Radio className="w-3 h-3 text-red-400 animate-ping" />
-                          <span>Sirens ETA: {route.emergencySirensEtaMinutes}m ({route.distanceKm} km)</span>
+                          <span>Estimate: ~{route.emergencySirensEtaMinutes} min with sirens, ~{route.distanceKm} km</span>
                         </span>
                       </div>
-                      <p className="text-xs text-slate-300 font-medium mt-1 truncate">
-                        Corridor: <span className="text-white font-bold">{route.primaryHighway}</span>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Nearest station by straight-line distance. Not a road route; times assume average speeds.
                       </p>
                     </div>
                   </div>

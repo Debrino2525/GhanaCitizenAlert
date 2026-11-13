@@ -735,7 +735,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
             {/* Collapsed One-Line Summary */}
             {isHudCollapsed ? (
               <div className="flex items-center justify-between text-[11px] text-slate-300 font-medium">
-                <span className="text-amber-400 font-bold font-mono">Sirens: {activeRoute.emergencySirensEtaMinutes}m</span>
+                <span className="text-amber-400 font-bold font-mono">Est. ~{activeRoute.emergencySirensEtaMinutes} min</span>
                 <span className="text-blue-400 font-mono">({activeRoute.distanceKm} km)</span>
                 <span className="text-slate-400 truncate max-w-[130px] font-mono">{activeRoute.originStation.name}</span>
               </div>
@@ -1013,7 +1013,7 @@ export const IncidentMap: React.FC<IncidentMapProps> = ({
               <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-slate-400 text-[10px]">
                 <span className="text-cyan-400 font-bold flex items-center space-x-1">
                   <span>🚔</span>
-                  <span>CAD Route</span>
+                  <span>Straight line to station</span>
                 </span>
                 <span className="text-amber-400 font-bold">⚠️ Geofence</span>
               </div>
