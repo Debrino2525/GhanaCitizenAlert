@@ -10,6 +10,7 @@ export function media(overrides: Partial<EvidenceMedia> = {}): EvidenceMedia {
     url: '',
     thumbnailUrl: '',
     timestampUtc: '2026-11-13T00:00:00Z',
+    isTamperProofVerified: false,
     ...overrides,
   };
 }

@@ -24,6 +24,9 @@ interface CaseQueueProps {
   searchInputRef: React.MutableRefObject<HTMLInputElement | null>;
   statusFilterList: StatusFilterItem[];
   statusCounts: Record<string, number>;
+  hasMoreIncidents?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadOlder?: () => void;
 }
 
 /** Left column of the command view: search, filters and the list of cases. */
@@ -41,7 +44,10 @@ export const CaseQueue: React.FC<CaseQueueProps> = ({
   setSearchQuery,
   searchInputRef,
   statusFilterList,
-  statusCounts
+  statusCounts,
+  hasMoreIncidents,
+  isLoadingOlder,
+  onLoadOlder
 }) => {
   return (
     <div className="lg:col-span-5 space-y-4">
@@ -214,6 +220,22 @@ export const CaseQueue: React.FC<CaseQueueProps> = ({
           })
         )}
       </div>
+
+      {/* Only the newest reports are loaded; older ones on request. */}
+      {onLoadOlder && (
+        hasMoreIncidents ? (
+          <button
+            type="button"
+            onClick={onLoadOlder}
+            disabled={isLoadingOlder}
+            className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 text-sm font-semibold transition disabled:opacity-50"
+          >
+            {isLoadingOlder ? 'Loading older reports...' : `Load older reports (showing ${incidents.length})`}
+          </button>
+        ) : (
+          <p className="text-center text-xs text-slate-500 py-1">All {incidents.length} reports loaded.</p>
+        )
+      )}
     </div>
   );
 };

@@ -12,6 +12,7 @@ import { OfficerManagementModal } from './components/OfficerManagementModal';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TwoStepChallenge, TwoStepSetupModal } from './components/TwoStepSignIn';
+import { mapIncidentRow, mergeOlder, INCIDENT_PAGE_SIZE } from './services/incidentMapper';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser, SosPing } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
@@ -37,6 +38,8 @@ export const App: React.FC = () => {
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
   // Shown when the database refuses or fails an officer action (see commitIncidentChange).
   const [writeError, setWriteError] = useState<string | null>(null);
+  const [hasMoreIncidents, setHasMoreIncidents] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   // True when this officer has an authenticator set up but this session has not entered a code yet.
   const [needsTwoStep, setNeedsTwoStep] = useState(false);
   const [isTwoStepSetupOpen, setIsTwoStepSetupOpen] = useState(false);
@@ -306,71 +309,20 @@ export const App: React.FC = () => {
 
     const fetchSupabaseData = async () => {
       try {
-        const { data: incidentRows } = await supabase
+        const { data: incidentRows, error } = await supabase
           .from('incidents')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(INCIDENT_PAGE_SIZE);
+        if (error) throw error;
 
-        if (incidentRows && incidentRows.length > 0) {
-          const formatted: IncidentReport[] = incidentRows.map((r: any) => {
-            let parsedMedia = Array.isArray(r.media) ? r.media : [];
-            if (typeof r.media === 'string') {
-              try {
-                parsedMedia = JSON.parse(r.media);
-              } catch (e) {
-                parsedMedia = [];
-              }
-            }
-            parsedMedia = parsedMedia.map((m: any) => ({
-              ...m,
-              url: m.url || m.rawS3Url || '',
-              rawS3Url: m.rawS3Url || m.url || '',
-              video_storage_path: m.video_storage_path || m.storage_path || '',
-              uploadStatus: m.uploadStatus || (m.rawS3Url || m.url ? 'UPLOADED' : 'QUEUED'),
-              thumbnailUrl: m.thumbnailUrl || m.rawS3Url || m.url || ''
-            }));
-
-            const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
-            const lat = hasValidCoords ? r.latitude : null;
-            const lng = hasValidCoords ? r.longitude : null;
-
-            return {
-              id: r.id,
-              trackingCode: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
-              title: r.title || 'Civic Incident Report',
-              category: r.category || 'CRIMINAL_OFFENSE',
-              description: r.description || 'No description provided.',
-              locationName: r.location_name || 'Location Not Specified',
-              ghanaPostCode: r.ghanapost_code || '',
-              region: r.region || 'National',
-              coordinates: hasValidCoords ? [lat, lng] : null,
-              latitude: lat,
-              longitude: lng,
-              locationSource: r.location_source || null,
-              gpsFixAgeSeconds: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
-              gpsAccuracyM: typeof r.gps_accuracy_m === 'number' ? r.gps_accuracy_m : null,
-              media: parsedMedia,
-              reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: typeof r.reporter_trust_score === 'number' ? r.reporter_trust_score : 0 },
-              assignedAgency: r.assigned_agency || 'GPS_CID',
-              secondaryAgencies: r.secondary_agencies || [],
-              status: r.status || 'RECEIVED_PENDING_TRIAGE',
-              severity: r.severity || 'NORMAL',
-              isPublicEligible: Boolean(r.is_public_eligible),
-              isPublicPublished: Boolean(r.is_public_published),
-              publicCorroborations: r.public_corroborations || 0,
-              createdAt: r.created_at || new Date().toISOString(),
-              updatedAt: r.updated_at || new Date().toISOString(),
-              investigatorNotes: r.investigator_notes || []
-            };
-          });
-          setIncidents(formatted);
-          setSelectedIncident(formatted[0]);
-        } else {
-          setIncidents([]);
-          setSelectedIncident(null);
-        }
+        const formatted: IncidentReport[] = (incidentRows || []).map(mapIncidentRow);
+        setIncidents(formatted);
+        setHasMoreIncidents(formatted.length === INCIDENT_PAGE_SIZE);
+        setSelectedIncident(formatted[0] ?? null);
       } catch (err) {
         console.error('Error fetching live incidents:', err);
+        setWriteError('Could not load reports. Check your connection and reload the page.');
       }
     };
 
@@ -379,7 +331,8 @@ export const App: React.FC = () => {
         const { data } = await supabase
           .from('sos_pings')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(1000);
 
         if (data && data.length > 0) {
           const map: Record<string, SosPing> = {};
@@ -417,56 +370,7 @@ export const App: React.FC = () => {
 
         const r: any = payload.new;
         if (!r || !r.id) return;
-
-        let parsedMedia = Array.isArray(r.media) ? r.media : [];
-        if (typeof r.media === 'string') {
-          try {
-            parsedMedia = JSON.parse(r.media);
-          } catch (e) {
-            parsedMedia = [];
-          }
-        }
-        parsedMedia = parsedMedia.map((m: any) => ({
-          ...m,
-          url: m.url || m.rawS3Url || '',
-          rawS3Url: m.rawS3Url || m.url || '',
-          video_storage_path: m.video_storage_path || m.storage_path || '',
-          uploadStatus: m.uploadStatus || (m.rawS3Url || m.url ? 'UPLOADED' : 'QUEUED'),
-          thumbnailUrl: m.thumbnailUrl || m.rawS3Url || m.url || ''
-        }));
-
-        const hasValidCoords = typeof r.latitude === 'number' && !isNaN(r.latitude) && typeof r.longitude === 'number' && !isNaN(r.longitude);
-        const lat = hasValidCoords ? r.latitude : null;
-        const lng = hasValidCoords ? r.longitude : null;
-
-        const incomingInc: IncidentReport = {
-          id: r.id,
-          trackingCode: r.tracking_code || `GH-2026-${r.id.substring(0, 4)}`,
-          title: r.title || 'Civic Incident Report',
-          category: r.category || 'CRIMINAL_OFFENSE',
-          description: r.description || 'No description provided.',
-          locationName: r.location_name || 'Location Not Specified',
-          ghanaPostCode: r.ghanapost_code || '',
-          region: r.region || 'National',
-          coordinates: hasValidCoords ? [lat, lng] : null,
-          latitude: lat,
-          longitude: lng,
-          locationSource: r.location_source || null,
-          gpsFixAgeSeconds: typeof r.gps_fix_age_s === 'number' ? r.gps_fix_age_s : null,
-          gpsAccuracyM: typeof r.gps_accuracy_m === 'number' ? r.gps_accuracy_m : null,
-          media: parsedMedia,
-          reporter: r.reporter_data || { isAnonymous: Boolean(r.is_anonymous), trustScore: typeof r.reporter_trust_score === 'number' ? r.reporter_trust_score : 0 },
-          assignedAgency: r.assigned_agency || 'GPS_CID',
-          secondaryAgencies: r.secondary_agencies || [],
-          status: r.status || 'RECEIVED_PENDING_TRIAGE',
-          severity: r.severity || 'NORMAL',
-          isPublicEligible: Boolean(r.is_public_eligible),
-          isPublicPublished: Boolean(r.is_public_published),
-          publicCorroborations: r.public_corroborations || 0,
-          createdAt: r.created_at || new Date().toISOString(),
-          updatedAt: r.updated_at || new Date().toISOString(),
-          investigatorNotes: r.investigator_notes || []
-        };
+        const incomingInc: IncidentReport = mapIncidentRow(r);
 
         if (payload.eventType === 'INSERT') {
           setIncidents(prev => [incomingInc, ...prev.filter(i => i.id !== incomingInc.id)]);
@@ -506,6 +410,28 @@ export const App: React.FC = () => {
     setCurrentOfficer(null);
     setAuthSession(null);
     setAuthErrorMsg(null);
+  };
+
+  // Keyset paging: the next page is everything older than the oldest report loaded,
+  // so reports that arrive in the meantime never shift or duplicate a page.
+  const handleLoadOlderIncidents = async () => {
+    if (isLoadingOlder || incidents.length === 0) return;
+    const oldest = incidents.reduce((min, i) => (i.createdAt < min ? i.createdAt : min), incidents[0].createdAt);
+    setIsLoadingOlder(true);
+    const { data, error } = await supabase
+      .from('incidents')
+      .select('*')
+      .lt('created_at', oldest)
+      .order('created_at', { ascending: false })
+      .limit(INCIDENT_PAGE_SIZE);
+    setIsLoadingOlder(false);
+    if (error) {
+      setWriteError(`Could not load older reports: ${error.message}`);
+      return;
+    }
+    const older = (data || []).map(mapIncidentRow);
+    setIncidents(prev => mergeOlder(prev, older));
+    setHasMoreIncidents(older.length === INCIDENT_PAGE_SIZE);
   };
 
   /**
@@ -839,6 +765,9 @@ export const App: React.FC = () => {
               onOpenCertificateModal={(cert) => setActiveCertificate(cert)}
               onApprovePublicPublish={handleApprovePublicPublish}
               onRejectPublicPublish={handleRejectPublicPublish}
+              hasMoreIncidents={hasMoreIncidents}
+              isLoadingOlder={isLoadingOlder}
+              onLoadOlder={handleLoadOlderIncidents}
             />
           </div>
         )}

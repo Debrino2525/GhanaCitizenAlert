@@ -55,6 +55,9 @@ interface PoliceCommandDashboardProps {
   onOpenCertificateModal: (cert: CourtCertificate) => void;
   onApprovePublicPublish?: (incidentId: string) => void;
   onRejectPublicPublish?: (incidentId: string) => void;
+  hasMoreIncidents?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadOlder?: () => void;
 }
 
 export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
@@ -65,7 +68,10 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
   onReassignAgency,
   onOpenCertificateModal,
   onApprovePublicPublish,
-  onRejectPublicPublish
+  onRejectPublicPublish,
+  hasMoreIncidents,
+  isLoadingOlder,
+  onLoadOlder
 }) => {
   const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -519,6 +525,9 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         searchInputRef={searchInputRef}
         statusFilterList={statusFilterList}
         statusCounts={statusCounts}
+        hasMoreIncidents={hasMoreIncidents}
+        isLoadingOlder={isLoadingOlder}
+        onLoadOlder={onLoadOlder}
       />
 
       {/* RIGHT COLUMN: Forensic Review Player & Investigation Command Hub */}

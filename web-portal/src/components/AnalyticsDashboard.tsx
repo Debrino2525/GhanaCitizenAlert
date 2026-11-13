@@ -76,7 +76,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ incident
           <div>
             <h2 className="text-xl font-bold text-white">Report analytics</h2>
             <p className="text-sm text-slate-400">
-              Counts from the {total} report{total === 1 ? '' : 's'} you can see. Response times are not tracked yet.
+              Counts from the {total} most recent report{total === 1 ? '' : 's'} loaded (use "Load older reports" in the Command view for more). Response times are not tracked yet.
             </p>
           </div>
         </div>
