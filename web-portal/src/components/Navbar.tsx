@@ -12,6 +12,7 @@ interface NavbarProps {
   onOpenAuthModal: () => void;
   onLogout: () => void;
   onOpenOfficerProvisioning?: () => void;
+  onOpenTwoStep?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,7 +23,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentOfficer,
   onOpenAuthModal,
   onLogout,
-  onOpenOfficerProvisioning
+  onOpenOfficerProvisioning,
+  onOpenTwoStep
 }) => {
   const headerRef = useRef<HTMLElement>(null);
   const activeAmberOrRed = activeAlerts.find(a => a.isActive);
@@ -141,6 +143,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onOpenAuthModal={onOpenAuthModal}
                 onLogout={onLogout}
                 onOpenOfficerProvisioning={onOpenOfficerProvisioning}
+                onOpenTwoStep={onOpenTwoStep}
               />
             </div>
           </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, LogOut, KeyRound, CheckCircle2, ChevronDown, UserPlus } from 'lucide-react';
+import { Shield, LogOut, KeyRound, CheckCircle2, ChevronDown, UserPlus, ShieldCheck } from 'lucide-react';
 import { OfficerUser } from '../types';
 
 interface OfficerBadgeProfileProps {
@@ -7,13 +7,15 @@ interface OfficerBadgeProfileProps {
   onOpenAuthModal: () => void;
   onLogout: () => void;
   onOpenOfficerProvisioning?: () => void;
+  onOpenTwoStep?: () => void;
 }
 
 export const OfficerBadgeProfile: React.FC<OfficerBadgeProfileProps> = ({
   officer,
   onOpenAuthModal,
   onLogout,
-  onOpenOfficerProvisioning
+  onOpenOfficerProvisioning,
+  onOpenTwoStep
 }) => {
   if (!officer) {
     return (
@@ -42,15 +44,35 @@ export const OfficerBadgeProfile: React.FC<OfficerBadgeProfileProps> = ({
         </button>
       )}
 
-      <div 
+      {onOpenTwoStep && (
+        <button
+          onClick={onOpenTwoStep}
+          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 transition shrink-0"
+          title="Two-step sign-in"
+          aria-label="Two-step sign-in settings"
+        >
+          <ShieldCheck className="w-4 h-4" />
+        </button>
+      )}
+
+      <div
         className="flex items-center space-x-2 px-2 sm:px-2.5 py-1 rounded-xl bg-slate-950/80 border border-slate-700/80 shadow-md min-w-0 max-w-[240px]"
         title={`${officer.name} — ${officer.badgeNumber} • ${officer.clearanceLevel}`}
       >
-        <img
-          src={officer.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'}
-          alt={officer.name}
-          className="w-7 h-7 rounded-full object-cover border border-amber-400 shrink-0"
-        />
+        {officer.avatarUrl ? (
+          <img
+            src={officer.avatarUrl}
+            alt={officer.name}
+            className="w-7 h-7 rounded-full object-cover border border-amber-400 shrink-0"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="w-7 h-7 rounded-full border border-amber-400 bg-slate-800 text-amber-300 text-[11px] font-bold flex items-center justify-center shrink-0"
+          >
+            {(officer.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?'}
+          </span>
+        )}
         <div className="hidden lg:block text-left min-w-0 flex-1">
           <div className="flex items-center space-x-1.5 min-w-0">
             <span className="text-xs font-bold text-white truncate">

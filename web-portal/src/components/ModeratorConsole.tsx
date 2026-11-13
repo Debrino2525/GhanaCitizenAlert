@@ -39,8 +39,8 @@ export interface StatutoryAppeal {
 
 interface ModeratorConsoleProps {
   incidents: IncidentReport[];
-  onApprovePublicPublish: (incidentId: string) => void;
-  onRejectPublicPublish: (incidentId: string, reason: string) => void;
+  onApprovePublicPublish: (incidentId: string) => Promise<void>;
+  onRejectPublicPublish: (incidentId: string, reason: string) => Promise<void>;
 }
 
 export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
@@ -162,51 +162,48 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
     }
   };
 
+  // Sets an appeal's outcome and confirms the database changed exactly that row.
+  // resolved_by is stamped server-side with the signed-in officer (migration
+  // phase4_accountability); the client never types an approver's name.
+  const resolveAppeal = async (appeal: StatutoryAppeal, status: 'GRANTED' | 'REJECTED', note: string) => {
+    const { data, error } = await supabase
+      .from('statutory_appeals')
+      .update({ status, resolved_at: new Date().toISOString(), dpo_notes: note })
+      .eq('id', appeal.id)
+      .select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('the database did not accept the change');
+  };
+
   const handleGrantTakedown = async (appeal: StatutoryAppeal) => {
     setIsProcessing(true);
     setActionFeedback(null);
     try {
-      // 1. Unpublish incident from Civic Feed
-      await onRejectPublicPublish(appeal.incident_id, `Granted statutory takedown under Act 843 (Appeal ID: ${appeal.id})`);
+      // 1. Unpublish first. If this fails, the appeal is NOT marked granted.
       if (appeal.incident_id) {
-        await supabase.from('incidents').update({
-          is_public_published: false,
-          is_public_eligible: false,
-          updated_at: new Date().toISOString()
-        }).eq('id', appeal.incident_id);
+        await onRejectPublicPublish(appeal.incident_id, `Takedown granted (appeal ${appeal.id})`);
       }
       if (appeal.tracking_code) {
-        await supabase.from('incidents').update({
+        const { error } = await supabase.from('incidents').update({
           is_public_published: false,
           is_public_eligible: false,
           updated_at: new Date().toISOString()
         }).eq('tracking_code', appeal.tracking_code);
-      }
-      if (appeal.incident_id) {
-        await supabase.from('emergency_alerts').update({
-          is_active: false
-        }).eq('id', appeal.incident_id);
+        if (error) throw error;
       }
 
-      // 2. Update appeal record in Supabase
-      const { error } = await supabase.from('statutory_appeals').update({
-        status: 'GRANTED',
-        resolved_at: new Date().toISOString(),
-        resolved_by: 'Data Protection Officer (Act 843)',
-        dpo_notes: 'Statutory takedown request granted. Dissemination retracted immediately in compliance with Act 843 Sections 32-43. Police internal chain-of-custody archive preserved under Act 772.'
-      }).eq('id', appeal.id);
-
-      if (error) throw error;
+      // 2. Record the decision.
+      await resolveAppeal(appeal, 'GRANTED', 'Takedown granted. The report was removed from the public feed; the internal case record is kept.');
 
       setActionFeedback({
         type: 'success',
-        message: `✅ Takedown GRANTED for ${appeal.tracking_code}. Civic bulletin unpublished immediately (Act 843 compliant).`
+        message: `✅ Takedown granted for ${appeal.tracking_code}. The report is no longer on the public feed.`
       });
       await fetchAppeals();
     } catch (e: any) {
       setActionFeedback({
         type: 'error',
-        message: `Failed to grant takedown: ${e?.message || 'Network error'}`
+        message: `Takedown not completed: ${e?.message || 'Network error'}. Check the report's public status before retrying.`
       });
     } finally {
       setIsProcessing(false);
@@ -217,24 +214,16 @@ export const ModeratorConsole: React.FC<ModeratorConsoleProps> = ({
     setIsProcessing(true);
     setActionFeedback(null);
     try {
-      const { error } = await supabase.from('statutory_appeals').update({
-        status: 'REJECTED',
-        resolved_at: new Date().toISOString(),
-        resolved_by: 'Data Protection Officer (Act 843)',
-        dpo_notes: 'Appeal dismissed. Section 35 public safety exemption maintained; legitimate civic necessity.'
-      }).eq('id', appeal.id);
-
-      if (error) throw error;
-
+      await resolveAppeal(appeal, 'REJECTED', 'Takedown request declined by a moderator. The report stays on the public feed.');
       setActionFeedback({
         type: 'warning',
-        message: `⚖️ Appeal dismissed for ${appeal.tracking_code}. Bulletin remains active under Section 35 public safety exemption.`
+        message: `Takedown request declined for ${appeal.tracking_code}. The report stays on the public feed.`
       });
       await fetchAppeals();
     } catch (e: any) {
       setActionFeedback({
         type: 'error',
-        message: `Failed to dismiss appeal: ${e?.message || 'Network error'}`
+        message: `Could not record the decision: ${e?.message || 'Network error'}`
       });
     } finally {
       setIsProcessing(false);

@@ -101,6 +101,12 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
           issuedByAgency: r.issued_by_agency || 'GPS_CID',
           issuingOfficerName: r.issuing_officer_name || 'CAD Duty Officer',
           approvingCommanderName: r.approving_commander_name || undefined,
+          // Alerts created before the approval step existed have no status: treat as approved.
+          approvalStatus: r.approval_status || 'APPROVED',
+          issuedByOfficerId: r.issued_by_officer_id ?? null,
+          approvedByOfficerId: r.approved_by_officer_id ?? null,
+          approvedAt: r.approved_at ?? null,
+          approvalNote: r.approval_note ?? null,
           badgeNumber: r.badge_number || 'GPS-CAD',
           activeUntil: r.active_until,
           createdAt: r.created_at,
@@ -238,10 +244,6 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
         setCreateError('Circumstance Details are required.');
         return;
       }
-      if (!approvingCommander.trim()) {
-        setCreateError('Enter the name of the commander who approved this alert.');
-        return;
-      }
     }
 
     const lat = parseFloat(latitude);
@@ -298,7 +300,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
         details: details.trim(),
         suspect_details: suspectDetails.trim() || null,
         vehicle_details: vehicleDetails.trim() || null,
-        is_active: true,
+        is_active: false, // the database also forces this: new alerts wait for approval
         issued_by_agency: currentOfficer?.agency || 'GPS_CID',
         issuing_officer_name: currentOfficer?.name || 'CAD Duty Officer',
         approving_commander_name: approvingCommander.trim() || null,
@@ -313,6 +315,11 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
       if (insertErr) {
         throw insertErr;
       }
+
+      setApprovalFeedback({
+        type: 'info',
+        message: 'Alert saved and waiting for approval. Citizens will not see it until it is approved.'
+      });
 
       // Reset and close
       setIsCreateModalOpen(false);
@@ -394,20 +401,88 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
     }
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('emergency_alerts')
         .update({ is_active: false })
-        .eq('id', alertId);
+        .eq('id', alertId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error('The database did not accept the change. The alert is still active.');
       await fetchAlerts();
     } catch (err: any) {
       alert(err.message || 'Failed to deactivate alert.');
     }
   };
 
+  const [approvalFeedback, setApprovalFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+
+  const handleApproveAlert = async (alert: EmergencyAlert) => {
+    const selfIssued = Boolean(currentOfficer?.id && alert.issuedByOfficerId === currentOfficer.id);
+    const prompt = selfIssued
+      ? 'You issued this alert. It can only be self-approved if no other approving officer is active, and it will be recorded as "self-approved, no second officer". Continue?'
+      : 'Approve this alert? It goes live to citizens immediately.';
+    if (!confirm(prompt)) return;
+    setIsApproving(true);
+    setApprovalFeedback(null);
+    const { data, error } = await supabase.rpc('approve_emergency_alert', { p_alert_id: alert.id });
+    setIsApproving(false);
+    if (error) {
+      setApprovalFeedback({ type: 'error', message: `Not approved: ${error.message}` });
+      return;
+    }
+    setApprovalFeedback({
+      type: 'success',
+      message: data === 'SELF_APPROVED_NO_SECOND_OFFICER'
+        ? 'Alert is live. Recorded as self-approved because no other approving officer is active.'
+        : 'Alert approved and live.'
+    });
+    await fetchAlerts();
+  };
+
+  const handleRejectAlert = async (alert: EmergencyAlert) => {
+    const reason = window.prompt('Reason for rejecting (or withdrawing) this alert:', '');
+    if (reason === null) return;
+    setIsApproving(true);
+    setApprovalFeedback(null);
+    const { error } = await supabase.rpc('reject_emergency_alert', { p_alert_id: alert.id, p_reason: reason });
+    setIsApproving(false);
+    if (error) {
+      setApprovalFeedback({ type: 'error', message: `Not rejected: ${error.message}` });
+      return;
+    }
+    setApprovalFeedback({ type: 'success', message: 'Alert rejected. It will not be shown to citizens.' });
+    await fetchAlerts();
+  };
+
+  const approvalBadge = (a: EmergencyAlert) => {
+    switch (a.approvalStatus) {
+      case 'PENDING_APPROVAL':
+        return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700">WAITING FOR APPROVAL</span>;
+      case 'REJECTED':
+        return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">REJECTED</span>;
+      case 'SELF_APPROVED_NO_SECOND_OFFICER':
+        return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-700">SELF-APPROVED</span>;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {approvalFeedback && (
+        <div role="status" className={`p-3 rounded-xl text-sm flex items-start gap-3 border ${
+          approvalFeedback.type === 'error'
+            ? 'bg-red-950/80 border-red-600 text-red-200'
+            : approvalFeedback.type === 'success'
+            ? 'bg-emerald-950/80 border-emerald-600 text-emerald-200'
+            : 'bg-amber-950/60 border-amber-600 text-amber-200'
+        }`}>
+          <span className="flex-1">{approvalFeedback.message}</span>
+          <button onClick={() => setApprovalFeedback(null)} className="font-bold px-1" aria-label="Dismiss">✕</button>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
@@ -517,7 +592,8 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                           >
                             {alert.alertType} ALERT
                           </span>
-                          {!alert.isActive && (
+                          {approvalBadge(alert)}
+                          {!alert.isActive && (alert.approvalStatus === 'APPROVED' || alert.approvalStatus === 'SELF_APPROVED_NO_SECOND_OFFICER') && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold">
                               DEACTIVATED
                             </span>
@@ -585,9 +661,17 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                       <span className="text-xs font-extrabold px-2.5 py-0.5 rounded bg-amber-500 text-black uppercase">
                         {selectedAlert.alertType} BROADCAST
                       </span>
-                      {selectedAlert.isActive ? (
+                      {selectedAlert.approvalStatus === 'PENDING_APPROVAL' ? (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700">
+                          Waiting for approval · not visible to citizens
+                        </span>
+                      ) : selectedAlert.approvalStatus === 'REJECTED' ? (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                          Rejected{selectedAlert.approvalNote ? `: ${selectedAlert.approvalNote}` : ''}
+                        </span>
+                      ) : selectedAlert.isActive ? (
                         <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                          Active Geofence
+                          Live{selectedAlert.approvalStatus === 'SELF_APPROVED_NO_SECOND_OFFICER' ? ' · self-approved, no second officer' : ''}
                         </span>
                       ) : (
                         <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
@@ -621,6 +705,25 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                     <Upload className="w-3.5 h-3.5" />
                     <span>{isReplacingPhoto ? 'Uploading...' : 'Replace Photo'}</span>
                   </button>
+
+                  {selectedAlert.approvalStatus === 'PENDING_APPROVAL' && (
+                    <>
+                      <button
+                        onClick={() => handleApproveAlert(selectedAlert)}
+                        disabled={isApproving}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition disabled:opacity-50"
+                      >
+                        {currentOfficer?.id && selectedAlert.issuedByOfficerId === currentOfficer.id ? 'Approve (self)' : 'Approve & send'}
+                      </button>
+                      <button
+                        onClick={() => handleRejectAlert(selectedAlert)}
+                        disabled={isApproving}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition disabled:opacity-50"
+                      >
+                        {currentOfficer?.id && selectedAlert.issuedByOfficerId === currentOfficer.id ? 'Withdraw' : 'Reject'}
+                      </button>
+                    </>
+                  )}
 
                   {selectedAlert.isActive && (
                     <button
@@ -769,7 +872,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-white">AUTHORIZE EMERGENCY BROADCAST</h2>
-                  <p className="text-xs text-slate-400">Goes live as soon as you submit. The approving commander's name is recorded as typed; the system does not ask them to confirm.</p>
+                  <p className="text-xs text-slate-400">Saved as waiting for approval. A second officer must approve it before citizens see it; if no other approving officer is active, you can self-approve and it is recorded as such.</p>
                 </div>
               </div>
 
@@ -973,14 +1076,13 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Approving commander (name as typed) *</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Commander consulted (optional note)</label>
                   <input
                     type="text"
                     placeholder="e.g. Chief Supt. Emmanuel Arthur"
                     value={approvingCommander}
                     onChange={(e) => setApprovingCommander(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
-                    required
                   />
                 </div>
                 <div>
@@ -1004,7 +1106,7 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                 className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black flex items-center justify-center space-x-2 shadow-lg shadow-red-600/30 transition disabled:opacity-50 mt-2"
               >
                 <Radio className="w-4 h-4" />
-                <span>{isSubmittingAlert ? 'Broadcasting to National Alert Geofence...' : 'Authorize & Broadcast Alert'}</span>
+                <span>{isSubmittingAlert ? 'Saving...' : 'Submit for approval'}</span>
               </button>
             </form>
           </div>

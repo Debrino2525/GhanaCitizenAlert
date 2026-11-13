@@ -113,6 +113,12 @@ export interface EmergencyAlert {
   issuedByAgency: AgencyType;
   issuingOfficerName: string;
   approvingCommanderName?: string;
+  /** PENDING_APPROVAL until a second officer approves (migration phase4_accountability). */
+  approvalStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'SELF_APPROVED_NO_SECOND_OFFICER' | 'REJECTED';
+  issuedByOfficerId?: string | null;
+  approvedByOfficerId?: string | null;
+  approvedAt?: string | null;
+  approvalNote?: string | null;
   badgeNumber: string;
   activeUntil: string;
   createdAt: string;

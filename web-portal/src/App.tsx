@@ -11,6 +11,7 @@ import { AuthModal } from './components/AuthModal';
 import { OfficerManagementModal } from './components/OfficerManagementModal';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TwoStepChallenge, TwoStepSetupModal } from './components/TwoStepSignIn';
 import { IncidentReport, EmergencyAlert, SightingTip, IncidentStatus, AgencyType, OfficerUser, SosPing } from './types';
 import { CourtCertificate } from './services/evidenceVault';
 import { supabase } from './services/supabaseClient';
@@ -34,6 +35,21 @@ export const App: React.FC = () => {
   const [citizenMobileBridge, setCitizenMobileBridge] = useState<{ email: string } | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
+  // Shown when the database refuses or fails an officer action (see commitIncidentChange).
+  const [writeError, setWriteError] = useState<string | null>(null);
+  // True when this officer has an authenticator set up but this session has not entered a code yet.
+  const [needsTwoStep, setNeedsTwoStep] = useState(false);
+  const [isTwoStepSetupOpen, setIsTwoStepSetupOpen] = useState(false);
+
+  useEffect(() => {
+    if (!currentOfficer) {
+      setNeedsTwoStep(false);
+      return;
+    }
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
+      setNeedsTwoStep(Boolean(data && data.nextLevel === 'aal2' && data.currentLevel !== 'aal2'));
+    });
+  }, [currentOfficer?.id]);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isOfficerMgmtOpen, setIsOfficerMgmtOpen] = useState<boolean>(false);
@@ -141,7 +157,7 @@ export const App: React.FC = () => {
           role: officerRow.role,
           rank: officerRow.rank || 'Duty Officer',
           email: officerRow.email || userEmail || '',
-          avatarUrl: officerRow.avatar_url || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80`,
+          avatarUrl: officerRow.avatar_url || undefined, // no stock photo: the badge shows initials
           clearanceLevel: officerRow.clearance_level || 'RESTRICTED',
           station_id: officerRow.station_id,
           is_active: Boolean(officerRow.is_active),
@@ -493,122 +509,100 @@ export const App: React.FC = () => {
     setAuthErrorMsg(null);
   };
 
+  /**
+   * Applies a change to one incident on screen, writes it to the database, and
+   * undoes the on-screen change if the database did not accept it. A write that
+   * row-level security refuses returns no error and zero rows, so we ask for the
+   * changed ids back and treat "no rows" as a failure too.
+   */
+  const commitIncidentChange = async (
+    incidentId: string,
+    uiPatch: Partial<IncidentReport>,
+    dbPatch: Record<string, unknown>,
+    actionLabel: string
+  ): Promise<boolean> => {
+    const before = incidents.find(i => i.id === incidentId);
+    const applyLocal = (patch: Partial<IncidentReport> | null) => {
+      setIncidents(prev => prev.map(inc => (inc.id === incidentId ? { ...inc, ...(patch ?? before) } as IncidentReport : inc)));
+      setSelectedIncident(prev => (prev && prev.id === incidentId ? { ...prev, ...(patch ?? before) } as IncidentReport : prev));
+    };
+
+    applyLocal({ ...uiPatch, updatedAt: new Date().toISOString() });
+
+    let failure: string | null = null;
+    try {
+      const { data, error } = await supabase
+        .from('incidents')
+        .update({ ...dbPatch, updated_at: new Date().toISOString() })
+        .eq('id', incidentId)
+        .select('id');
+      if (error) failure = error.message;
+      else if (!data || data.length === 0) failure = 'the database did not accept the change. You may not have access to this case.';
+    } catch (e: any) {
+      failure = e?.message || 'network error';
+    }
+
+    if (failure) {
+      if (before) applyLocal(null);
+      setWriteError(`Could not ${actionLabel}: ${failure} Nothing was changed.`);
+      return false;
+    }
+    return true;
+  };
+
+  // Trust is server-owned (adjust_citizen_trust_score). We only refresh the
+  // per-report snapshot column; reporter_data is never rewritten from the UI copy.
   const adjustReporterTrust = async (incidentId: string, delta: number) => {
     const inc = incidents.find(i => i.id === incidentId);
     if (!inc || !inc.reporter || inc.reporter.isAnonymous) return;
-    
-    const currentTrust = typeof inc.reporter.trustScore === 'number' ? inc.reporter.trustScore : 0;
-    const newTrust = Math.min(100, Math.max(0, currentTrust + delta));
     const reporterUserId = (inc.reporter as any).userId;
+    if (!reporterUserId) return;
 
+    const { data: newTrust, error } = await supabase.rpc('adjust_citizen_trust_score', {
+      target_user_id: reporterUserId,
+      delta_score: delta
+    });
+    if (error || typeof newTrust !== 'number') {
+      console.warn('[adjustReporterTrust] not applied:', error?.message);
+      return;
+    }
     const updatedReporter = { ...inc.reporter, trustScore: newTrust };
-
-    setIncidents(prev => prev.map(item => {
-      if (item.id === incidentId) {
-        return { ...item, reporter: updatedReporter };
-      }
-      return item;
-    }));
-
-    if (selectedIncident?.id === incidentId) {
-      setSelectedIncident(prev => prev ? { ...prev, reporter: updatedReporter } : null);
-    }
-
-    try {
-      await supabase.from('incidents').update({
-        reporter_trust_score: newTrust,
-        reporter_data: updatedReporter,
-        updated_at: new Date().toISOString()
-      }).eq('id', incidentId);
-
-      if (reporterUserId) {
-        try {
-          await supabase.rpc('adjust_citizen_trust_score', {
-            target_user_id: reporterUserId,
-            delta_score: delta
-          });
-        } catch {}
-      }
-    } catch (e) {
-      console.warn('[adjustReporterTrust] Error:', e);
-    }
+    await supabase.from('incidents').update({ reporter_trust_score: newTrust }).eq('id', incidentId);
+    setIncidents(prev => prev.map(item => (item.id === incidentId ? { ...item, reporter: updatedReporter } : item)));
+    setSelectedIncident(prev => (prev && prev.id === incidentId ? { ...prev, reporter: updatedReporter } : prev));
   };
 
   const handleUpdateStatus = async (incidentId: string, newStatus: IncidentStatus) => {
-    setIncidents(prev => prev.map(inc => {
-      if (inc.id === incidentId) {
-        const updated = { ...inc, status: newStatus, updatedAt: new Date().toISOString() };
-        if (selectedIncident?.id === incidentId) setSelectedIncident(updated);
-        return updated;
-      }
-      return inc;
-    }));
-
-    try {
-      await supabase.from('incidents').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', incidentId);
-      if (newStatus === 'DISMISSED') {
-        await adjustReporterTrust(incidentId, -5);
-      }
-    } catch (e) {}
+    const ok = await commitIncidentChange(incidentId, { status: newStatus }, { status: newStatus }, 'change the case status');
+    if (ok && newStatus === 'DISMISSED') {
+      await adjustReporterTrust(incidentId, -5);
+    }
   };
 
   const handleReassignAgency = async (incidentId: string, newAgency: AgencyType) => {
-    setIncidents(prev => prev.map(inc => {
-      if (inc.id === incidentId) {
-        const updated = { ...inc, assignedAgency: newAgency, updatedAt: new Date().toISOString() };
-        if (selectedIncident?.id === incidentId) setSelectedIncident(updated);
-        return updated;
-      }
-      return inc;
-    }));
-
-    try {
-      await supabase.from('incidents').update({ assigned_agency: newAgency, updated_at: new Date().toISOString() }).eq('id', incidentId);
-    } catch (e) {}
+    await commitIncidentChange(incidentId, { assignedAgency: newAgency }, { assigned_agency: newAgency }, 'reassign the agency');
   };
 
   const handleApprovePublicPublish = async (incidentId: string) => {
-    setIncidents(prev => prev.map(inc => {
-      if (inc.id === incidentId) {
-        const updated = { ...inc, isPublicPublished: true, isPublicEligible: true, updatedAt: new Date().toISOString() };
-        if (selectedIncident?.id === incidentId) setSelectedIncident(updated);
-        return updated;
-      }
-      return inc;
-    }));
-
-    try {
-      await supabase.from('incidents').update({ 
-        is_public_published: true, 
-        is_public_eligible: true, 
-        updated_at: new Date().toISOString() 
-      }).eq('id', incidentId);
-      await adjustReporterTrust(incidentId, 5);
-    } catch (e) {
-      console.warn('Supabase publish update error:', e);
-    }
+    const ok = await commitIncidentChange(
+      incidentId,
+      { isPublicPublished: true, isPublicEligible: true },
+      { is_public_published: true, is_public_eligible: true },
+      'publish the report'
+    );
+    if (!ok) throw new Error('Publish was not saved');
+    await adjustReporterTrust(incidentId, 5);
   };
 
   const handleRejectPublicPublish = async (incidentId: string) => {
-    setIncidents(prev => prev.map(inc => {
-      if (inc.id === incidentId) {
-        const updated = { ...inc, isPublicPublished: false, isPublicEligible: false, updatedAt: new Date().toISOString() };
-        if (selectedIncident?.id === incidentId) setSelectedIncident(updated);
-        return updated;
-      }
-      return inc;
-    }));
-
-    try {
-      await supabase.from('incidents').update({ 
-        is_public_published: false, 
-        is_public_eligible: false, 
-        updated_at: new Date().toISOString() 
-      }).eq('id', incidentId);
-      await adjustReporterTrust(incidentId, -5);
-    } catch (e) {
-      console.warn('Supabase reject update error:', e);
-    }
+    const ok = await commitIncidentChange(
+      incidentId,
+      { isPublicPublished: false, isPublicEligible: false },
+      { is_public_published: false, is_public_eligible: false },
+      'remove the report from the public feed'
+    );
+    if (!ok) throw new Error('Unpublish was not saved');
+    await adjustReporterTrust(incidentId, -5);
   };
 
   const handleCorroborate = async (incidentId: string) => {
@@ -728,6 +722,10 @@ export const App: React.FC = () => {
     );
   }
 
+  if (needsTwoStep) {
+    return <TwoStepChallenge onVerified={() => setNeedsTwoStep(false)} onSignOut={handleLogout} />;
+  }
+
   // Phase 2 KPI Strip Metrics computed strictly from incidents prop
   const activeCount = incidents.filter(i => i.status !== 'RESOLVED' && i.status !== 'DISMISSED').length;
   const dispatchedCount = incidents.filter(i => i.status === 'DISPATCHED').length;
@@ -743,6 +741,12 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(30,58,138,0.15),rgba(255,255,255,0))] text-slate-100 flex flex-col font-sans selection:bg-ghana-gold selection:text-black">
+      {writeError && (
+        <div role="alert" className="fixed top-3 left-1/2 -translate-x-1/2 z-toast w-[min(92vw,640px)] p-3.5 rounded-xl bg-red-950 border border-red-500 text-red-100 text-sm shadow-2xl flex items-start gap-3">
+          <span className="flex-1">{writeError}</span>
+          <button onClick={() => setWriteError(null)} className="text-red-300 hover:text-white font-bold px-1" aria-label="Dismiss error">✕</button>
+        </div>
+      )}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -752,7 +756,9 @@ export const App: React.FC = () => {
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
         onOpenOfficerProvisioning={() => setIsOfficerMgmtOpen(true)}
+        onOpenTwoStep={() => setIsTwoStepSetupOpen(true)}
       />
+      <TwoStepSetupModal isOpen={isTwoStepSetupOpen} onClose={() => setIsTwoStepSetupOpen(false)} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
         {activeTab === 'COMMAND' && (

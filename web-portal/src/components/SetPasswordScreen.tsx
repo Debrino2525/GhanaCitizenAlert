@@ -105,7 +105,7 @@ export const SetPasswordScreen: React.FC<SetPasswordScreenProps> = ({
         role: officerRow.role,
         rank: officerRow.rank || 'Duty Officer',
         email: officerRow.email || authData.user.email || '',
-        avatarUrl: officerRow.avatar_url || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80`,
+        avatarUrl: officerRow.avatar_url || undefined, // no stock photo: the badge shows initials
         clearanceLevel: officerRow.clearance_level || 'RESTRICTED',
         station_id: officerRow.station_id,
         is_active: Boolean(officerRow.is_active),
