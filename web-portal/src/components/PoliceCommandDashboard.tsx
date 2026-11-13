@@ -125,6 +125,12 @@ interface PoliceCommandDashboardProps {
   onRejectPublicPublish?: (incidentId: string) => void;
 }
 
+/** Object path inside the 'evidence' bucket from a Supabase storage URL, or null. */
+export function evidencePathFromUrl(url: string): string | null {
+  const m = /\/storage\/v1\/object\/(?:public|sign|authenticated)\/evidence\/([^?#]+)/.exec(url || '');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 /** Resolved, dismissed, or cancelled by the reporter: no longer an emergency on screen. */
 export function isCaseClosed(inc: Pick<IncidentReport, 'status' | 'title'>): boolean {
   return inc.status === 'RESOLVED' || inc.status === 'DISMISSED' || /STAND DOWN|CANCELLED/i.test(inc.title || '');
@@ -353,79 +359,49 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
     }
 
     const rawUrl = (activeMedia as any).rawS3Url || (activeMedia as any).url || (activeMedia as any).thumbnailUrl || '';
-    const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path;
+    // The evidence bucket is private: playback needs a signed URL. Stored media often
+    // carries an old public URL, so recover the object path from it when no path is stored.
+    const storagePath = (activeMedia as any).video_storage_path || (activeMedia as any).storage_path
+      || evidencePathFromUrl(rawUrl);
     const uploadStatus = (activeMedia as any).uploadStatus;
 
-    console.log('[CAD_MEDIA] Resolving media for incident:', {
-      trackingCode: selectedIncident?.trackingCode,
-      activeMedia,
-      rawUrl,
-      storagePath,
-      uploadStatus
-    });
-
     setIsResolvingUrl(true);
+    const playFrom = (url: string) => {
+      setResolvedVideoUrl(url);
+      setVideoLoadError(false);
+      setIsPlaying(false);
+      setIsResolvingUrl(false);
+      if (videoRef.current) {
+        videoRef.current.currentTime = 0;
+        try {
+          videoRef.current.load();
+        } catch (e) {}
+      }
+    };
     try {
-      // 1. Direct Data URI or valid HTTP(S) Stream (instant zero-latency playback)
-      if (rawUrl && !rawUrl.startsWith('file://') && (rawUrl.startsWith('data:') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
-        console.log('[CAD_MEDIA] Using raw direct URL:', rawUrl);
-        setResolvedVideoUrl(rawUrl);
-        setVideoLoadError(false);
-        setIsPlaying(false);
-        setIsResolvingUrl(false);
-        if (videoRef.current) {
-          videoRef.current.currentTime = 0;
-          try {
-            videoRef.current.load();
-          } catch (e) {}
-        }
+      // 1. Inline data, or a link that is not into the private evidence bucket.
+      if (rawUrl && (rawUrl.startsWith('data:') || (/^https?:\/\//.test(rawUrl) && !evidencePathFromUrl(rawUrl)))) {
+        playFrom(rawUrl);
         return;
       }
 
-      // 2. Supabase Storage Public / Signed URL resolution
+      // 2. Private evidence: signed URL (officer-only by storage policy).
       if (storagePath) {
-        // Fast synchronous public URL from Supabase storage
-        const { data: pubData } = supabase.storage.from('evidence').getPublicUrl(storagePath);
-        if (pubData?.publicUrl) {
-          console.log('[CAD_MEDIA] Using public storage URL for path:', storagePath, pubData.publicUrl);
-          setResolvedVideoUrl(pubData.publicUrl);
-          setVideoLoadError(false);
-          setIsPlaying(false);
-          setIsResolvingUrl(false);
-          if (videoRef.current) {
-            videoRef.current.currentTime = 0;
-            try {
-              videoRef.current.load();
-            } catch (e) {}
-          }
-          return;
-        }
-
         try {
           const { data: signedData, error: signedErr } = await supabase.storage
             .from('evidence')
             .createSignedUrl(storagePath, 3600);
-
           if (!signedErr && signedData?.signedUrl) {
-            console.log('[CAD_MEDIA] Using signed storage URL:', signedData.signedUrl);
-            setResolvedVideoUrl(signedData.signedUrl);
-            setVideoLoadError(false);
-            setIsPlaying(false);
-            setIsResolvingUrl(false);
-            if (videoRef.current) {
-              videoRef.current.currentTime = 0;
-              try {
-                videoRef.current.load();
-              } catch (e) {}
-            }
+            playFrom(signedData.signedUrl);
             return;
           }
+          console.warn('[CAD_MEDIA] Could not sign evidence URL:', signedErr?.message, { uploadStatus });
         } catch (signedErr) {
           console.warn('[CAD_MEDIA] Signed URL resolution exception:', signedErr);
         }
       }
 
-      if (rawUrl && !rawUrl.startsWith('file://')) {
+      if (rawUrl && !rawUrl.startsWith('file://') && !evidencePathFromUrl(rawUrl)) {
         console.log('[CAD_MEDIA] Falling back to rawUrl:', rawUrl);
         setResolvedVideoUrl(rawUrl);
         setVideoLoadError(false);
@@ -1169,14 +1145,14 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
                     )}
                   </div>
                 ) : (
-                  (currentMedia?.thumbnailUrl || (currentMedia as any)?.rawS3Url || (currentMedia as any)?.url) && !(currentMedia?.thumbnailUrl || (currentMedia as any)?.rawS3Url || '').startsWith('file://') ? (
+                  resolvedVideoUrl ? (
                     <div
-                      onClick={() => setLightboxImage(currentMedia?.thumbnailUrl || (currentMedia as any)?.rawS3Url || (currentMedia as any)?.url)}
+                      onClick={() => setLightboxImage(resolvedVideoUrl)}
                       className="relative w-full h-80 bg-black cursor-pointer group flex items-center justify-center overflow-hidden"
                       title="Click to Open Wide (Full Resolution)"
                     >
                       <img
-                        src={currentMedia?.thumbnailUrl || (currentMedia as any)?.rawS3Url || (currentMedia as any)?.url}
+                        src={resolvedVideoUrl}
                         alt="Evidence"
                         className="w-full h-full object-contain opacity-95 group-hover:scale-105 transition duration-300"
                       />
