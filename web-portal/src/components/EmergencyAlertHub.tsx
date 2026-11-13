@@ -746,7 +746,9 @@ export const EmergencyAlertHub: React.FC<EmergencyAlertHubProps> = ({
                 <div>
                   <span className="text-slate-500 block text-xs uppercase font-bold">Coordinates</span>
                   <span className="text-amber-400 font-mono">
-                    {selectedAlert.centerCoordinates[0].toFixed(4)}, {selectedAlert.centerCoordinates[1].toFixed(4)}
+                    {selectedAlert.centerCoordinates
+                      ? `${selectedAlert.centerCoordinates[0].toFixed(4)}, ${selectedAlert.centerCoordinates[1].toFixed(4)}`
+                      : 'Not recorded'}
                   </span>
                 </div>
                 <div>

@@ -274,7 +274,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!currentOfficer) return;
 
-    let intervalId: any;
 
     const recordActivity = () => {
       lastActivityRef.current = Date.now();
@@ -293,7 +292,7 @@ export const App: React.FC = () => {
 
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
     activityEvents.forEach((ev) => window.addEventListener(ev, recordActivity, { passive: true }));
-    intervalId = setInterval(checkInactivity, 30000); // Check every 30s
+    const intervalId = setInterval(checkInactivity, 30000); // Check every 30s
 
     return () => {
       clearInterval(intervalId);
@@ -613,15 +612,17 @@ export const App: React.FC = () => {
       return inc;
     }));
 
-    try {
-      await supabase.rpc('increment_corroboration', { row_id: incidentId });
-    } catch (e) {}
+    const { error } = await supabase.rpc('increment_corroboration', { row_id: incidentId });
+    if (error) {
+      setIncidents(prev => prev.map(inc => (inc.id === incidentId
+        ? { ...inc, publicCorroborations: Math.max(0, inc.publicCorroborations - 1) } : inc)));
+      setWriteError(`Could not record the corroboration: ${error.message}`);
+    }
   };
 
   const handleAddSighting = async (sighting: SightingTip) => {
     setSightings(prev => [sighting, ...prev]);
-    try {
-      await supabase.from('alert_sightings').insert({
+    const { error } = await supabase.from('alert_sightings').insert({
         alert_id: sighting.alertId,
         location_name: sighting.locationName,
         ghanapost_code: null,
@@ -631,7 +632,10 @@ export const App: React.FC = () => {
         reporter_phone: sighting.reporterPhone,
         is_verified: sighting.isVerified
       });
-    } catch (e) {}
+    if (error) {
+      setSightings(prev => prev.filter(s => s !== sighting));
+      setWriteError(`Could not save the sighting: ${error.message}`);
+    }
   };
 
   const handleCreateAlert = async (newAlert: EmergencyAlert) => {

@@ -34,7 +34,7 @@ export function generateCourtCertificate(incident: IncidentReport): CourtCertifi
       const rawHash = m.sha256Checksum || m.sha256Hash || '';
       const isVerifiedHex = HEX_64_REGEX.test(rawHash);
       return {
-        mediaId: m.id,
+        mediaId: m.id ?? 'unknown',
         type: m.type,
         duration: m.durationSeconds ? `${m.durationSeconds}s` : 'N/A',
         sha256Hash: isVerifiedHex ? rawHash : (rawHash ? `${rawHash} (unverified)` : 'unverified'),

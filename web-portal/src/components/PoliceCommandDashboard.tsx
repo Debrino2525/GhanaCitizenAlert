@@ -291,7 +291,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
         videoRef.current.currentTime = 0;
         try {
           videoRef.current.load();
-        } catch (e) {}
+        } catch { /* element may be detaching; nothing to do */ }
       }
     };
     try {
@@ -326,7 +326,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
           videoRef.current.currentTime = 0;
           try {
             videoRef.current.load();
-          } catch (e) {}
+          } catch { /* element may be detaching; nothing to do */ }
         }
       } else {
         console.log('[CAD_MEDIA] No valid remote URL found (in-flight or local URI)');
@@ -343,7 +343,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
           videoRef.current.currentTime = 0;
           try {
             videoRef.current.load();
-          } catch (loadErr) {}
+          } catch { /* element may be detaching; nothing to do */ }
         }
       }
     } finally {
@@ -358,7 +358,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
       videoRef.current.currentTime = 0;
       try {
         videoRef.current.load();
-      } catch (e) {}
+      } catch { /* element may be detaching; nothing to do */ }
     }
   }, [resolveMediaUrl, selectedIncident?.id, selectedIncident?.trackingCode, mediaSerialized]);
 
@@ -369,7 +369,7 @@ export const PoliceCommandDashboard: React.FC<PoliceCommandDashboardProps> = ({
       videoRef.current.currentTime = 0;
       try {
         videoRef.current.load();
-      } catch (e) {}
+      } catch { /* element may be detaching; nothing to do */ }
     }
   }, [resolveMediaUrl]);
 

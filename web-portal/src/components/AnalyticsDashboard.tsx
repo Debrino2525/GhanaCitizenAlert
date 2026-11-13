@@ -22,7 +22,7 @@ const AGENCY_LABELS: Record<string, string> = {
 };
 
 /** "Western Region", "western", "Western" -> "Western"; empty or "UNKNOWN" -> "Not recorded". */
-function normaliseRegion(raw: string | null | undefined): string {
+export function normaliseRegion(raw: string | null | undefined): string {
   const r = (raw || '').trim().replace(/\s+region$/i, '');
   if (!r || /^unknown$/i.test(r)) return 'Not recorded';
   return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
